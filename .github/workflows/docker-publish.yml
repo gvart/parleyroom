@@ -17,10 +17,14 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: parley-room
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          path: parley-room
           submodules: recursive
 
       - name: Set up JDK 25
@@ -36,7 +40,7 @@ jobs:
             ~/.cache/JetBrains/Amper
             ~/.amper
             ~/.gradle/caches
-          key: ${{ runner.os }}-amper-${{ hashFiles('amper', 'module.yaml', 'libs.versions.toml', 'plugins/**/module.yaml') }}
+          key: ${{ runner.os }}-amper-${{ hashFiles('parley-room/amper', 'parley-room/module.yaml', 'parley-room/libs.versions.toml', 'parley-room/plugins/**/module.yaml') }}
           restore-keys: |
             ${{ runner.os }}-amper-
 
