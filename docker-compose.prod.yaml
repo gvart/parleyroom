@@ -1,0 +1,70 @@
+services:
+  app:
+    image: ghcr.io/gvart/parleyroom:0.1.0 # x-release-please-version
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - livekit
+      - minio
+    environment:
+      DB_URL: "jdbc:postgresql://postgres:5432/${DB_NAME:-parleyroom}"
+      DB_USER: ${DB_USER:?DB_USER required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      APPLICATION_ADMIN_DEFAULT_PASSWORD: ${APPLICATION_ADMIN_DEFAULT_PASSWORD:?APPLICATION_ADMIN_DEFAULT_PASSWORD required}
+      LIVEKIT_URL: ${LIVEKIT_URL:?LIVEKIT_URL required}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY required}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET required}
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-http://minio:9000}
+      STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?STORAGE_ACCESS_KEY required}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?STORAGE_SECRET_KEY required}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-parleyroom-materials}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-parleyroom}
+      POSTGRES_USER: ${DB_USER:?DB_USER required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        bind_addresses: ["0.0.0.0"]
+        rtc:
+          tcp_port: 7881
+          port_range_start: 50000
+          port_range_end: 50019
+          use_external_ip: true
+          node_ip: "${HOST_IP}"
+        keys:
+          ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
+        logging:
+          level: info
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50019:50000-50019/udp"
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:?STORAGE_ACCESS_KEY required}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:?STORAGE_SECRET_KEY required}
+    volumes:
+      - minio_data:/data
+
+volumes:
+  postgres_data:
+  minio_data:
