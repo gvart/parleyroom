@@ -12,7 +12,6 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE: ghcr.io/gvart/parleyroom
 
 jobs:
   build-and-push:
@@ -51,29 +50,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build image to local Docker daemon
+      - name: Build and push multi-arch image with Jib
         env:
           AMPER_JAVA_HOME: ${{ env.JAVA_HOME }}
-        run: ./amper task :parley-room:jibDockerBuild@jib-plugin
-
-      - name: Add OCI labels for repo linking
-        run: |
-          cat > Dockerfile.labels <<'EOF'
-          ARG BASE
-          FROM ${BASE}
-          LABEL org.opencontainers.image.source="https://github.com/${{ github.repository }}"
-          LABEL org.opencontainers.image.revision="${{ github.sha }}"
-          LABEL org.opencontainers.image.licenses="Apache-2.0"
-          EOF
-          docker build --build-arg BASE="$IMAGE:latest" -f Dockerfile.labels -t "$IMAGE:latest" .
-
-      - name: Read release version
-        id: version
-        run: echo "value=$(jq -r '."."' .release-please-manifest.json)" >> "$GITHUB_OUTPUT"
-
-      - name: Tag and push image
-        run: |
-          SHA_TAG="sha-$(git rev-parse --short HEAD)"
-          docker tag "$IMAGE:latest" "$IMAGE:${{ steps.version.outputs.value }}"
-          docker tag "$IMAGE:latest" "$IMAGE:$SHA_TAG"
-          docker push "$IMAGE" --all-tags
+        run: ./amper task :parley-room:jib@jib-plugin

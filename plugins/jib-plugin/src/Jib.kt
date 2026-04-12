@@ -1,4 +1,5 @@
 import com.google.cloud.tools.jib.api.*
+import com.google.cloud.tools.jib.api.buildplan.Platform
 import com.google.cloud.tools.jib.frontend.CredentialRetrieverFactory
 import org.jetbrains.amper.plugins.*
 import java.nio.file.Path
@@ -10,8 +11,9 @@ fun buildAndPush(
     baseImage: BaseImageSettings,
     targetImage: TargetImageSettings,
 ) {
-    jibContainerBuilder(runtimeClasspath, container, baseImage)
-        .containerize(Containerizer.to(targetImage.toRegistryImages()))
+    val containerizer = Containerizer.to(targetImage.toRegistryImages())
+    targetImage.tags.forEach { containerizer.withAdditionalTag(it) }
+    jibContainerBuilder(runtimeClasspath, container, baseImage).containerize(containerizer)
 }
 
 @TaskAction
@@ -49,6 +51,9 @@ private fun jibContainerBuilder(
     .apply {
         if (container.entryPoint != null) {
             setEntrypoint(container.entryPoint)
+        }
+        if (container.platforms.isNotEmpty()) {
+            setPlatforms(container.platforms.map { Platform(it.architecture, it.os) }.toSet())
         }
     }
 

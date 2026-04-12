@@ -25,6 +25,22 @@ interface ContainerSettings {
      * The default entrypoint is the `java` command with the runtime classpath, [jvmArgs] and [mainClass].
      */
     val entryPoint: List<String>?
+
+    /**
+     * Target platforms for the built image. When more than one is specified, Jib produces a multi-arch
+     * manifest list. Only supported for the `jib` (buildAndPush) task.
+     */
+    val platforms: List<PlatformConfig>
+        get() = emptyList()
+}
+
+@Configurable
+interface PlatformConfig {
+    /** CPU architecture, e.g. "amd64", "arm64". */
+    val architecture: String
+
+    /** Operating system, e.g. "linux". */
+    val os: String
 }
 
 @Configurable

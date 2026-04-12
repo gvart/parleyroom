@@ -16,6 +16,11 @@ plugins:
     enabled: true
     container:
       mainClass: com.gvart.parleyroom.ApplicationKt
+      platforms:
+        - architecture: amd64
+          os: linux
+        - architecture: arm64
+          os: linux
     baseImage:
       fullName: gcr.io/distroless/java25
     targetImage:
