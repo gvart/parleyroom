@@ -1,25 +1,4 @@
 services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    depends_on:
-      - postgres
-      - livekit
-      - minio
-    environment:
-      DB_URL: "jdbc:postgresql://postgres:5432/parleyroom"
-      DB_USER: "parleyroom"
-      DB_PASSWORD: "parleyroom"
-      LIVEKIT_URL: "ws://${APP_HOST}:7880"
-      LIVEKIT_API_KEY: "devkey"
-      LIVEKIT_API_SECRET: "devsecretdevsecretdevsecretdevsecret"
-      STORAGE_ENDPOINT: "http://minio:9000"
-      STORAGE_ACCESS_KEY: "minioadmin"
-      STORAGE_SECRET_KEY: "minioadmin"
-    ports:
-      - "8080:8080"
-
   postgres:
     image: postgres:17
     environment:

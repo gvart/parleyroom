@@ -8,6 +8,19 @@ settings:
   jvm:
     mainClass: com.gvart.parleyroom.ApplicationKt
 
+plugins:
+  jib-plugin:
+    enabled: true
+    container:
+      mainClass: com.gvart.parleyroom.ApplicationKt
+    baseImage:
+      fullName: gcr.io/distroless/java25
+    targetImage:
+      name: ghcr.io/gvart/parleyroom
+      tags:
+        - latest
+        - 0.1.0 # x-release-please-version
+
 dependencies:
   - $ktor.server.core
   - $ktor.server.netty

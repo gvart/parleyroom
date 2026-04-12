@@ -11,6 +11,10 @@
         {
           "type": "generic",
           "path": "docker-compose.prod.yaml"
+        },
+        {
+          "type": "generic",
+          "path": "module.yaml"
         }
       ]
     }
