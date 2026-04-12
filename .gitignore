@@ -1,0 +1,18 @@
+# Build output
+/build/
+
+# IDE
+/.idea/
+*.iml
+
+# Agent / tooling local state
+/.claude/
+
+# Local environment
+/.env
+
+# Local HTTP client scratch files
+/testrequest/
+
+# OS
+.DS_Store
