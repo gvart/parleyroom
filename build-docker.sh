@@ -7,7 +7,7 @@ IMAGE_TAG="${IMAGE_TAG:-dev}"
 cd "$(dirname "$0")"
 
 echo "==> Building executable jar with Amper"
-./amper task :parley-room:executableJarJvm
+./amper package -f executable-jar
 
 echo "==> Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}"
 docker build -t "${IMAGE_NAME}:${IMAGE_TAG}" .
