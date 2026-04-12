@@ -12,6 +12,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE: ghcr.io/gvart/parleyroom
 
 jobs:
   build-and-push:
@@ -46,7 +47,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image with Jib
+      - name: Build image to local Docker daemon
         env:
           AMPER_JAVA_HOME: ${{ env.JAVA_HOME }}
-        run: ./amper task :parley-room:jib@jib-plugin
+        run: ./amper task :parley-room:jibDockerBuild@jib-plugin
+
+      - name: Read release version
+        id: version
+        run: echo "value=$(jq -r '."."' .release-please-manifest.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Tag and push image
+        run: |
+          SHA_TAG="sha-$(git rev-parse --short HEAD)"
+          docker tag "$IMAGE:latest" "$IMAGE:${{ steps.version.outputs.value }}"
+          docker tag "$IMAGE:latest" "$IMAGE:$SHA_TAG"
+          docker push "$IMAGE" --all-tags
