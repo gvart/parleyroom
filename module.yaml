@@ -7,6 +7,9 @@ settings:
     optIns: [ kotlin.uuid.ExperimentalUuidApi, io.ktor.utils.io.ExperimentalKtorApi ]
   jvm:
     mainClass: com.gvart.parleyroom.ApplicationKt
+    release: 25
+    jdk:
+      version: 25
 
 plugins:
   jib-plugin:

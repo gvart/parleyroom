@@ -1,5 +1,11 @@
 product: jvm/amper-plugin
 
+settings:
+  jvm:
+    release: 25
+    jdk:
+      version: 25
+
 pluginInfo:
   settingsClass: JibSettings
 
