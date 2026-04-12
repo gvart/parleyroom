@@ -1,0 +1,44 @@
+product: jvm/app
+
+settings:
+  ktor: enabled
+  kotlin:
+    serialization: json
+    optIns: [ kotlin.uuid.ExperimentalUuidApi, io.ktor.utils.io.ExperimentalKtorApi ]
+  jvm:
+    mainClass: com.gvart.parleyroom.ApplicationKt
+
+dependencies:
+  - $ktor.server.core
+  - $ktor.server.netty
+  - $ktor.server.contentNegotiation
+  - $ktor.server.requestValidation
+  - $ktor.serialization.kotlinx.json
+  - $ktor.server.statusPages
+  - $ktor.server.callLogging
+  - $ktor.server.callId
+  - io.ktor:ktor-server-di
+  - ch.qos.logback:logback-classic:1.5.18
+  - com.zaxxer:HikariCP:6.2.1
+  - org.postgresql:postgresql:42.7.10
+  - $libs.exposed.core
+  - $libs.exposed.dao
+  - $libs.exposed.jdbc
+  - $libs.exposed.datetime
+  - $libs.flyway.core
+  - $libs.flyway.postgresql
+  - $libs.jbcrypt
+  - $libs.aws.sdk.s3
+  - $ktor.server.auth
+  - $ktor.server.auth.jwt
+  - $ktor.server.openapi
+  - $ktor.server.swagger
+  - $libs.ktor.openapi.routing
+
+test-dependencies:
+  - $ktor.server.testHost
+  - $ktor.client.contentNegotiation
+  - $libs.testcontainers
+  - $libs.testcontainers.postgresql
+  - $libs.testcontainers.junit.jupiter
+
