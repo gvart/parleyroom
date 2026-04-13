@@ -70,6 +70,10 @@ class StorageService(
         return "$teacherId/$materialId/$safe"
     }
 
+    fun healthCheck() {
+        s3Client.headBucket(HeadBucketRequest.builder().bucket(config.bucket).build())
+    }
+
     fun upload(key: String, contentType: String, stream: InputStream, contentLength: Long) {
         val put = PutObjectRequest.builder()
             .bucket(config.bucket)
