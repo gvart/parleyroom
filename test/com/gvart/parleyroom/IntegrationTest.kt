@@ -77,11 +77,20 @@ abstract class IntegrationTest {
                 "jwt.audience" to "parley-room-api",
                 "jwt.realm" to "TestRealm",
                 "jwt.duration" to "60m",
+                "jwt.refresh_duration" to "30d",
                 "livekit.url" to "ws://localhost:7880",
                 "livekit.api_key" to "devkey",
                 "livekit.api_secret" to "devsecretdevsecretdevsecretdevsecret",
                 "livekit.token_ttl" to "2h",
                 "application.admin.default_password" to "admin",
+                "storage.endpoint" to "http://localhost:9000",
+                "storage.region" to "us-east-1",
+                "storage.access_key" to "minioadmin",
+                "storage.secret_key" to "minioadmin",
+                "storage.bucket" to "parleyroom-test",
+                "storage.download_url_ttl" to "1h",
+                "storage.max_file_size" to "104857600",
+                "storage.path_style_access" to "true",
             )
         }
         application {
@@ -93,7 +102,7 @@ abstract class IntegrationTest {
 
     private fun loadTestData() {
         transaction {
-            exec("TRUNCATE learning_goals, homework, vocabulary_words, lesson_events, lesson_students, lessons, password_resets, registrations, users CASCADE")
+            exec("TRUNCATE refresh_tokens, learning_goals, homework, vocabulary_words, lesson_events, lesson_students, lessons, password_resets, registrations, users CASCADE")
             exec(testDataSql)
         }
     }
@@ -109,7 +118,7 @@ abstract class IntegrationTest {
             contentType(ContentType.Application.Json)
             setBody(AuthenticateRequest(email, password))
         }
-        return response.body<AuthenticateResponse>().token
+        return response.body<AuthenticateResponse>().accessToken
     }
 
     protected suspend fun getAdminToken(client: HttpClient): String =

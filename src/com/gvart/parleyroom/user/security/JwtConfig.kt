@@ -8,4 +8,5 @@ data class JwtConfig(
     val audience: String,
     val realm: String,
     val duration: Duration,
+    val refreshDuration: Duration,
 )

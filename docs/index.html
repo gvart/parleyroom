@@ -699,9 +699,11 @@
 };
             defs["AuthenticateResponse"] = {
   "title" : "com.gvart.parleyroom.user.transfer.AuthenticateResponse",
-  "required" : [ "token" ],
+  "required" : [ "accessToken", "accessTokenExpiresIn", "refreshToken" ],
   "properties" : {
-    "token" : { }
+    "accessToken" : { },
+    "refreshToken" : { },
+    "accessTokenExpiresIn" : { }
   }
 };
             defs["CancelLessonRequest"] = {
@@ -777,21 +779,7 @@
     },
     "studentId" : { },
     "lessonId" : { },
-    "fileName" : { },
-    "contentType" : { },
-    "fileSize" : { },
     "url" : { }
-  }
-};
-            defs["CreateMaterialResponse"] = {
-  "title" : "com.gvart.parleyroom.material.transfer.CreateMaterialResponse",
-  "required" : [ "material" ],
-  "properties" : {
-    "material" : {
-      "$ref" : "#/components/schemas/MaterialResponse"
-    },
-    "uploadUrl" : { },
-    "uploadContentType" : { }
   }
 };
             defs["CreateVocabularyWordRequest"] = {
@@ -1037,6 +1025,13 @@
   "properties" : {
     "studentReflection" : { },
     "studentHardToday" : { }
+  }
+};
+            defs["RefreshTokenRequest"] = {
+  "title" : "com.gvart.parleyroom.user.transfer.RefreshTokenRequest",
+  "required" : [ "refreshToken" ],
+  "properties" : {
+    "refreshToken" : { }
   }
 };
             defs["RegisterUserRequest"] = {
@@ -1367,6 +1362,9 @@
                     <li data-group="Default" data-name="apiV1TokenPost" class="">
                       <a href="#api-Default-apiV1TokenPost">apiV1TokenPost</a>
                     </li>
+                    <li data-group="Default" data-name="apiV1TokenRefreshPost" class="">
+                      <a href="#api-Default-apiV1TokenRefreshPost">apiV1TokenRefreshPost</a>
+                    </li>
                     <li data-group="Default" data-name="apiV1UsersGet" class="">
                       <a href="#api-Default-apiV1UsersGet">apiV1UsersGet</a>
                     </li>
@@ -1387,6 +1385,12 @@
                     </li>
                     <li data-group="Default" data-name="apiV1VocabularyPost" class="">
                       <a href="#api-Default-apiV1VocabularyPost">apiV1VocabularyPost</a>
+                    </li>
+                    <li data-group="Default" data-name="healthzGet" class="">
+                      <a href="#api-Default-healthzGet">healthzGet</a>
+                    </li>
+                    <li data-group="Default" data-name="readyzGet" class="">
+                      <a href="#api-Default-readyzGet">readyzGet</a>
                     </li>
           </ul>
         </nav>
@@ -15075,7 +15079,7 @@ except ApiException as e:
                         <div class="pull-right"></div>
                         <div class="clearfix"></div>
                         <p></p>
-                        <p class="marked">Creates a material. For PDF/AUDIO/VIDEO, returns an uploadUrl the client must PUT the file to. For LINK, supply the external url.</p>
+                        <p class="marked">Creates a material via multipart/form-data. Send a JSON &#x60;metadata&#x60; part and, for PDF/AUDIO/VIDEO, a binary &#x60;file&#x60; part. For LINK, omit the file and supply &#x60;url&#x60; in metadata.</p>
                         <p></p>
                         <br />
                         <pre class="prettyprint language-html prettyprinted" data-type="post"><code><span class="pln">/api/v1/materials</span></code></pre>
@@ -15122,7 +15126,7 @@ public class DefaultApiExample {
         DefaultApi apiInstance = new DefaultApi();
         CreateMaterialRequest body = ; // CreateMaterialRequest | 
         try {
-            CreateMaterialResponse result = apiInstance.apiV1MaterialsPost(body);
+            MaterialResponse result = apiInstance.apiV1MaterialsPost(body);
             System.out.println(result);
         } catch (ApiException e) {
             System.err.println("Exception when calling DefaultApi#apiV1MaterialsPost");
@@ -15141,7 +15145,7 @@ public class DefaultApiExample {
         DefaultApi apiInstance = new DefaultApi();
         CreateMaterialRequest body = ; // CreateMaterialRequest | 
         try {
-            CreateMaterialResponse result = apiInstance.apiV1MaterialsPost(body);
+            MaterialResponse result = apiInstance.apiV1MaterialsPost(body);
             System.out.println(result);
         } catch (ApiException e) {
             System.err.println("Exception when calling DefaultApi#apiV1MaterialsPost");
@@ -15162,7 +15166,7 @@ DefaultApi *apiInstance = [[DefaultApi alloc] init];
 
 // Create material
 [apiInstance apiV1MaterialsPostWith:body
-              completionHandler: ^(CreateMaterialResponse output, NSError* error) {
+              completionHandler: ^(MaterialResponse output, NSError* error) {
                             if (output) {
                                 NSLog(@"%@", output);
                             }
@@ -15217,7 +15221,7 @@ namespace Example
             try
             {
                 // Create material
-                CreateMaterialResponse result = apiInstance.apiV1MaterialsPost(body);
+                MaterialResponse result = apiInstance.apiV1MaterialsPost(body);
                 Debug.WriteLine(result);
             }
             catch (Exception e)
@@ -15355,7 +15359,7 @@ except ApiException as e:
   "content" : {
     "application/json" : {
       "schema" : {
-        "$ref" : "#/components/schemas/CreateMaterialResponse"
+        "$ref" : "#/components/schemas/MaterialResponse"
       }
     }
   }
@@ -18310,7 +18314,7 @@ except ApiException as e:
                         <div class="pull-right"></div>
                         <div class="clearfix"></div>
                         <p></p>
-                        <p class="marked">Authenticates a user with email and password, returns a JWT token.</p>
+                        <p class="marked">Authenticates a user with email and password. Returns an access token (JWT), a refresh token, and the access token TTL in seconds.</p>
                         <p></p>
                         <br />
                         <pre class="prettyprint language-html prettyprinted" data-type="post"><code><span class="pln">/api/v1/token</span></code></pre>
@@ -18702,6 +18706,365 @@ except ApiException as e:
                                     </script>
                                   </div>
                                   <input id='responses-apiV1TokenPost-401-schema-data' type='hidden' value=''></input>
+                                </div>
+                            </div>
+
+                        </article>
+                      </div>
+                      <hr>
+                    <div id="api-Default-apiV1TokenRefreshPost">
+                      <article id="api-Default-apiV1TokenRefreshPost-0" data-group="User" data-name="apiV1TokenRefreshPost" data-version="0">
+                        <div class="pull-left">
+                          <h1>apiV1TokenRefreshPost</h1>
+                          <p>Refresh access token</p>
+                        </div>
+                        <div class="pull-right"></div>
+                        <div class="clearfix"></div>
+                        <p></p>
+                        <p class="marked">Exchanges a refresh token for a new access + refresh token pair. The old refresh token is invalidated (rotation).</p>
+                        <p></p>
+                        <br />
+                        <pre class="prettyprint language-html prettyprinted" data-type="post"><code><span class="pln">/api/v1/token/refresh</span></code></pre>
+                        <p>
+                          <h3>Usage and SDK Samples</h3>
+                        </p>
+                        <ul class="nav nav-tabs nav-tabs-examples">
+                          <li class="active"><a href="#examples-Default-apiV1TokenRefreshPost-0-curl">Curl</a></li>
+                          <li class=""><a href="#examples-Default-apiV1TokenRefreshPost-0-java">Java</a></li>
+                          <li class=""><a href="#examples-Default-apiV1TokenRefreshPost-0-android">Android</a></li>
+                          <!--<li class=""><a href="#examples-Default-apiV1TokenRefreshPost-0-groovy">Groovy</a></li>-->
+                          <li class=""><a href="#examples-Default-apiV1TokenRefreshPost-0-objc">Obj-C</a></li>
+                          <li class=""><a href="#examples-Default-apiV1TokenRefreshPost-0-javascript">JavaScript</a></li>
+                          <!--<li class=""><a href="#examples-Default-apiV1TokenRefreshPost-0-angular">Angular</a></li>-->
+                          <li class=""><a href="#examples-Default-apiV1TokenRefreshPost-0-csharp">C#</a></li>
+                          <li class=""><a href="#examples-Default-apiV1TokenRefreshPost-0-php">PHP</a></li>
+                          <li class=""><a href="#examples-Default-apiV1TokenRefreshPost-0-perl">Perl</a></li>
+                          <li class=""><a href="#examples-Default-apiV1TokenRefreshPost-0-python">Python</a></li>
+                        </ul>
+
+                        <div class="tab-content">
+                          <div class="tab-pane active" id="examples-Default-apiV1TokenRefreshPost-0-curl">
+                           <pre class="prettyprint"><code class="language-bsh">curl -X POST\
+-H "Accept: application/json"\
+-H "Content-Type: application/json"\
+"//api/v1/token/refresh"</code></pre>
+                          </div>
+                          <div class="tab-pane" id="examples-Default-apiV1TokenRefreshPost-0-java">
+                            <pre class="prettyprint"><code class="language-java">import io.swagger.client.*;
+import io.swagger.client.auth.*;
+import io.swagger.client.model.*;
+import io.swagger.client.api.DefaultApi;
+
+import java.io.File;
+import java.util.*;
+
+public class DefaultApiExample {
+
+    public static void main(String[] args) {
+        
+        DefaultApi apiInstance = new DefaultApi();
+        RefreshTokenRequest body = ; // RefreshTokenRequest | 
+        try {
+            AuthenticateResponse result = apiInstance.apiV1TokenRefreshPost(body);
+            System.out.println(result);
+        } catch (ApiException e) {
+            System.err.println("Exception when calling DefaultApi#apiV1TokenRefreshPost");
+            e.printStackTrace();
+        }
+    }
+}</code></pre>
+                          </div>
+
+                          <div class="tab-pane" id="examples-Default-apiV1TokenRefreshPost-0-android">
+                            <pre class="prettyprint"><code class="language-java">import io.swagger.client.api.DefaultApi;
+
+public class DefaultApiExample {
+
+    public static void main(String[] args) {
+        DefaultApi apiInstance = new DefaultApi();
+        RefreshTokenRequest body = ; // RefreshTokenRequest | 
+        try {
+            AuthenticateResponse result = apiInstance.apiV1TokenRefreshPost(body);
+            System.out.println(result);
+        } catch (ApiException e) {
+            System.err.println("Exception when calling DefaultApi#apiV1TokenRefreshPost");
+            e.printStackTrace();
+        }
+    }
+}</code></pre>
+                          </div>
+  <!--
+  <div class="tab-pane" id="examples-Default-apiV1TokenRefreshPost-0-groovy">
+  <pre class="prettyprint language-json prettyprinted" data-type="json"><code>Coming Soon!</code></pre>
+  </div> -->
+                            <div class="tab-pane" id="examples-Default-apiV1TokenRefreshPost-0-objc">
+                              <pre class="prettyprint"><code class="language-cpp">RefreshTokenRequest *body = ; //  (optional)
+
+DefaultApi *apiInstance = [[DefaultApi alloc] init];
+
+// Refresh access token
+[apiInstance apiV1TokenRefreshPostWith:body
+              completionHandler: ^(AuthenticateResponse output, NSError* error) {
+                            if (output) {
+                                NSLog(@"%@", output);
+                            }
+                            if (error) {
+                                NSLog(@"Error: %@", error);
+                            }
+                        }];
+</code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-apiV1TokenRefreshPost-0-javascript">
+                              <pre class="prettyprint"><code class="language-js">var UntitledApi = require('untitled_api');
+
+var api = new UntitledApi.DefaultApi()
+var opts = { 
+  'body':  // {{RefreshTokenRequest}} 
+};
+var callback = function(error, data, response) {
+  if (error) {
+    console.error(error);
+  } else {
+    console.log('API called successfully. Returned data: ' + data);
+  }
+};
+api.apiV1TokenRefreshPost(opts, callback);
+</code></pre>
+                            </div>
+
+                            <!--<div class="tab-pane" id="examples-Default-apiV1TokenRefreshPost-0-angular">
+              <pre class="prettyprint language-json prettyprinted" data-type="json"><code>Coming Soon!</code></pre>
+            </div>-->
+                            <div class="tab-pane" id="examples-Default-apiV1TokenRefreshPost-0-csharp">
+                              <pre class="prettyprint"><code class="language-cs">using System;
+using System.Diagnostics;
+using IO.Swagger.Api;
+using IO.Swagger.Client;
+using IO.Swagger.Model;
+
+namespace Example
+{
+    public class apiV1TokenRefreshPostExample
+    {
+        public void main()
+        {
+
+            var apiInstance = new DefaultApi();
+            var body = new RefreshTokenRequest(); // RefreshTokenRequest |  (optional) 
+
+            try
+            {
+                // Refresh access token
+                AuthenticateResponse result = apiInstance.apiV1TokenRefreshPost(body);
+                Debug.WriteLine(result);
+            }
+            catch (Exception e)
+            {
+                Debug.Print("Exception when calling DefaultApi.apiV1TokenRefreshPost: " + e.Message );
+            }
+        }
+    }
+}
+</code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-apiV1TokenRefreshPost-0-php">
+                              <pre class="prettyprint"><code class="language-php"><&#63;php
+require_once(__DIR__ . '/vendor/autoload.php');
+
+$api_instance = new Swagger\Client\ApiDefaultApi();
+$body = ; // RefreshTokenRequest | 
+
+try {
+    $result = $api_instance->apiV1TokenRefreshPost($body);
+    print_r($result);
+} catch (Exception $e) {
+    echo 'Exception when calling DefaultApi->apiV1TokenRefreshPost: ', $e->getMessage(), PHP_EOL;
+}
+?></code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-apiV1TokenRefreshPost-0-perl">
+                              <pre class="prettyprint"><code class="language-perl">use Data::Dumper;
+use WWW::SwaggerClient::Configuration;
+use WWW::SwaggerClient::DefaultApi;
+
+my $api_instance = WWW::SwaggerClient::DefaultApi->new();
+my $body = WWW::SwaggerClient::Object::RefreshTokenRequest->new(); # RefreshTokenRequest | 
+
+eval { 
+    my $result = $api_instance->apiV1TokenRefreshPost(body => $body);
+    print Dumper($result);
+};
+if ($@) {
+    warn "Exception when calling DefaultApi->apiV1TokenRefreshPost: $@\n";
+}</code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-apiV1TokenRefreshPost-0-python">
+                              <pre class="prettyprint"><code class="language-python">from __future__ import print_statement
+import time
+import swagger_client
+from swagger_client.rest import ApiException
+from pprint import pprint
+
+# create an instance of the API class
+api_instance = swagger_client.DefaultApi()
+body =  # RefreshTokenRequest |  (optional)
+
+try: 
+    # Refresh access token
+    api_response = api_instance.api_v1_token_refresh_post(body=body)
+    pprint(api_response)
+except ApiException as e:
+    print("Exception when calling DefaultApi->apiV1TokenRefreshPost: %s\n" % e)</code></pre>
+                            </div>
+                          </div>
+
+                          <h2>Parameters</h2>
+
+
+
+                            <div class="methodsubtabletitle">Body parameters</div>
+                            <table id="methodsubtable">
+                              <tr>
+                                <th width="150px">Name</th>
+                                <th>Description</th>
+                              </tr>
+                                <tr><td style="width:150px;">body </td>
+                                <td>
+                                
+                                
+                                <script>
+                                $(document).ready(function() {
+                                  var schemaWrapper = {
+  "content" : {
+    "application/json" : {
+      "schema" : {
+        "$ref" : "#/components/schemas/RefreshTokenRequest"
+      }
+    }
+  }
+};
+                                  var schema = schemaWrapper.content["application/json"].schema;
+                                  if (schema.$ref != null) {
+                                    schema = defsParser.$refs.get(schema.$ref);
+                                  } else {
+                                    schemaWrapper.components = {};
+                                    schemaWrapper.components.schemas = Object.assign({}, defs);
+                                    $RefParser.dereference(schemaWrapper).catch(function(err) {
+                                      console.log(err);
+                                    });
+                                  }
+                                
+                                  var view = new JSONSchemaView(schema,2,{isBodyParam: true});
+                                  var result = $('#d2e199_apiV1TokenRefreshPost_body');
+                                  result.empty();
+                                  result.append(view.render());
+                                });
+                                </script>
+                                <div id="d2e199_apiV1TokenRefreshPost_body"></div>
+                                </td>
+                                </tr>
+                            </table>
+
+
+
+                          <h2>Responses</h2>
+                            <h3> Status: 200 - Tokens refreshed </h3>
+
+                            <ul class="nav nav-tabs nav-tabs-examples" >
+                                <li class="active">
+                                  <a data-toggle="tab" href="#responses-apiV1TokenRefreshPost-200-schema">Schema</a>
+                                </li>
+
+                            </ul>
+
+                            <div class="tab-content" style='margin-bottom: 10px;'>
+                                <div class="tab-pane active" id="responses-apiV1TokenRefreshPost-200-schema">
+                                  <div id='responses-apiV1TokenRefreshPost-200-schema-200' style="padding: 30px; border-left: 1px solid #eee; border-right: 1px solid #eee; border-bottom: 1px solid #eee;">
+                                    <script>
+                                      $(document).ready(function() {
+                                        var schemaWrapper = {
+  "description" : "Tokens refreshed",
+  "content" : {
+    "application/json" : {
+      "schema" : {
+        "$ref" : "#/components/schemas/AuthenticateResponse"
+      }
+    }
+  }
+};
+                                        var schema = schemaWrapper.content["application/json"].schema;
+                                        if (schema.$ref != null) {
+                                          schema = defsParser.$refs.get(schema.$ref);
+                                        } else {
+                                          schemaWrapper.components = {};
+                                          schemaWrapper.components.schemas = Object.assign({}, defs);
+                                          $RefParser.dereference(schemaWrapper).catch(function(err) {
+                                            console.log(err);
+                                          });
+                                        }
+
+                                        //console.log(JSON.stringify(schema));
+                                        var view = new JSONSchemaView(schema, 3);
+                                        $('#responses-apiV1TokenRefreshPost-200-schema-data').val(stringify(schema));
+                                        var result = $('#responses-apiV1TokenRefreshPost-200-schema-200');
+                                        result.empty();
+                                        result.append(view.render());
+                                      });
+                                    </script>
+                                  </div>
+                                  <input id='responses-apiV1TokenRefreshPost-200-schema-data' type='hidden' value=''></input>
+                                </div>
+                            </div>
+
+                            <h3> Status: 401 - Refresh token missing, expired, or revoked </h3>
+
+                            <ul class="nav nav-tabs nav-tabs-examples" >
+                                <li class="active">
+                                  <a data-toggle="tab" href="#responses-apiV1TokenRefreshPost-401-schema">Schema</a>
+                                </li>
+
+                            </ul>
+
+                            <div class="tab-content" style='margin-bottom: 10px;'>
+                                <div class="tab-pane active" id="responses-apiV1TokenRefreshPost-401-schema">
+                                  <div id='responses-apiV1TokenRefreshPost-401-schema-401' style="padding: 30px; border-left: 1px solid #eee; border-right: 1px solid #eee; border-bottom: 1px solid #eee;">
+                                    <script>
+                                      $(document).ready(function() {
+                                        var schemaWrapper = {
+  "description" : "Refresh token missing, expired, or revoked",
+  "content" : {
+    "application/json" : {
+      "schema" : {
+        "$ref" : "#/components/schemas/ProblemDetail"
+      }
+    }
+  }
+};
+                                        var schema = schemaWrapper.content["application/json"].schema;
+                                        if (schema.$ref != null) {
+                                          schema = defsParser.$refs.get(schema.$ref);
+                                        } else {
+                                          schemaWrapper.components = {};
+                                          schemaWrapper.components.schemas = Object.assign({}, defs);
+                                          $RefParser.dereference(schemaWrapper).catch(function(err) {
+                                            console.log(err);
+                                          });
+                                        }
+
+                                        //console.log(JSON.stringify(schema));
+                                        var view = new JSONSchemaView(schema, 3);
+                                        $('#responses-apiV1TokenRefreshPost-401-schema-data').val(stringify(schema));
+                                        var result = $('#responses-apiV1TokenRefreshPost-401-schema-401');
+                                        result.empty();
+                                        result.append(view.render());
+                                      });
+                                    </script>
+                                  </div>
+                                  <input id='responses-apiV1TokenRefreshPost-401-schema-data' type='hidden' value=''></input>
                                 </div>
                             </div>
 
@@ -21040,6 +21403,400 @@ except ApiException as e:
                                 </div>
                             </div>
 
+                        </article>
+                      </div>
+                      <hr>
+                    <div id="api-Default-healthzGet">
+                      <article id="api-Default-healthzGet-0" data-group="User" data-name="healthzGet" data-version="0">
+                        <div class="pull-left">
+                          <h1>healthzGet</h1>
+                          <p></p>
+                        </div>
+                        <div class="pull-right"></div>
+                        <div class="clearfix"></div>
+                        <p></p>
+                        <p class="marked"></p>
+                        <p></p>
+                        <br />
+                        <pre class="prettyprint language-html prettyprinted" data-type="get"><code><span class="pln">/healthz</span></code></pre>
+                        <p>
+                          <h3>Usage and SDK Samples</h3>
+                        </p>
+                        <ul class="nav nav-tabs nav-tabs-examples">
+                          <li class="active"><a href="#examples-Default-healthzGet-0-curl">Curl</a></li>
+                          <li class=""><a href="#examples-Default-healthzGet-0-java">Java</a></li>
+                          <li class=""><a href="#examples-Default-healthzGet-0-android">Android</a></li>
+                          <!--<li class=""><a href="#examples-Default-healthzGet-0-groovy">Groovy</a></li>-->
+                          <li class=""><a href="#examples-Default-healthzGet-0-objc">Obj-C</a></li>
+                          <li class=""><a href="#examples-Default-healthzGet-0-javascript">JavaScript</a></li>
+                          <!--<li class=""><a href="#examples-Default-healthzGet-0-angular">Angular</a></li>-->
+                          <li class=""><a href="#examples-Default-healthzGet-0-csharp">C#</a></li>
+                          <li class=""><a href="#examples-Default-healthzGet-0-php">PHP</a></li>
+                          <li class=""><a href="#examples-Default-healthzGet-0-perl">Perl</a></li>
+                          <li class=""><a href="#examples-Default-healthzGet-0-python">Python</a></li>
+                        </ul>
+
+                        <div class="tab-content">
+                          <div class="tab-pane active" id="examples-Default-healthzGet-0-curl">
+                           <pre class="prettyprint"><code class="language-bsh">curl -X GET\
+"//healthz"</code></pre>
+                          </div>
+                          <div class="tab-pane" id="examples-Default-healthzGet-0-java">
+                            <pre class="prettyprint"><code class="language-java">import io.swagger.client.*;
+import io.swagger.client.auth.*;
+import io.swagger.client.model.*;
+import io.swagger.client.api.DefaultApi;
+
+import java.io.File;
+import java.util.*;
+
+public class DefaultApiExample {
+
+    public static void main(String[] args) {
+        
+        DefaultApi apiInstance = new DefaultApi();
+        try {
+            apiInstance.healthzGet();
+        } catch (ApiException e) {
+            System.err.println("Exception when calling DefaultApi#healthzGet");
+            e.printStackTrace();
+        }
+    }
+}</code></pre>
+                          </div>
+
+                          <div class="tab-pane" id="examples-Default-healthzGet-0-android">
+                            <pre class="prettyprint"><code class="language-java">import io.swagger.client.api.DefaultApi;
+
+public class DefaultApiExample {
+
+    public static void main(String[] args) {
+        DefaultApi apiInstance = new DefaultApi();
+        try {
+            apiInstance.healthzGet();
+        } catch (ApiException e) {
+            System.err.println("Exception when calling DefaultApi#healthzGet");
+            e.printStackTrace();
+        }
+    }
+}</code></pre>
+                          </div>
+  <!--
+  <div class="tab-pane" id="examples-Default-healthzGet-0-groovy">
+  <pre class="prettyprint language-json prettyprinted" data-type="json"><code>Coming Soon!</code></pre>
+  </div> -->
+                            <div class="tab-pane" id="examples-Default-healthzGet-0-objc">
+                              <pre class="prettyprint"><code class="language-cpp">
+DefaultApi *apiInstance = [[DefaultApi alloc] init];
+
+[apiInstance healthzGetWithCompletionHandler: 
+              ^(NSError* error) {
+                            if (error) {
+                                NSLog(@"Error: %@", error);
+                            }
+                        }];
+</code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-healthzGet-0-javascript">
+                              <pre class="prettyprint"><code class="language-js">var UntitledApi = require('untitled_api');
+
+var api = new UntitledApi.DefaultApi()
+var callback = function(error, data, response) {
+  if (error) {
+    console.error(error);
+  } else {
+    console.log('API called successfully.');
+  }
+};
+api.healthzGet(callback);
+</code></pre>
+                            </div>
+
+                            <!--<div class="tab-pane" id="examples-Default-healthzGet-0-angular">
+              <pre class="prettyprint language-json prettyprinted" data-type="json"><code>Coming Soon!</code></pre>
+            </div>-->
+                            <div class="tab-pane" id="examples-Default-healthzGet-0-csharp">
+                              <pre class="prettyprint"><code class="language-cs">using System;
+using System.Diagnostics;
+using IO.Swagger.Api;
+using IO.Swagger.Client;
+using IO.Swagger.Model;
+
+namespace Example
+{
+    public class healthzGetExample
+    {
+        public void main()
+        {
+
+            var apiInstance = new DefaultApi();
+
+            try
+            {
+                apiInstance.healthzGet();
+            }
+            catch (Exception e)
+            {
+                Debug.Print("Exception when calling DefaultApi.healthzGet: " + e.Message );
+            }
+        }
+    }
+}
+</code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-healthzGet-0-php">
+                              <pre class="prettyprint"><code class="language-php"><&#63;php
+require_once(__DIR__ . '/vendor/autoload.php');
+
+$api_instance = new Swagger\Client\ApiDefaultApi();
+
+try {
+    $api_instance->healthzGet();
+} catch (Exception $e) {
+    echo 'Exception when calling DefaultApi->healthzGet: ', $e->getMessage(), PHP_EOL;
+}
+?></code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-healthzGet-0-perl">
+                              <pre class="prettyprint"><code class="language-perl">use Data::Dumper;
+use WWW::SwaggerClient::Configuration;
+use WWW::SwaggerClient::DefaultApi;
+
+my $api_instance = WWW::SwaggerClient::DefaultApi->new();
+
+eval { 
+    $api_instance->healthzGet();
+};
+if ($@) {
+    warn "Exception when calling DefaultApi->healthzGet: $@\n";
+}</code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-healthzGet-0-python">
+                              <pre class="prettyprint"><code class="language-python">from __future__ import print_statement
+import time
+import swagger_client
+from swagger_client.rest import ApiException
+from pprint import pprint
+
+# create an instance of the API class
+api_instance = swagger_client.DefaultApi()
+
+try: 
+    api_instance.healthz_get()
+except ApiException as e:
+    print("Exception when calling DefaultApi->healthzGet: %s\n" % e)</code></pre>
+                            </div>
+                          </div>
+
+                          <h2>Parameters</h2>
+
+
+
+
+
+
+                          <h2>Responses</h2>
+                        </article>
+                      </div>
+                      <hr>
+                    <div id="api-Default-readyzGet">
+                      <article id="api-Default-readyzGet-0" data-group="User" data-name="readyzGet" data-version="0">
+                        <div class="pull-left">
+                          <h1>readyzGet</h1>
+                          <p></p>
+                        </div>
+                        <div class="pull-right"></div>
+                        <div class="clearfix"></div>
+                        <p></p>
+                        <p class="marked"></p>
+                        <p></p>
+                        <br />
+                        <pre class="prettyprint language-html prettyprinted" data-type="get"><code><span class="pln">/readyz</span></code></pre>
+                        <p>
+                          <h3>Usage and SDK Samples</h3>
+                        </p>
+                        <ul class="nav nav-tabs nav-tabs-examples">
+                          <li class="active"><a href="#examples-Default-readyzGet-0-curl">Curl</a></li>
+                          <li class=""><a href="#examples-Default-readyzGet-0-java">Java</a></li>
+                          <li class=""><a href="#examples-Default-readyzGet-0-android">Android</a></li>
+                          <!--<li class=""><a href="#examples-Default-readyzGet-0-groovy">Groovy</a></li>-->
+                          <li class=""><a href="#examples-Default-readyzGet-0-objc">Obj-C</a></li>
+                          <li class=""><a href="#examples-Default-readyzGet-0-javascript">JavaScript</a></li>
+                          <!--<li class=""><a href="#examples-Default-readyzGet-0-angular">Angular</a></li>-->
+                          <li class=""><a href="#examples-Default-readyzGet-0-csharp">C#</a></li>
+                          <li class=""><a href="#examples-Default-readyzGet-0-php">PHP</a></li>
+                          <li class=""><a href="#examples-Default-readyzGet-0-perl">Perl</a></li>
+                          <li class=""><a href="#examples-Default-readyzGet-0-python">Python</a></li>
+                        </ul>
+
+                        <div class="tab-content">
+                          <div class="tab-pane active" id="examples-Default-readyzGet-0-curl">
+                           <pre class="prettyprint"><code class="language-bsh">curl -X GET\
+"//readyz"</code></pre>
+                          </div>
+                          <div class="tab-pane" id="examples-Default-readyzGet-0-java">
+                            <pre class="prettyprint"><code class="language-java">import io.swagger.client.*;
+import io.swagger.client.auth.*;
+import io.swagger.client.model.*;
+import io.swagger.client.api.DefaultApi;
+
+import java.io.File;
+import java.util.*;
+
+public class DefaultApiExample {
+
+    public static void main(String[] args) {
+        
+        DefaultApi apiInstance = new DefaultApi();
+        try {
+            apiInstance.readyzGet();
+        } catch (ApiException e) {
+            System.err.println("Exception when calling DefaultApi#readyzGet");
+            e.printStackTrace();
+        }
+    }
+}</code></pre>
+                          </div>
+
+                          <div class="tab-pane" id="examples-Default-readyzGet-0-android">
+                            <pre class="prettyprint"><code class="language-java">import io.swagger.client.api.DefaultApi;
+
+public class DefaultApiExample {
+
+    public static void main(String[] args) {
+        DefaultApi apiInstance = new DefaultApi();
+        try {
+            apiInstance.readyzGet();
+        } catch (ApiException e) {
+            System.err.println("Exception when calling DefaultApi#readyzGet");
+            e.printStackTrace();
+        }
+    }
+}</code></pre>
+                          </div>
+  <!--
+  <div class="tab-pane" id="examples-Default-readyzGet-0-groovy">
+  <pre class="prettyprint language-json prettyprinted" data-type="json"><code>Coming Soon!</code></pre>
+  </div> -->
+                            <div class="tab-pane" id="examples-Default-readyzGet-0-objc">
+                              <pre class="prettyprint"><code class="language-cpp">
+DefaultApi *apiInstance = [[DefaultApi alloc] init];
+
+[apiInstance readyzGetWithCompletionHandler: 
+              ^(NSError* error) {
+                            if (error) {
+                                NSLog(@"Error: %@", error);
+                            }
+                        }];
+</code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-readyzGet-0-javascript">
+                              <pre class="prettyprint"><code class="language-js">var UntitledApi = require('untitled_api');
+
+var api = new UntitledApi.DefaultApi()
+var callback = function(error, data, response) {
+  if (error) {
+    console.error(error);
+  } else {
+    console.log('API called successfully.');
+  }
+};
+api.readyzGet(callback);
+</code></pre>
+                            </div>
+
+                            <!--<div class="tab-pane" id="examples-Default-readyzGet-0-angular">
+              <pre class="prettyprint language-json prettyprinted" data-type="json"><code>Coming Soon!</code></pre>
+            </div>-->
+                            <div class="tab-pane" id="examples-Default-readyzGet-0-csharp">
+                              <pre class="prettyprint"><code class="language-cs">using System;
+using System.Diagnostics;
+using IO.Swagger.Api;
+using IO.Swagger.Client;
+using IO.Swagger.Model;
+
+namespace Example
+{
+    public class readyzGetExample
+    {
+        public void main()
+        {
+
+            var apiInstance = new DefaultApi();
+
+            try
+            {
+                apiInstance.readyzGet();
+            }
+            catch (Exception e)
+            {
+                Debug.Print("Exception when calling DefaultApi.readyzGet: " + e.Message );
+            }
+        }
+    }
+}
+</code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-readyzGet-0-php">
+                              <pre class="prettyprint"><code class="language-php"><&#63;php
+require_once(__DIR__ . '/vendor/autoload.php');
+
+$api_instance = new Swagger\Client\ApiDefaultApi();
+
+try {
+    $api_instance->readyzGet();
+} catch (Exception $e) {
+    echo 'Exception when calling DefaultApi->readyzGet: ', $e->getMessage(), PHP_EOL;
+}
+?></code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-readyzGet-0-perl">
+                              <pre class="prettyprint"><code class="language-perl">use Data::Dumper;
+use WWW::SwaggerClient::Configuration;
+use WWW::SwaggerClient::DefaultApi;
+
+my $api_instance = WWW::SwaggerClient::DefaultApi->new();
+
+eval { 
+    $api_instance->readyzGet();
+};
+if ($@) {
+    warn "Exception when calling DefaultApi->readyzGet: $@\n";
+}</code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-readyzGet-0-python">
+                              <pre class="prettyprint"><code class="language-python">from __future__ import print_statement
+import time
+import swagger_client
+from swagger_client.rest import ApiException
+from pprint import pprint
+
+# create an instance of the API class
+api_instance = swagger_client.DefaultApi()
+
+try: 
+    api_instance.readyz_get()
+except ApiException as e:
+    print("Exception when calling DefaultApi->readyzGet: %s\n" % e)</code></pre>
+                            </div>
+                          </div>
+
+                          <h2>Parameters</h2>
+
+
+
+
+
+
+                          <h2>Responses</h2>
                         </article>
                       </div>
                       <hr>

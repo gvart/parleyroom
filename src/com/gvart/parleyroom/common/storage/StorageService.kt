@@ -51,7 +51,9 @@ class StorageService(
         .build()
 
     init {
-        ensureBucket()
+        runCatching { ensureBucket() }.onFailure {
+            log.warn("Storage bucket '{}' check failed at startup: {}. Bucket will be created on first use.", config.bucket, it.message)
+        }
     }
 
     private fun ensureBucket() {

@@ -22,6 +22,7 @@ import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.security.JwtConfig
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.user.transfer.AuthenticateRequest
+import com.gvart.parleyroom.user.transfer.RefreshTokenRequest
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -60,7 +61,8 @@ fun Application.generalConfig() {
                 issuer = config.property("jwt.issuer").getString(),
                 audience = config.property("jwt.audience").getString(),
                 realm = config.property("jwt.realm").getString(),
-                duration = Duration.parse(config.property("jwt.duration").getString())
+                duration = Duration.parse(config.property("jwt.duration").getString()),
+                refreshDuration = Duration.parse(config.property("jwt.refresh_duration").getString()),
             )
 
         }
@@ -91,6 +93,7 @@ fun Application.generalConfig() {
     install(RequestValidation) {
         validate<RegisterUserRequest> { it.validate() }
         validate<AuthenticateRequest> { it.validate() }
+        validate<RefreshTokenRequest> { it.validate() }
         validate<ResetPasswordRequest> { it.validate() }
         validate<CreateLessonRequest> { it.validate() }
         validate<RescheduleLessonRequest> { it.validate() }

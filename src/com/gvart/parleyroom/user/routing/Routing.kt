@@ -6,6 +6,7 @@ import com.gvart.parleyroom.user.service.AuthenticationService
 import com.gvart.parleyroom.user.service.UserService
 import com.gvart.parleyroom.user.transfer.AuthenticateRequest
 import com.gvart.parleyroom.user.transfer.AuthenticateResponse
+import com.gvart.parleyroom.user.transfer.RefreshTokenRequest
 import com.gvart.parleyroom.user.transfer.UserListResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
@@ -32,7 +33,7 @@ fun Application.configureRouting() {
                 call.respond(HttpStatusCode.OK, result)
             }.describe {
                 summary = "Authenticate user"
-                description = "Authenticates a user with email and password, returns a JWT token."
+                description = "Authenticates a user with email and password. Returns an access token (JWT), a refresh token, and the access token TTL in seconds."
                 requestBody {
                     schema = jsonSchema<AuthenticateRequest>()
                 }
@@ -47,6 +48,28 @@ fun Application.configureRouting() {
                     }
                     HttpStatusCode.Unauthorized {
                         description = "Invalid credentials"
+                        schema = jsonSchema<ProblemDetail>()
+                    }
+                }
+            }
+
+            post<RefreshTokenRequest>("/refresh") {
+                val result = authenticationService.refresh(it)
+
+                call.respond(HttpStatusCode.OK, result)
+            }.describe {
+                summary = "Refresh access token"
+                description = "Exchanges a refresh token for a new access + refresh token pair. The old refresh token is invalidated (rotation)."
+                requestBody {
+                    schema = jsonSchema<RefreshTokenRequest>()
+                }
+                responses {
+                    HttpStatusCode.OK {
+                        description = "Tokens refreshed"
+                        schema = jsonSchema<AuthenticateResponse>()
+                    }
+                    HttpStatusCode.Unauthorized {
+                        description = "Refresh token missing, expired, or revoked"
                         schema = jsonSchema<ProblemDetail>()
                     }
                 }
