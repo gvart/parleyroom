@@ -1,19 +1,25 @@
 package com.gvart.parleyroom.material.routing
 
+import com.gvart.parleyroom.common.storage.StorageConfig
 import com.gvart.parleyroom.common.transfer.ProblemDetail
+import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.material.data.MaterialType
 import com.gvart.parleyroom.material.service.MaterialService
+import com.gvart.parleyroom.material.transfer.CreateMaterialInput
 import com.gvart.parleyroom.material.transfer.CreateMaterialRequest
-import com.gvart.parleyroom.material.transfer.CreateMaterialResponse
 import com.gvart.parleyroom.material.transfer.MaterialResponse
 import com.gvart.parleyroom.material.transfer.UpdateMaterialRequest
 import com.gvart.parleyroom.user.security.UserPrincipal
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.PartData
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
+import io.ktor.server.plugins.requestvalidation.ValidationResult
+import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.respond
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
@@ -22,10 +28,14 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import io.ktor.utils.io.jvm.javaio.toInputStream
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
 import java.util.UUID
 
 fun Application.configureMaterialRouting() {
     val materialService: MaterialService by dependencies
+    val storageConfig: StorageConfig by dependencies
 
     routing {
         authenticate {
@@ -54,19 +64,79 @@ fun Application.configureMaterialRouting() {
                     }
                 }
 
-                post<CreateMaterialRequest> {
+                post {
                     val principal = call.principal<UserPrincipal>()!!
+                    val multipart = call.receiveMultipart()
 
-                    val result = materialService.createMaterial(it, principal)
-                    call.respond(HttpStatusCode.Created, result)
+                    var metadata: CreateMaterialRequest? = null
+                    var fileItem: PartData.FileItem? = null
+
+                    try {
+                        while (fileItem == null) {
+                            val part = multipart.readPart() ?: break
+                            when (part) {
+                                is PartData.FormItem -> {
+                                    if (part.name == "metadata" && metadata == null) {
+                                        metadata = parseMetadata(part.value)
+                                    }
+                                    part.dispose()
+                                }
+                                is PartData.FileItem -> {
+                                    if (part.name == "file") {
+                                        fileItem = part
+                                    } else {
+                                        part.dispose()
+                                    }
+                                }
+                                else -> part.dispose()
+                            }
+                        }
+
+                        val meta = metadata
+                            ?: throw BadRequestException("metadata part is required and must be sent before the file part")
+
+                        val input = when (meta.type) {
+                            MaterialType.LINK -> {
+                                if (fileItem != null) {
+                                    throw BadRequestException("file part must be omitted for LINK materials")
+                                }
+                                CreateMaterialInput.Link(meta)
+                            }
+                            else -> {
+                                val fp = fileItem
+                                    ?: throw BadRequestException("file part is required for ${meta.type}")
+                                val fileName = fp.originalFileName?.takeIf { it.isNotBlank() }
+                                    ?: throw BadRequestException("file part is missing a filename")
+                                val partContentType = fp.contentType?.toString()
+                                    ?: throw BadRequestException("file part is missing Content-Type")
+                                val size = fp.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+                                    ?: throw BadRequestException("file part is missing Content-Length")
+                                if (size > storageConfig.maxFileSize) {
+                                    throw BadRequestException("file exceeds max size of ${storageConfig.maxFileSize} bytes")
+                                }
+                                CreateMaterialInput.File(
+                                    request = meta,
+                                    fileName = fileName,
+                                    contentType = partContentType,
+                                    size = size,
+                                    stream = fp.provider().toInputStream(),
+                                )
+                            }
+                        }
+
+                        val result = materialService.createMaterial(input, principal)
+                        call.respond(HttpStatusCode.Created, result)
+                    } finally {
+                        fileItem?.dispose()
+                    }
                 }.describe {
                     summary = "Create material"
-                    description = "Creates a material. For PDF/AUDIO/VIDEO, returns an uploadUrl the client must PUT the file to. For LINK, supply the external url."
+                    description = "Creates a material via multipart/form-data. Send a JSON `metadata` part and, for PDF/AUDIO/VIDEO, a binary `file` part. For LINK, omit the file and supply `url` in metadata."
                     requestBody { schema = jsonSchema<CreateMaterialRequest>() }
                     responses {
                         HttpStatusCode.Created {
                             description = "Material created"
-                            schema = jsonSchema<CreateMaterialResponse>()
+                            schema = jsonSchema<MaterialResponse>()
                         }
                         HttpStatusCode.Forbidden {
                             description = "Students cannot create materials"
@@ -135,4 +205,17 @@ fun Application.configureMaterialRouting() {
             }
         }
     }
+}
+
+private fun parseMetadata(value: String): CreateMaterialRequest {
+    val request = try {
+        Json.decodeFromString<CreateMaterialRequest>(value)
+    } catch (e: SerializationException) {
+        throw BadRequestException("metadata part is not valid JSON: ${e.message}")
+    }
+    val validation = request.validate()
+    if (validation is ValidationResult.Invalid) {
+        throw BadRequestException(validation.reasons.joinToString())
+    }
+    return request
 }

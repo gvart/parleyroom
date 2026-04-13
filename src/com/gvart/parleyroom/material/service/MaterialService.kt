@@ -9,8 +9,8 @@ import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.material.data.MaterialTable
 import com.gvart.parleyroom.material.data.MaterialType
+import com.gvart.parleyroom.material.transfer.CreateMaterialInput
 import com.gvart.parleyroom.material.transfer.CreateMaterialRequest
-import com.gvart.parleyroom.material.transfer.CreateMaterialResponse
 import com.gvart.parleyroom.material.transfer.MaterialResponse
 import com.gvart.parleyroom.material.transfer.UpdateMaterialRequest
 import com.gvart.parleyroom.user.data.UserRole
@@ -77,26 +77,68 @@ class MaterialService(
         toResponse(row)
     }
 
-    fun createMaterial(request: CreateMaterialRequest, principal: UserPrincipal): CreateMaterialResponse = transaction {
+    fun createMaterial(input: CreateMaterialInput, principal: UserPrincipal): MaterialResponse {
         if (principal.role == UserRole.STUDENT)
             throw ForbiddenException("Only teachers and admins can create materials")
 
+        val request = input.request
         val teacherId = principal.id
         val studentUuid = request.studentId?.let(UUID::fromString)
         val lessonUuid = request.lessonId?.let(UUID::fromString)
 
         if (studentUuid != null) {
-            AuthorizationHelper.requireAccessToStudent(studentUuid, principal)
+            transaction { AuthorizationHelper.requireAccessToStudent(studentUuid, principal) }
         }
 
-        val now = OffsetDateTime.now()
         val materialId = UUID.randomUUID()
-        val storedUrl = when (request.type) {
-            MaterialType.LINK -> request.url!!
-            else -> storage.buildKey(teacherId, materialId, request.fileName!!)
-        }
-        val contentType = if (request.type == MaterialType.LINK) null else request.contentType!!
+        val now = OffsetDateTime.now()
 
+        return when (input) {
+            is CreateMaterialInput.Link -> insertMaterial(
+                materialId = materialId,
+                teacherId = teacherId,
+                studentUuid = studentUuid,
+                lessonUuid = lessonUuid,
+                request = request,
+                storedUrl = request.url!!,
+                contentType = null,
+                fileSize = null,
+                createdAt = now,
+            )
+            is CreateMaterialInput.File -> {
+                val key = storage.buildKey(teacherId, materialId, input.fileName)
+                storage.upload(key, input.contentType, input.stream, input.size)
+                runCatching {
+                    insertMaterial(
+                        materialId = materialId,
+                        teacherId = teacherId,
+                        studentUuid = studentUuid,
+                        lessonUuid = lessonUuid,
+                        request = request,
+                        storedUrl = key,
+                        contentType = input.contentType,
+                        fileSize = input.size,
+                        createdAt = now,
+                    )
+                }.getOrElse { e ->
+                    runCatching { storage.delete(key) }
+                    throw e
+                }
+            }
+        }
+    }
+
+    private fun insertMaterial(
+        materialId: UUID,
+        teacherId: UUID,
+        studentUuid: UUID?,
+        lessonUuid: UUID?,
+        request: CreateMaterialRequest,
+        storedUrl: String,
+        contentType: String?,
+        fileSize: Long?,
+        createdAt: OffsetDateTime,
+    ): MaterialResponse = transaction {
         MaterialTable.insert {
             it[id] = EntityID(materialId, MaterialTable)
             it[MaterialTable.lessonId] = lessonUuid
@@ -106,15 +148,10 @@ class MaterialService(
             it[type] = request.type
             it[url] = storedUrl
             it[MaterialTable.contentType] = contentType
-            it[fileSize] = request.fileSize
-            it[createdAt] = now
+            it[MaterialTable.fileSize] = fileSize
+            it[MaterialTable.createdAt] = createdAt
         }
-
-        val uploadUrl = if (request.type != MaterialType.LINK)
-            storage.presignPut(storedUrl, request.contentType!!)
-        else null
-
-        val material = MaterialResponse(
+        MaterialResponse(
             id = materialId.toString(),
             teacherId = teacherId.toString(),
             studentId = studentUuid?.toString(),
@@ -122,18 +159,12 @@ class MaterialService(
             name = request.name,
             type = request.type,
             contentType = contentType,
-            fileSize = request.fileSize,
+            fileSize = fileSize,
             downloadUrl = when (request.type) {
                 MaterialType.LINK -> request.url
                 else -> storage.presignGet(storedUrl)
             },
-            createdAt = now.toString(),
-        )
-
-        CreateMaterialResponse(
-            material = material,
-            uploadUrl = uploadUrl,
-            uploadContentType = if (uploadUrl != null) request.contentType else null,
+            createdAt = createdAt.toString(),
         )
     }
 

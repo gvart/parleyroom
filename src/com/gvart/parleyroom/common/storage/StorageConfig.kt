@@ -8,7 +8,7 @@ data class StorageConfig(
     val accessKey: String,
     val secretKey: String,
     val bucket: String,
-    val uploadUrlTtl: Duration,
     val downloadUrlTtl: Duration,
+    val maxFileSize: Long,
     val pathStyleAccess: Boolean,
 )

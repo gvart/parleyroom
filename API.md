@@ -219,13 +219,17 @@ Null when no pending reschedule.
 
 ## Materials (`/api/v1/materials`)
 
-Teacher-owned study resources stored in S3-compatible storage (MinIO locally, S3 on AWS).
+Teacher-owned study resources stored in S3-compatible storage (MinIO locally, S3 on AWS). Clients upload bytes to the API; the server streams them to storage. Downloads return a short-lived presigned GET URL.
 
-Upload flow for `PDF`, `AUDIO`, `VIDEO`:
-1. `POST /api/v1/materials` with metadata + `fileName` + `contentType`. Response includes `uploadUrl` and `uploadContentType`.
-2. Client `PUT`s the file bytes to `uploadUrl` with `Content-Type: <uploadContentType>`.
+Upload flow for `PDF`, `AUDIO`, `VIDEO`: `POST /api/v1/materials` as `multipart/form-data` with two parts:
+- `metadata` (`application/json`): `{ name, type, studentId?, lessonId? }`
+- `file` (binary): the file bytes; `Content-Type` and `Content-Length` headers required
 
-For `LINK` materials, supply `url` in the create request; no upload step.
+For `LINK` materials, send only the `metadata` part with `{ name, type: "LINK", url, studentId?, lessonId? }` (no `file` part).
+
+The `metadata` part MUST come before the `file` part — the server streams the file straight to storage and parses metadata first to authorize the request. Most HTTP clients (browser `FormData`, curl `-F`) preserve append/argument order naturally.
+
+Max file size: 100 MiB by default (configurable via `STORAGE_MAX_FILE_SIZE`, in bytes).
 
 ```
 GET /api/v1/materials?studentId=UUID&lessonId=UUID&type=PDF|AUDIO|VIDEO|LINK
@@ -235,13 +239,22 @@ GET /api/v1/materials?studentId=UUID&lessonId=UUID&type=PDF|AUDIO|VIDEO|LINK
 - **Admin** -> all
 
 ```
-POST /api/v1/materials
-Body (upload):  { name, type: "PDF"|"AUDIO"|"VIDEO", studentId?, lessonId?, fileName, contentType, fileSize? }
-Body (link):    { name, type: "LINK", studentId?, lessonId?, url }
+POST /api/v1/materials                Content-Type: multipart/form-data
+  metadata (JSON part): { name, type, studentId?, lessonId?, url? }
+  file     (binary part, required for PDF/AUDIO/VIDEO; omit for LINK)
 ```
 - **Teacher/Admin only**
 - If `studentId` set, teacher must have a `teacher_students` relationship with that student
 - `type`: PDF, AUDIO, VIDEO, LINK
+- Returns `MaterialResponse` (see below) with status 201
+
+Example:
+```
+curl -X POST http://localhost:8080/api/v1/materials \
+  -H "Authorization: Bearer $TOKEN" \
+  -F 'metadata={"name":"Chapter 1","type":"PDF"};type=application/json' \
+  -F 'file=@chapter1.pdf;type=application/pdf'
+```
 
 ```
 GET    /api/v1/materials/{id}
@@ -249,15 +262,6 @@ PUT    /api/v1/materials/{id}    Body: { name? }
 DELETE /api/v1/materials/{id}
 ```
 PUT/DELETE: owning teacher or admin only. DELETE also removes the stored object.
-
-### Create response
-```json
-{
-  "material": { /* MaterialResponse */ },
-  "uploadUrl": "https://.../parleyroom-materials/... | null",
-  "uploadContentType": "application/pdf | null"
-}
-```
 
 ### Material response
 ```json

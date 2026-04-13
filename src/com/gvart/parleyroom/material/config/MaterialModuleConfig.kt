@@ -19,8 +19,8 @@ fun Application.configureMaterialModule() {
                 accessKey = config.property("storage.access_key").getString(),
                 secretKey = config.property("storage.secret_key").getString(),
                 bucket = config.property("storage.bucket").getString(),
-                uploadUrlTtl = Duration.parse(config.property("storage.upload_url_ttl").getString()),
                 downloadUrlTtl = Duration.parse(config.property("storage.download_url_ttl").getString()),
+                maxFileSize = config.property("storage.max_file_size").getString().toLong(),
                 pathStyleAccess = config.property("storage.path_style_access").getString().toBoolean(),
             )
         }

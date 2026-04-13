@@ -3,6 +3,7 @@ package com.gvart.parleyroom.common.storage
 import org.slf4j.LoggerFactory
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
+import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.S3Configuration
@@ -16,7 +17,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
-import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest
+import java.io.InputStream
 import java.net.URI
 import java.util.UUID
 import kotlin.time.Duration
@@ -69,17 +70,14 @@ class StorageService(
         return "$teacherId/$materialId/$safe"
     }
 
-    fun presignPut(key: String, contentType: String, ttl: Duration = config.uploadUrlTtl): String {
+    fun upload(key: String, contentType: String, stream: InputStream, contentLength: Long) {
         val put = PutObjectRequest.builder()
             .bucket(config.bucket)
             .key(key)
             .contentType(contentType)
+            .contentLength(contentLength)
             .build()
-        val request = PutObjectPresignRequest.builder()
-            .signatureDuration(ttl.toJavaDuration())
-            .putObjectRequest(put)
-            .build()
-        return presigner.presignPutObject(request).url().toString()
+        s3Client.putObject(put, RequestBody.fromInputStream(stream, contentLength))
     }
 
     fun presignGet(key: String, ttl: Duration = config.downloadUrlTtl): String {
