@@ -1,12 +1,14 @@
 package com.gvart.parleyroom.material.routing
 
 import com.gvart.parleyroom.common.storage.StorageConfig
+import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.material.data.MaterialType
 import com.gvart.parleyroom.material.service.MaterialService
 import com.gvart.parleyroom.material.transfer.CreateMaterialInput
 import com.gvart.parleyroom.material.transfer.CreateMaterialRequest
+import com.gvart.parleyroom.material.transfer.MaterialPageResponse
 import com.gvart.parleyroom.material.transfer.MaterialResponse
 import com.gvart.parleyroom.material.transfer.UpdateMaterialRequest
 import com.gvart.parleyroom.user.security.UserPrincipal
@@ -42,24 +44,26 @@ fun Application.configureMaterialRouting() {
             route("/api/v1/materials") {
                 get {
                     val principal = call.principal<UserPrincipal>()!!
-                    val studentId = call.queryParameters["studentId"]?.let(UUID::fromString)
-                    val lessonId = call.queryParameters["lessonId"]?.let(UUID::fromString)
-                    val type = call.queryParameters["type"]?.let { MaterialType.valueOf(it) }
+                    val studentId = call.request.queryParameters["studentId"]?.let(UUID::fromString)
+                    val lessonId = call.request.queryParameters["lessonId"]?.let(UUID::fromString)
+                    val type = call.request.queryParameters["type"]?.let { MaterialType.valueOf(it) }
 
-                    val result = materialService.listMaterials(principal, studentId, lessonId, type)
+                    val result = materialService.listMaterials(principal, studentId, lessonId, type, PageRequest.from(call))
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "List materials"
-                    description = "Lists materials. Students see materials assigned to them or attached to lessons they attend. Teachers see materials they own. Admins see all."
+                    description = "Lists materials with pagination. Students see materials assigned to them or attached to lessons they attend. Teachers see materials they own. Admins see all."
                     parameters {
                         query("studentId") { description = "Filter by student UUID"; required = false }
                         query("lessonId") { description = "Filter by lesson UUID"; required = false }
                         query("type") { description = "Filter by type (PDF, AUDIO, VIDEO, LINK)"; required = false }
+                        query("page") { description = "Page number (1-based, default 1)"; required = false }
+                        query("pageSize") { description = "Items per page (default 20, max 100)"; required = false }
                     }
                     responses {
                         HttpStatusCode.OK {
-                            description = "List of materials"
-                            schema = jsonSchema<List<MaterialResponse>>()
+                            description = "Paginated list of materials"
+                            schema = jsonSchema<MaterialPageResponse>()
                         }
                     }
                 }

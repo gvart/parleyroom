@@ -1,15 +1,19 @@
 package com.gvart.parleyroom.vocabulary.service
 
 import com.gvart.parleyroom.common.service.AuthorizationHelper
+import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
+import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.vocabulary.data.VocabStatus
 import com.gvart.parleyroom.vocabulary.data.VocabularyWordTable
 import com.gvart.parleyroom.vocabulary.transfer.CreateVocabularyWordRequest
 import com.gvart.parleyroom.vocabulary.transfer.UpdateVocabularyWordRequest
+import com.gvart.parleyroom.vocabulary.transfer.VocabularyPageResponse
 import com.gvart.parleyroom.vocabulary.transfer.VocabularyWordResponse
+import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
@@ -28,12 +32,17 @@ class VocabularyService {
         principal: UserPrincipal,
         studentId: UUID?,
         status: VocabStatus?,
-    ): List<VocabularyWordResponse> = transaction {
+        page: PageRequest,
+    ): VocabularyPageResponse = transaction {
         val query = when (principal.role) {
             UserRole.ADMIN -> VocabularyWordTable.selectAll()
             UserRole.TEACHER -> {
-                VocabularyWordTable.selectAll()
-                    // Teacher sees words for all their students; filtered below if studentId given
+                VocabularyWordTable.join(
+                    TeacherStudentTable, JoinType.INNER,
+                    onColumn = VocabularyWordTable.studentId,
+                    otherColumn = TeacherStudentTable.studentId,
+                ).selectAll()
+                    .where { TeacherStudentTable.teacherId eq principal.id }
             }
             UserRole.STUDENT -> VocabularyWordTable.selectAll()
                 .where { VocabularyWordTable.studentId eq principal.id }
@@ -48,7 +57,18 @@ class VocabularyService {
             query.andWhere { VocabularyWordTable.status eq status }
         }
 
-        query.map(::toResponse)
+        val total = query.count()
+        val items = query
+            .limit(page.pageSize)
+            .offset(page.offset)
+            .map(::toResponse)
+
+        VocabularyPageResponse(
+            words = items,
+            total = total,
+            page = page.page,
+            pageSize = page.pageSize,
+        )
     }
 
     fun getWord(wordId: UUID, principal: UserPrincipal): VocabularyWordResponse = transaction {
@@ -151,8 +171,8 @@ class VocabularyService {
         exampleTranslation = row[VocabularyWordTable.exampleTranslation],
         category = row[VocabularyWordTable.category],
         status = row[VocabularyWordTable.status],
-        nextReviewAt = row[VocabularyWordTable.nextReviewAt]?.toString(),
+        nextReviewAt = row[VocabularyWordTable.nextReviewAt],
         reviewCount = row[VocabularyWordTable.reviewCount],
-        addedAt = row[VocabularyWordTable.addedAt].toString(),
+        addedAt = row[VocabularyWordTable.addedAt],
     )
 }

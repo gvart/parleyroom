@@ -1,12 +1,14 @@
 package com.gvart.parleyroom.goal.service
 
 import com.gvart.parleyroom.common.service.AuthorizationHelper
+import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.goal.data.GoalSetBy
 import com.gvart.parleyroom.goal.data.GoalStatus
 import com.gvart.parleyroom.goal.data.LearningGoalTable
 import com.gvart.parleyroom.goal.transfer.CreateGoalRequest
+import com.gvart.parleyroom.goal.transfer.GoalPageResponse
 import com.gvart.parleyroom.goal.transfer.GoalResponse
 import com.gvart.parleyroom.goal.transfer.UpdateGoalProgressRequest
 import com.gvart.parleyroom.goal.transfer.UpdateGoalRequest
@@ -30,7 +32,8 @@ class GoalService {
         principal: UserPrincipal,
         studentId: UUID?,
         status: GoalStatus?,
-    ): List<GoalResponse> = transaction {
+        page: PageRequest,
+    ): GoalPageResponse = transaction {
         val query = when (principal.role) {
             UserRole.ADMIN -> LearningGoalTable.selectAll()
             UserRole.TEACHER -> LearningGoalTable.selectAll()
@@ -48,7 +51,18 @@ class GoalService {
             query.andWhere { LearningGoalTable.status eq status }
         }
 
-        query.map(::toResponse)
+        val total = query.count()
+        val items = query
+            .limit(page.pageSize)
+            .offset(page.offset)
+            .map(::toResponse)
+
+        GoalPageResponse(
+            goals = items,
+            total = total,
+            page = page.page,
+            pageSize = page.pageSize,
+        )
     }
 
     fun getGoal(goalId: UUID, principal: UserPrincipal): GoalResponse = transaction {
@@ -78,8 +92,6 @@ class GoalService {
             it[description] = request.description
             it[LearningGoalTable.setBy] = setBy
             it[targetDate] = request.targetDate?.let { d -> LocalDate.parse(d) }
-            it[createdAt] = now
-            it[updatedAt] = now
         }
 
         LearningGoalTable.selectAll()
@@ -98,6 +110,7 @@ class GoalService {
         LearningGoalTable.update({ LearningGoalTable.id eq goalId }) {
             if (request.description != null) it[description] = request.description
             if (request.targetDate != null) it[targetDate] = LocalDate.parse(request.targetDate)
+            it[updatedAt] = OffsetDateTime.now()
         }
 
         LearningGoalTable.selectAll()
@@ -115,6 +128,7 @@ class GoalService {
 
         LearningGoalTable.update({ LearningGoalTable.id eq goalId }) {
             it[progress] = request.progress
+            it[updatedAt] = OffsetDateTime.now()
         }
 
         LearningGoalTable.selectAll()
@@ -133,6 +147,7 @@ class GoalService {
         LearningGoalTable.update({ LearningGoalTable.id eq goalId }) {
             it[status] = GoalStatus.COMPLETED
             it[progress] = 100
+            it[updatedAt] = OffsetDateTime.now()
         }
 
         LearningGoalTable.selectAll()
@@ -150,6 +165,7 @@ class GoalService {
 
         LearningGoalTable.update({ LearningGoalTable.id eq goalId }) {
             it[status] = GoalStatus.ABANDONED
+            it[updatedAt] = OffsetDateTime.now()
         }
 
         LearningGoalTable.selectAll()
@@ -178,7 +194,7 @@ class GoalService {
         setBy = row[LearningGoalTable.setBy],
         targetDate = row[LearningGoalTable.targetDate]?.toString(),
         status = row[LearningGoalTable.status],
-        createdAt = row[LearningGoalTable.createdAt].toString(),
-        updatedAt = row[LearningGoalTable.updatedAt].toString(),
+        createdAt = row[LearningGoalTable.createdAt],
+        updatedAt = row[LearningGoalTable.updatedAt],
     )
 }

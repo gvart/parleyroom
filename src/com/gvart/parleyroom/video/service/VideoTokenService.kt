@@ -5,6 +5,8 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.gvart.parleyroom.video.config.VideoConfig
 import com.gvart.parleyroom.video.transfer.VideoAccess
 import com.gvart.parleyroom.video.transfer.VideoParticipantRole
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import java.time.Instant
 import java.util.UUID
 import kotlin.time.toJavaDuration
@@ -35,7 +37,10 @@ class VideoTokenService(
             "canPublishSources" to publishSources,
         )
 
-        val metadata = """{"role":"${role.name}","lessonId":"$lessonId"}"""
+        val metadata = Json.encodeToString(
+            VideoTokenMetadata.serializer(),
+            VideoTokenMetadata(role = role.name, lessonId = lessonId.toString()),
+        )
 
         val token = JWT.create()
             .withIssuer(videoConfig.apiKey)
@@ -54,4 +59,7 @@ class VideoTokenService(
             url = videoConfig.url,
         )
     }
+
+    @Serializable
+    private data class VideoTokenMetadata(val role: String, val lessonId: String)
 }

@@ -4,6 +4,7 @@ import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.homework.data.HomeworkCategory
 import com.gvart.parleyroom.homework.data.HomeworkStatus
 import com.gvart.parleyroom.homework.transfer.CreateHomeworkRequest
+import com.gvart.parleyroom.homework.transfer.HomeworkPageResponse
 import com.gvart.parleyroom.homework.transfer.HomeworkResponse
 import com.gvart.parleyroom.homework.transfer.ReviewHomeworkRequest
 import com.gvart.parleyroom.homework.transfer.SubmitHomeworkRequest
@@ -97,7 +98,7 @@ class HomeworkIntegrationTest : IntegrationTest() {
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
-        val list = response.body<List<HomeworkResponse>>()
+        val list = response.body<HomeworkPageResponse>().homework
         assertEquals(1, list.size)
     }
 
@@ -114,7 +115,7 @@ class HomeworkIntegrationTest : IntegrationTest() {
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
-        val list = response.body<List<HomeworkResponse>>()
+        val list = response.body<HomeworkPageResponse>().homework
         assertEquals(1, list.size)
     }
 
@@ -142,12 +143,12 @@ class HomeworkIntegrationTest : IntegrationTest() {
 
         val open = client.get("/api/v1/homework?status=OPEN") {
             bearerAuth(token)
-        }.body<List<HomeworkResponse>>()
+        }.body<HomeworkPageResponse>().homework
         assertEquals(1, open.size)
 
         val done = client.get("/api/v1/homework?status=DONE") {
             bearerAuth(token)
-        }.body<List<HomeworkResponse>>()
+        }.body<HomeworkPageResponse>().homework
         assertEquals(0, done.size)
     }
 
@@ -375,5 +376,122 @@ class HomeworkIntegrationTest : IntegrationTest() {
         assertEquals(HomeworkStatus.DONE, done.status)
         assertEquals("Well done", done.teacherFeedback)
         assertEquals("My essay about weekend", done.submissionText)
+    }
+
+    @Test
+    fun `cannot submit homework with both fields empty`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val created = createHomework(client, teacherToken).body<HomeworkResponse>()
+
+        val response = client.post("/api/v1/homework/${created.id}/submit") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(studentToken)
+            setBody(SubmitHomeworkRequest())
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `cannot submit homework with blank text and null url`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val created = createHomework(client, teacherToken).body<HomeworkResponse>()
+
+        val response = client.post("/api/v1/homework/${created.id}/submit") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(studentToken)
+            setBody(SubmitHomeworkRequest(submissionText = "   "))
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `can submit homework with only url`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val created = createHomework(client, teacherToken).body<HomeworkResponse>()
+
+        val response = client.post("/api/v1/homework/${created.id}/submit") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(studentToken)
+            setBody(SubmitHomeworkRequest(submissionUrl = "https://example.com/essay.pdf"))
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val hw = response.body<HomeworkResponse>()
+        assertEquals(HomeworkStatus.SUBMITTED, hw.status)
+        assertEquals("https://example.com/essay.pdf", hw.submissionUrl)
+    }
+
+    @Test
+    fun `review with invalid status OPEN is rejected`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val created = createHomework(client, teacherToken).body<HomeworkResponse>()
+
+        client.post("/api/v1/homework/${created.id}/submit") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(studentToken)
+            setBody(SubmitHomeworkRequest(submissionText = "My essay"))
+        }
+
+        // Try to review with OPEN status (should be rejected by DTO validation)
+        val response = client.post("/api/v1/homework/${created.id}/review") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(teacherToken)
+            setBody(mapOf("status" to "OPEN", "teacherFeedback" to "Trying to hack"))
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `review with SUBMITTED status is rejected`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val created = createHomework(client, teacherToken).body<HomeworkResponse>()
+
+        client.post("/api/v1/homework/${created.id}/submit") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(studentToken)
+            setBody(SubmitHomeworkRequest(submissionText = "My essay"))
+        }
+
+        val response = client.post("/api/v1/homework/${created.id}/review") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(teacherToken)
+            setBody(mapOf("status" to "SUBMITTED"))
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `homework list pagination returns slice and total`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        repeat(3) { createHomework(client, token) }
+
+        val page = client.get("/api/v1/homework?page=2&pageSize=2") {
+            bearerAuth(token)
+        }.body<HomeworkPageResponse>()
+
+        assertEquals(3, page.total)
+        assertEquals(2, page.page)
+        assertEquals(2, page.pageSize)
+        assertEquals(1, page.homework.size)
     }
 }

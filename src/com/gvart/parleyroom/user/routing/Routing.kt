@@ -1,25 +1,37 @@
 package com.gvart.parleyroom.user.routing
 
+import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
+import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.user.service.AuthenticationService
 import com.gvart.parleyroom.user.service.UserService
 import com.gvart.parleyroom.user.transfer.AuthenticateRequest
 import com.gvart.parleyroom.user.transfer.AuthenticateResponse
+import com.gvart.parleyroom.user.transfer.LogoutRequest
 import com.gvart.parleyroom.user.transfer.RefreshTokenRequest
+import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import com.gvart.parleyroom.user.transfer.UserListResponse
+import com.gvart.parleyroom.user.transfer.UserResponse
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.PartData
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
+import io.ktor.server.request.receive
+import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.respond
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.openapi.describe
+import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import io.ktor.utils.io.jvm.javaio.toInputStream
 
 fun Application.configureRouting() {
     val authenticationService: AuthenticationService by dependencies
@@ -77,17 +89,170 @@ fun Application.configureRouting() {
         }
 
         authenticate {
+            route("/api/v1/token") {
+                delete {
+                    val principal = call.principal<UserPrincipal>()!!
+                    val request = call.receive<LogoutRequest>()
+                    authenticationService.logout(request.refreshToken, principal.id)
+                    call.respond(HttpStatusCode.NoContent)
+                }.describe {
+                    summary = "Logout / revoke refresh token"
+                    description = "Revokes the specified refresh token for the authenticated user."
+                    requestBody {
+                        schema = jsonSchema<LogoutRequest>()
+                    }
+                    responses {
+                        HttpStatusCode.NoContent {
+                            description = "Refresh token revoked successfully"
+                        }
+                        HttpStatusCode.Unauthorized {
+                            description = "Missing or invalid authentication token, or refresh token not found"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                    }
+                }
+            }
+
             route("/api/v1/users") {
                 get {
-                    val result = userService.findAllUsers(call.principal<UserPrincipal>()!!)
+                    val result = userService.findAllUsers(
+                        call.principal<UserPrincipal>()!!,
+                        PageRequest.from(call),
+                    )
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Get users"
-                    description = "Retrieves a list of users. Requires authentication."
+                    description = "Retrieves a paginated list of users. Requires authentication."
+                    parameters {
+                        query("page") {
+                            description = "Page number (1-based, default 1)"
+                            required = false
+                        }
+                        query("pageSize") {
+                            description = "Number of users per page (default 20, max 100)"
+                            required = false
+                        }
+                    }
                     responses {
                         HttpStatusCode.OK {
-                            description = "List of users"
+                            description = "Paginated list of users"
                             schema = jsonSchema<UserListResponse>()
+                        }
+                        HttpStatusCode.Unauthorized {
+                            description = "Missing or invalid authentication token"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                    }
+                }
+
+                get("/me") {
+                    val result = userService.getProfile(call.principal<UserPrincipal>()!!)
+                    call.respond(HttpStatusCode.OK, result)
+                }.describe {
+                    summary = "Get current user profile"
+                    description = "Returns the profile of the currently authenticated user."
+                    responses {
+                        HttpStatusCode.OK {
+                            description = "Current user profile"
+                            schema = jsonSchema<UserResponse>()
+                        }
+                        HttpStatusCode.Unauthorized {
+                            description = "Missing or invalid authentication token"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                    }
+                }
+
+                patch<UpdateProfileRequest>("/me") {
+                    val result = userService.updateProfile(call.principal<UserPrincipal>()!!, it)
+                    call.respond(HttpStatusCode.OK, result)
+                }.describe {
+                    summary = "Update current user profile"
+                    description = "Updates the authenticated user's profile. All fields are optional; at least one must be provided."
+                    requestBody {
+                        schema = jsonSchema<UpdateProfileRequest>()
+                    }
+                    responses {
+                        HttpStatusCode.OK {
+                            description = "Updated user profile"
+                            schema = jsonSchema<UserResponse>()
+                        }
+                        HttpStatusCode.BadRequest {
+                            description = "Invalid request body or validation error"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.Unauthorized {
+                            description = "Missing or invalid authentication token"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                    }
+                }
+
+                post("/me/avatar") {
+                    val principal = call.principal<UserPrincipal>()!!
+                    val multipart = call.receiveMultipart()
+
+                    var fileItem: PartData.FileItem? = null
+                    try {
+                        while (fileItem == null) {
+                            val part = multipart.readPart() ?: break
+                            when (part) {
+                                is PartData.FileItem -> {
+                                    if (part.name == "file") fileItem = part else part.dispose()
+                                }
+                                else -> part.dispose()
+                            }
+                        }
+
+                        val fp = fileItem
+                            ?: throw BadRequestException("file part is required")
+                        val fileName = fp.originalFileName?.takeIf { it.isNotBlank() }
+                            ?: throw BadRequestException("file part is missing a filename")
+                        val partContentType = fp.contentType?.toString()
+                            ?: throw BadRequestException("file part is missing Content-Type")
+                        val size = fp.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+                            ?: throw BadRequestException("file part is missing Content-Length")
+
+                        val result = userService.updateAvatar(
+                            principal = principal,
+                            fileName = fileName,
+                            contentType = partContentType,
+                            size = size,
+                            stream = fp.provider().toInputStream(),
+                        )
+                        call.respond(HttpStatusCode.OK, result)
+                    } finally {
+                        fileItem?.dispose()
+                    }
+                }.describe {
+                    summary = "Upload avatar"
+                    description = "Uploads or replaces the current user's avatar image. Send as multipart/form-data with a `file` part. Max size 5 MB; allowed content types: image/jpeg, image/png, image/webp, image/gif."
+                    responses {
+                        HttpStatusCode.OK {
+                            description = "Avatar updated"
+                            schema = jsonSchema<UserResponse>()
+                        }
+                        HttpStatusCode.BadRequest {
+                            description = "Invalid file, size, or content type"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.Unauthorized {
+                            description = "Missing or invalid authentication token"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                    }
+                }
+
+                delete("/me/avatar") {
+                    val result = userService.deleteAvatar(call.principal<UserPrincipal>()!!)
+                    call.respond(HttpStatusCode.OK, result)
+                }.describe {
+                    summary = "Delete avatar"
+                    description = "Removes the current user's avatar."
+                    responses {
+                        HttpStatusCode.OK {
+                            description = "Avatar removed"
+                            schema = jsonSchema<UserResponse>()
                         }
                         HttpStatusCode.Unauthorized {
                             description = "Missing or invalid authentication token"

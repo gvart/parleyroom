@@ -1,9 +1,11 @@
 package com.gvart.parleyroom.homework.routing
 
+import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.homework.data.HomeworkStatus
 import com.gvart.parleyroom.homework.service.HomeworkService
 import com.gvart.parleyroom.homework.transfer.CreateHomeworkRequest
+import com.gvart.parleyroom.homework.transfer.HomeworkPageResponse
 import com.gvart.parleyroom.homework.transfer.HomeworkResponse
 import com.gvart.parleyroom.homework.transfer.ReviewHomeworkRequest
 import com.gvart.parleyroom.homework.transfer.SubmitHomeworkRequest
@@ -33,22 +35,24 @@ fun Application.configureHomeworkRouting() {
             route("/api/v1/homework") {
                 get {
                     val principal = call.principal<UserPrincipal>()!!
-                    val studentId = call.queryParameters["studentId"]?.let(UUID::fromString)
-                    val status = call.queryParameters["status"]?.let { HomeworkStatus.valueOf(it) }
+                    val studentId = call.request.queryParameters["studentId"]?.let(UUID::fromString)
+                    val status = call.request.queryParameters["status"]?.let { HomeworkStatus.valueOf(it) }
 
-                    val result = homeworkService.getHomework(principal, studentId, status)
+                    val result = homeworkService.getHomework(principal, studentId, status, PageRequest.from(call))
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Get homework"
-                    description = "Lists homework. Students see their own, teachers see homework they assigned, admins see all."
+                    description = "Lists homework with pagination. Students see their own, teachers see homework they assigned, admins see all."
                     parameters {
                         query("studentId") { description = "Filter by student UUID"; required = false }
                         query("status") { description = "Filter by status (OPEN, SUBMITTED, IN_REVIEW, DONE, REJECTED)"; required = false }
+                        query("page") { description = "Page number (1-based, default 1)"; required = false }
+                        query("pageSize") { description = "Items per page (default 20, max 100)"; required = false }
                     }
                     responses {
                         HttpStatusCode.OK {
-                            description = "List of homework"
-                            schema = jsonSchema<List<HomeworkResponse>>()
+                            description = "Paginated list of homework"
+                            schema = jsonSchema<HomeworkPageResponse>()
                         }
                     }
                 }

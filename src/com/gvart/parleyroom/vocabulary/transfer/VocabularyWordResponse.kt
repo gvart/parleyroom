@@ -1,8 +1,10 @@
 package com.gvart.parleyroom.vocabulary.transfer
 
+import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
 import com.gvart.parleyroom.vocabulary.data.VocabCategory
 import com.gvart.parleyroom.vocabulary.data.VocabStatus
 import kotlinx.serialization.Serializable
+import java.time.OffsetDateTime
 
 @Serializable
 data class VocabularyWordResponse(
@@ -15,7 +17,9 @@ data class VocabularyWordResponse(
     val exampleTranslation: String? = null,
     val category: VocabCategory,
     val status: VocabStatus,
-    val nextReviewAt: String? = null,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val nextReviewAt: OffsetDateTime? = null,
     val reviewCount: Int,
-    val addedAt: String,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val addedAt: OffsetDateTime,
 )

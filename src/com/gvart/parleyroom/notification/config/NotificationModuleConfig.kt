@@ -4,13 +4,18 @@ import com.gvart.parleyroom.notification.routing.configureNotificationRouting
 import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.notification.service.NotificationSseManager
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationStopped
 import io.ktor.server.plugins.di.dependencies
 
 fun Application.configureNotificationModule() {
+    val sseManager = NotificationSseManager()
+
     dependencies {
-        provide { NotificationSseManager() }
+        provide { sseManager }
         provide(NotificationService::class)
     }
+
+    monitor.subscribe(ApplicationStopped) { sseManager.shutdown() }
 
     configureNotificationRouting()
 }

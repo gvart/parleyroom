@@ -12,17 +12,23 @@ import com.gvart.parleyroom.goal.transfer.CreateGoalRequest
 import com.gvart.parleyroom.goal.transfer.UpdateGoalProgressRequest
 import com.gvart.parleyroom.homework.transfer.CreateHomeworkRequest
 import com.gvart.parleyroom.homework.transfer.ReviewHomeworkRequest
+import com.gvart.parleyroom.homework.transfer.SubmitHomeworkRequest
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
+import com.gvart.parleyroom.lesson.transfer.ReflectLessonRequest
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
+import com.gvart.parleyroom.notification.transfer.MarkViewedRequest
 import com.gvart.parleyroom.registration.transfer.InviteUserRequest
 import com.gvart.parleyroom.registration.transfer.RegisterUserRequest
 import com.gvart.parleyroom.registration.transfer.ResetPasswordRequest
 import com.gvart.parleyroom.vocabulary.transfer.CreateVocabularyWordRequest
 import com.gvart.parleyroom.user.data.UserRole
+import com.gvart.parleyroom.user.transfer.LogoutRequest
+import com.gvart.parleyroom.user.security.AuthLockoutConfig
 import com.gvart.parleyroom.user.security.JwtConfig
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.user.transfer.AuthenticateRequest
 import com.gvart.parleyroom.user.transfer.RefreshTokenRequest
+import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -53,18 +59,28 @@ import kotlin.time.Duration
 
 fun Application.generalConfig() {
     val config = environment.config
+    val log = environment.log
 
     dependencies {
         provide {
+            val secret = config.property("jwt.secret").getString()
+            if (secret == "secret") {
+                log.warn("JWT secret is set to the default value 'secret'. This is insecure and MUST be changed in production!")
+            }
             JwtConfig(
-                secret = config.property("jwt.secret").getString(),
+                secret = secret,
                 issuer = config.property("jwt.issuer").getString(),
                 audience = config.property("jwt.audience").getString(),
                 realm = config.property("jwt.realm").getString(),
                 duration = Duration.parse(config.property("jwt.duration").getString()),
                 refreshDuration = Duration.parse(config.property("jwt.refresh_duration").getString()),
             )
-
+        }
+        provide {
+            AuthLockoutConfig(
+                maxFailedAttempts = config.property("authentication.lockout.max_failed_attempts").getString().toInt(),
+                lockoutDuration = Duration.parse(config.property("authentication.lockout.duration").getString()),
+            )
         }
     }
 
@@ -101,8 +117,13 @@ fun Application.generalConfig() {
         validate<CreateVocabularyWordRequest> { it.validate() }
         validate<CreateHomeworkRequest> { it.validate() }
         validate<ReviewHomeworkRequest> { it.validate() }
+        validate<SubmitHomeworkRequest> { it.validate() }
         validate<CreateGoalRequest> { it.validate() }
         validate<UpdateGoalProgressRequest> { it.validate() }
+        validate<LogoutRequest> { it.validate() }
+        validate<ReflectLessonRequest> { it.validate() }
+        validate<MarkViewedRequest> { it.validate() }
+        validate<UpdateProfileRequest> { it.validate() }
     }
 
 
@@ -114,6 +135,9 @@ fun Application.generalConfig() {
             )
         }
         exception<ContentTransformationException> { call, cause ->
+            call.respond(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message))
+        }
+        exception<io.ktor.server.plugins.BadRequestException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message))
         }
 
@@ -175,8 +199,11 @@ fun Application.generalConfig() {
         }
     }
 
-    routing {
-        openAPI("docs.json")
-        swaggerUI("/swagger")
+    val openApiEnabled = config.propertyOrNull("application.openapi.enabled")?.getString()?.toBoolean() ?: true
+    if (openApiEnabled) {
+        routing {
+            openAPI("docs.json")
+            swaggerUI("/swagger")
+        }
     }
 }

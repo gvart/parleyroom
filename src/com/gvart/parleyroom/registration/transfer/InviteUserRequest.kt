@@ -12,9 +12,17 @@ data class InviteUserRequest(
     fun validate(): ValidationResult {
         val errors = buildList {
             if (email.isBlank()) add("Email can't be empty")
+            else if (!isValidEmail(email)) add("Email format is invalid")
         }
 
         return if (errors.isNotEmpty()) ValidationResult.Invalid(errors)
         else ValidationResult.Valid
+    }
+
+    private fun isValidEmail(email: String): Boolean {
+        val parts = email.split("@")
+        if (parts.size != 2) return false
+        val (local, domain) = parts
+        return local.isNotEmpty() && domain.contains(".") && domain.length >= 3
     }
 }

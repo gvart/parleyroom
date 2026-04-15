@@ -1,6 +1,8 @@
 package com.gvart.parleyroom.lesson.transfer
 
+import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
 import kotlinx.serialization.Serializable
+import java.time.OffsetDateTime
 
 @Serializable
 data class LessonDocumentResponse(
@@ -12,6 +14,8 @@ data class LessonDocumentResponse(
     val teacherWorkingOn: String? = null,
     val studentReflection: String? = null,
     val studentHardToday: String? = null,
-    val createdAt: String,
-    val updatedAt: String,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val createdAt: OffsetDateTime,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val updatedAt: OffsetDateTime,
 )

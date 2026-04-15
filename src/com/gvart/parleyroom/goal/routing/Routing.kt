@@ -1,9 +1,11 @@
 package com.gvart.parleyroom.goal.routing
 
+import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.goal.data.GoalStatus
 import com.gvart.parleyroom.goal.service.GoalService
 import com.gvart.parleyroom.goal.transfer.CreateGoalRequest
+import com.gvart.parleyroom.goal.transfer.GoalPageResponse
 import com.gvart.parleyroom.goal.transfer.GoalResponse
 import com.gvart.parleyroom.goal.transfer.UpdateGoalProgressRequest
 import com.gvart.parleyroom.goal.transfer.UpdateGoalRequest
@@ -32,22 +34,24 @@ fun Application.configureGoalRouting() {
             route("/api/v1/goals") {
                 get {
                     val principal = call.principal<UserPrincipal>()!!
-                    val studentId = call.queryParameters["studentId"]?.let(UUID::fromString)
-                    val status = call.queryParameters["status"]?.let { GoalStatus.valueOf(it) }
+                    val studentId = call.request.queryParameters["studentId"]?.let(UUID::fromString)
+                    val status = call.request.queryParameters["status"]?.let { GoalStatus.valueOf(it) }
 
-                    val result = goalService.getGoals(principal, studentId, status)
+                    val result = goalService.getGoals(principal, studentId, status, PageRequest.from(call))
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Get learning goals"
-                    description = "Lists learning goals. Students see their own, teachers see their students', admins see all."
+                    description = "Lists learning goals with pagination. Students see their own, teachers see their students', admins see all."
                     parameters {
                         query("studentId") { description = "Filter by student UUID"; required = false }
                         query("status") { description = "Filter by status (ACTIVE, COMPLETED, ABANDONED)"; required = false }
+                        query("page") { description = "Page number (1-based, default 1)"; required = false }
+                        query("pageSize") { description = "Items per page (default 20, max 100)"; required = false }
                     }
                     responses {
                         HttpStatusCode.OK {
-                            description = "List of goals"
-                            schema = jsonSchema<List<GoalResponse>>()
+                            description = "Paginated list of goals"
+                            schema = jsonSchema<GoalPageResponse>()
                         }
                     }
                 }

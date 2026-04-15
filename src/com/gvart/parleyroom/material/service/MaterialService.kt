@@ -2,6 +2,7 @@ package com.gvart.parleyroom.material.service
 
 import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.storage.StorageService
+import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
@@ -11,6 +12,7 @@ import com.gvart.parleyroom.material.data.MaterialTable
 import com.gvart.parleyroom.material.data.MaterialType
 import com.gvart.parleyroom.material.transfer.CreateMaterialInput
 import com.gvart.parleyroom.material.transfer.CreateMaterialRequest
+import com.gvart.parleyroom.material.transfer.MaterialPageResponse
 import com.gvart.parleyroom.material.transfer.MaterialResponse
 import com.gvart.parleyroom.material.transfer.UpdateMaterialRequest
 import com.gvart.parleyroom.user.data.UserRole
@@ -26,7 +28,6 @@ import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
-import java.time.OffsetDateTime
 import java.util.UUID
 
 class MaterialService(
@@ -38,7 +39,8 @@ class MaterialService(
         studentId: UUID?,
         lessonId: UUID?,
         type: MaterialType?,
-    ): List<MaterialResponse> = transaction {
+        page: PageRequest,
+    ): MaterialPageResponse = transaction {
         val query = when (principal.role) {
             UserRole.ADMIN -> MaterialTable.selectAll()
             UserRole.TEACHER -> MaterialTable.selectAll()
@@ -68,7 +70,18 @@ class MaterialService(
             query.andWhere { MaterialTable.type eq type }
         }
 
-        query.map(::toResponse)
+        val total = query.count()
+        val items = query
+            .limit(page.pageSize)
+            .offset(page.offset)
+            .map(::toResponse)
+
+        MaterialPageResponse(
+            materials = items,
+            total = total,
+            page = page.page,
+            pageSize = page.pageSize,
+        )
     }
 
     fun getMaterial(materialId: UUID, principal: UserPrincipal): MaterialResponse = transaction {
@@ -91,7 +104,6 @@ class MaterialService(
         }
 
         val materialId = UUID.randomUUID()
-        val now = OffsetDateTime.now()
 
         return when (input) {
             is CreateMaterialInput.Link -> insertMaterial(
@@ -103,7 +115,6 @@ class MaterialService(
                 storedUrl = request.url!!,
                 contentType = null,
                 fileSize = null,
-                createdAt = now,
             )
             is CreateMaterialInput.File -> {
                 val key = storage.buildKey(teacherId, materialId, input.fileName)
@@ -118,7 +129,6 @@ class MaterialService(
                         storedUrl = key,
                         contentType = input.contentType,
                         fileSize = input.size,
-                        createdAt = now,
                     )
                 }.getOrElse { e ->
                     runCatching { storage.delete(key) }
@@ -137,7 +147,6 @@ class MaterialService(
         storedUrl: String,
         contentType: String?,
         fileSize: Long?,
-        createdAt: OffsetDateTime,
     ): MaterialResponse = transaction {
         MaterialTable.insert {
             it[id] = EntityID(materialId, MaterialTable)
@@ -149,23 +158,8 @@ class MaterialService(
             it[url] = storedUrl
             it[MaterialTable.contentType] = contentType
             it[MaterialTable.fileSize] = fileSize
-            it[MaterialTable.createdAt] = createdAt
         }
-        MaterialResponse(
-            id = materialId.toString(),
-            teacherId = teacherId.toString(),
-            studentId = studentUuid?.toString(),
-            lessonId = lessonUuid?.toString(),
-            name = request.name,
-            type = request.type,
-            contentType = contentType,
-            fileSize = fileSize,
-            downloadUrl = when (request.type) {
-                MaterialType.LINK -> request.url
-                else -> storage.presignGet(storedUrl)
-            },
-            createdAt = createdAt.toString(),
-        )
+        findMaterial(materialId).let(::toResponse)
     }
 
     fun updateMaterial(materialId: UUID, request: UpdateMaterialRequest, principal: UserPrincipal): MaterialResponse = transaction {
@@ -254,7 +248,7 @@ class MaterialService(
             contentType = row[MaterialTable.contentType],
             fileSize = row[MaterialTable.fileSize],
             downloadUrl = downloadUrl,
-            createdAt = row[MaterialTable.createdAt].toString(),
+            createdAt = row[MaterialTable.createdAt],
         )
     }
 }

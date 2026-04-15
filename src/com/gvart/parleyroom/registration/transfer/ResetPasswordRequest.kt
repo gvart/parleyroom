@@ -12,6 +12,7 @@ data class ResetPasswordRequest(
         val errors = buildList {
             if (token.isBlank()) add("Token can't be empty")
             if (newPassword.isBlank()) add("New password can't be empty")
+            else if (newPassword.length < 8) add("New password must be at least 8 characters")
         }
 
         return if (errors.isNotEmpty()) ValidationResult.Invalid(errors)

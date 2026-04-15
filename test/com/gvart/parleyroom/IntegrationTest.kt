@@ -19,8 +19,10 @@ import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.transactions.transaction
 
+import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.containers.wait.strategy.HostPortWaitStrategy
+import org.testcontainers.containers.wait.strategy.Wait
 
 abstract class IntegrationTest {
 
@@ -32,6 +34,17 @@ abstract class IntegrationTest {
             .withPassword("test")
             .waitingFor(HostPortWaitStrategy())
 
+        @JvmField
+        val minio: GenericContainer<*> = GenericContainer("minio/minio:RELEASE.2024-12-18T13-15-44Z")
+            .withExposedPorts(9000)
+            .withCommand("server", "/data")
+            .withEnv("MINIO_ROOT_USER", "minioadmin")
+            .withEnv("MINIO_ROOT_PASSWORD", "minioadmin")
+            .waitingFor(Wait.forHttp("/minio/health/live").forPort(9000))
+
+        val minioEndpoint: String
+            get() = "http://${minio.host}:${minio.getMappedPort(9000)}"
+
         val sharedDataSource: HikariDataSource
 
         const val ADMIN_ID = "00000000-0000-0000-0000-000000000001"
@@ -42,6 +55,7 @@ abstract class IntegrationTest {
 
         init {
             postgres.start()
+            minio.start()
 
             sharedDataSource = HikariDataSource(HikariConfig().apply {
                 jdbcUrl = postgres.jdbcUrl
@@ -78,12 +92,18 @@ abstract class IntegrationTest {
                 "jwt.realm" to "TestRealm",
                 "jwt.duration" to "60m",
                 "jwt.refresh_duration" to "30d",
+                "authentication.lockout.max_failed_attempts" to "5",
+                "authentication.lockout.duration" to "15m",
                 "livekit.url" to "ws://localhost:7880",
                 "livekit.api_key" to "devkey",
                 "livekit.api_secret" to "devsecretdevsecretdevsecretdevsecret",
                 "livekit.token_ttl" to "2h",
+                "application.admin.email" to "admin@admin.co",
                 "application.admin.default_password" to "admin",
-                "storage.endpoint" to "http://localhost:9000",
+                "application.openapi.enabled" to "false",
+                "vocabulary.review_reminder.enabled" to "false",
+                "vocabulary.review_reminder.interval" to "1h",
+                "storage.endpoint" to minioEndpoint,
                 "storage.region" to "us-east-1",
                 "storage.access_key" to "minioadmin",
                 "storage.secret_key" to "minioadmin",
@@ -102,7 +122,7 @@ abstract class IntegrationTest {
 
     private fun loadTestData() {
         transaction {
-            exec("TRUNCATE refresh_tokens, learning_goals, homework, vocabulary_words, lesson_events, lesson_students, lessons, password_resets, registrations, users CASCADE")
+            exec("TRUNCATE refresh_tokens, learning_goals, homework, vocabulary_words, lesson_events, lesson_students, lessons, password_resets, registrations, teacher_students, materials, users CASCADE")
             exec(testDataSql)
         }
     }

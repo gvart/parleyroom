@@ -1,13 +1,18 @@
 package com.gvart.parleyroom.user.transfer
 
 import com.gvart.parleyroom.common.data.LanguageLevel
+import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
 import kotlinx.serialization.Serializable
+import java.time.OffsetDateTime
 
 @Serializable
 data class UserListResponse(
-    val users: List<User>
+    val users: List<User>,
+    val total: Long = 0,
+    val page: Int = 1,
+    val pageSize: Int = 0,
 ) {
     @Serializable
     data class User(
@@ -19,7 +24,8 @@ data class UserListResponse(
         val avatarUrl: String?,
         val level: LanguageLevel?,
         val status: UserStatus,
-        val createdAt: String,
+        @Serializable(with = OffsetDateTimeSerializer::class)
+        val createdAt: OffsetDateTime,
         val locale: String,
     )
 }

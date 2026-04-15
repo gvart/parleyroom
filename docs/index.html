@@ -932,6 +932,13 @@
     "status" : { }
   }
 };
+            defs["LogoutRequest"] = {
+  "title" : "com.gvart.parleyroom.user.transfer.LogoutRequest",
+  "required" : [ "refreshToken" ],
+  "properties" : {
+    "refreshToken" : { }
+  }
+};
             defs["MarkViewedRequest"] = {
   "title" : "com.gvart.parleyroom.notification.transfer.MarkViewedRequest",
   "required" : [ "notificationIds" ],
@@ -1358,6 +1365,9 @@
                     </li>
                     <li data-group="Default" data-name="apiV1RegistrationPost" class="">
                       <a href="#api-Default-apiV1RegistrationPost">apiV1RegistrationPost</a>
+                    </li>
+                    <li data-group="Default" data-name="apiV1TokenDelete" class="">
+                      <a href="#api-Default-apiV1TokenDelete">apiV1TokenDelete</a>
                     </li>
                     <li data-group="Default" data-name="apiV1TokenPost" class="">
                       <a href="#api-Default-apiV1TokenPost">apiV1TokenPost</a>
@@ -18299,6 +18309,326 @@ except ApiException as e:
                                     </script>
                                   </div>
                                   <input id='responses-apiV1RegistrationPost-409-schema-data' type='hidden' value=''></input>
+                                </div>
+                            </div>
+
+                        </article>
+                      </div>
+                      <hr>
+                    <div id="api-Default-apiV1TokenDelete">
+                      <article id="api-Default-apiV1TokenDelete-0" data-group="User" data-name="apiV1TokenDelete" data-version="0">
+                        <div class="pull-left">
+                          <h1>apiV1TokenDelete</h1>
+                          <p>Logout / revoke refresh token</p>
+                        </div>
+                        <div class="pull-right"></div>
+                        <div class="clearfix"></div>
+                        <p></p>
+                        <p class="marked">Revokes the specified refresh token for the authenticated user.</p>
+                        <p></p>
+                        <br />
+                        <pre class="prettyprint language-html prettyprinted" data-type="delete"><code><span class="pln">/api/v1/token</span></code></pre>
+                        <p>
+                          <h3>Usage and SDK Samples</h3>
+                        </p>
+                        <ul class="nav nav-tabs nav-tabs-examples">
+                          <li class="active"><a href="#examples-Default-apiV1TokenDelete-0-curl">Curl</a></li>
+                          <li class=""><a href="#examples-Default-apiV1TokenDelete-0-java">Java</a></li>
+                          <li class=""><a href="#examples-Default-apiV1TokenDelete-0-android">Android</a></li>
+                          <!--<li class=""><a href="#examples-Default-apiV1TokenDelete-0-groovy">Groovy</a></li>-->
+                          <li class=""><a href="#examples-Default-apiV1TokenDelete-0-objc">Obj-C</a></li>
+                          <li class=""><a href="#examples-Default-apiV1TokenDelete-0-javascript">JavaScript</a></li>
+                          <!--<li class=""><a href="#examples-Default-apiV1TokenDelete-0-angular">Angular</a></li>-->
+                          <li class=""><a href="#examples-Default-apiV1TokenDelete-0-csharp">C#</a></li>
+                          <li class=""><a href="#examples-Default-apiV1TokenDelete-0-php">PHP</a></li>
+                          <li class=""><a href="#examples-Default-apiV1TokenDelete-0-perl">Perl</a></li>
+                          <li class=""><a href="#examples-Default-apiV1TokenDelete-0-python">Python</a></li>
+                        </ul>
+
+                        <div class="tab-content">
+                          <div class="tab-pane active" id="examples-Default-apiV1TokenDelete-0-curl">
+                           <pre class="prettyprint"><code class="language-bsh">curl -X DELETE\
+ -H "Authorization: Bearer [[accessToken]]"\
+-H "Accept: application/json"\
+-H "Content-Type: application/json"\
+"//api/v1/token"</code></pre>
+                          </div>
+                          <div class="tab-pane" id="examples-Default-apiV1TokenDelete-0-java">
+                            <pre class="prettyprint"><code class="language-java">import io.swagger.client.*;
+import io.swagger.client.auth.*;
+import io.swagger.client.model.*;
+import io.swagger.client.api.DefaultApi;
+
+import java.io.File;
+import java.util.*;
+
+public class DefaultApiExample {
+
+    public static void main(String[] args) {
+        ApiClient defaultClient = Configuration.getDefaultApiClient();
+
+
+        DefaultApi apiInstance = new DefaultApi();
+        LogoutRequest body = ; // LogoutRequest | 
+        try {
+            apiInstance.apiV1TokenDelete(body);
+        } catch (ApiException e) {
+            System.err.println("Exception when calling DefaultApi#apiV1TokenDelete");
+            e.printStackTrace();
+        }
+    }
+}</code></pre>
+                          </div>
+
+                          <div class="tab-pane" id="examples-Default-apiV1TokenDelete-0-android">
+                            <pre class="prettyprint"><code class="language-java">import io.swagger.client.api.DefaultApi;
+
+public class DefaultApiExample {
+
+    public static void main(String[] args) {
+        DefaultApi apiInstance = new DefaultApi();
+        LogoutRequest body = ; // LogoutRequest | 
+        try {
+            apiInstance.apiV1TokenDelete(body);
+        } catch (ApiException e) {
+            System.err.println("Exception when calling DefaultApi#apiV1TokenDelete");
+            e.printStackTrace();
+        }
+    }
+}</code></pre>
+                          </div>
+  <!--
+  <div class="tab-pane" id="examples-Default-apiV1TokenDelete-0-groovy">
+  <pre class="prettyprint language-json prettyprinted" data-type="json"><code>Coming Soon!</code></pre>
+  </div> -->
+                            <div class="tab-pane" id="examples-Default-apiV1TokenDelete-0-objc">
+                              <pre class="prettyprint"><code class="language-cpp">Configuration *apiConfig = [Configuration sharedConfig];
+LogoutRequest *body = ; //  (optional)
+
+DefaultApi *apiInstance = [[DefaultApi alloc] init];
+
+// Logout / revoke refresh token
+[apiInstance apiV1TokenDeleteWith:body
+              completionHandler: ^(NSError* error) {
+                            if (error) {
+                                NSLog(@"Error: %@", error);
+                            }
+                        }];
+</code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-apiV1TokenDelete-0-javascript">
+                              <pre class="prettyprint"><code class="language-js">var UntitledApi = require('untitled_api');
+var defaultClient = UntitledApi.ApiClient.instance;
+
+
+var api = new UntitledApi.DefaultApi()
+var opts = { 
+  'body':  // {{LogoutRequest}} 
+};
+var callback = function(error, data, response) {
+  if (error) {
+    console.error(error);
+  } else {
+    console.log('API called successfully.');
+  }
+};
+api.apiV1TokenDelete(opts, callback);
+</code></pre>
+                            </div>
+
+                            <!--<div class="tab-pane" id="examples-Default-apiV1TokenDelete-0-angular">
+              <pre class="prettyprint language-json prettyprinted" data-type="json"><code>Coming Soon!</code></pre>
+            </div>-->
+                            <div class="tab-pane" id="examples-Default-apiV1TokenDelete-0-csharp">
+                              <pre class="prettyprint"><code class="language-cs">using System;
+using System.Diagnostics;
+using IO.Swagger.Api;
+using IO.Swagger.Client;
+using IO.Swagger.Model;
+
+namespace Example
+{
+    public class apiV1TokenDeleteExample
+    {
+        public void main()
+        {
+
+
+            var apiInstance = new DefaultApi();
+            var body = new LogoutRequest(); // LogoutRequest |  (optional) 
+
+            try
+            {
+                // Logout / revoke refresh token
+                apiInstance.apiV1TokenDelete(body);
+            }
+            catch (Exception e)
+            {
+                Debug.Print("Exception when calling DefaultApi.apiV1TokenDelete: " + e.Message );
+            }
+        }
+    }
+}
+</code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-apiV1TokenDelete-0-php">
+                              <pre class="prettyprint"><code class="language-php"><&#63;php
+require_once(__DIR__ . '/vendor/autoload.php');
+
+
+$api_instance = new Swagger\Client\ApiDefaultApi();
+$body = ; // LogoutRequest | 
+
+try {
+    $api_instance->apiV1TokenDelete($body);
+} catch (Exception $e) {
+    echo 'Exception when calling DefaultApi->apiV1TokenDelete: ', $e->getMessage(), PHP_EOL;
+}
+?></code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-apiV1TokenDelete-0-perl">
+                              <pre class="prettyprint"><code class="language-perl">use Data::Dumper;
+use WWW::SwaggerClient::Configuration;
+use WWW::SwaggerClient::DefaultApi;
+
+
+my $api_instance = WWW::SwaggerClient::DefaultApi->new();
+my $body = WWW::SwaggerClient::Object::LogoutRequest->new(); # LogoutRequest | 
+
+eval { 
+    $api_instance->apiV1TokenDelete(body => $body);
+};
+if ($@) {
+    warn "Exception when calling DefaultApi->apiV1TokenDelete: $@\n";
+}</code></pre>
+                            </div>
+
+                            <div class="tab-pane" id="examples-Default-apiV1TokenDelete-0-python">
+                              <pre class="prettyprint"><code class="language-python">from __future__ import print_statement
+import time
+import swagger_client
+from swagger_client.rest import ApiException
+from pprint import pprint
+
+
+# create an instance of the API class
+api_instance = swagger_client.DefaultApi()
+body =  # LogoutRequest |  (optional)
+
+try: 
+    # Logout / revoke refresh token
+    api_instance.api_v1_token_delete(body=body)
+except ApiException as e:
+    print("Exception when calling DefaultApi->apiV1TokenDelete: %s\n" % e)</code></pre>
+                            </div>
+                          </div>
+
+                          <h2>Parameters</h2>
+
+
+
+                            <div class="methodsubtabletitle">Body parameters</div>
+                            <table id="methodsubtable">
+                              <tr>
+                                <th width="150px">Name</th>
+                                <th>Description</th>
+                              </tr>
+                                <tr><td style="width:150px;">body </td>
+                                <td>
+                                
+                                
+                                <script>
+                                $(document).ready(function() {
+                                  var schemaWrapper = {
+  "content" : {
+    "application/json" : {
+      "schema" : {
+        "$ref" : "#/components/schemas/LogoutRequest"
+      }
+    }
+  }
+};
+                                  var schema = schemaWrapper.content["application/json"].schema;
+                                  if (schema.$ref != null) {
+                                    schema = defsParser.$refs.get(schema.$ref);
+                                  } else {
+                                    schemaWrapper.components = {};
+                                    schemaWrapper.components.schemas = Object.assign({}, defs);
+                                    $RefParser.dereference(schemaWrapper).catch(function(err) {
+                                      console.log(err);
+                                    });
+                                  }
+                                
+                                  var view = new JSONSchemaView(schema,2,{isBodyParam: true});
+                                  var result = $('#d2e199_apiV1TokenDelete_body');
+                                  result.empty();
+                                  result.append(view.render());
+                                });
+                                </script>
+                                <div id="d2e199_apiV1TokenDelete_body"></div>
+                                </td>
+                                </tr>
+                            </table>
+
+
+
+                          <h2>Responses</h2>
+                            <h3> Status: 204 - Refresh token revoked successfully </h3>
+
+                            <ul class="nav nav-tabs nav-tabs-examples" >
+                            </ul>
+
+                            <div class="tab-content" style='margin-bottom: 10px;'>
+                            </div>
+
+                            <h3> Status: 401 - Missing or invalid authentication token, or refresh token not found </h3>
+
+                            <ul class="nav nav-tabs nav-tabs-examples" >
+                                <li class="active">
+                                  <a data-toggle="tab" href="#responses-apiV1TokenDelete-401-schema">Schema</a>
+                                </li>
+
+                            </ul>
+
+                            <div class="tab-content" style='margin-bottom: 10px;'>
+                                <div class="tab-pane active" id="responses-apiV1TokenDelete-401-schema">
+                                  <div id='responses-apiV1TokenDelete-401-schema-401' style="padding: 30px; border-left: 1px solid #eee; border-right: 1px solid #eee; border-bottom: 1px solid #eee;">
+                                    <script>
+                                      $(document).ready(function() {
+                                        var schemaWrapper = {
+  "description" : "Missing or invalid authentication token, or refresh token not found",
+  "content" : {
+    "application/json" : {
+      "schema" : {
+        "$ref" : "#/components/schemas/ProblemDetail"
+      }
+    }
+  }
+};
+                                        var schema = schemaWrapper.content["application/json"].schema;
+                                        if (schema.$ref != null) {
+                                          schema = defsParser.$refs.get(schema.$ref);
+                                        } else {
+                                          schemaWrapper.components = {};
+                                          schemaWrapper.components.schemas = Object.assign({}, defs);
+                                          $RefParser.dereference(schemaWrapper).catch(function(err) {
+                                            console.log(err);
+                                          });
+                                        }
+
+                                        //console.log(JSON.stringify(schema));
+                                        var view = new JSONSchemaView(schema, 3);
+                                        $('#responses-apiV1TokenDelete-401-schema-data').val(stringify(schema));
+                                        var result = $('#responses-apiV1TokenDelete-401-schema-401');
+                                        result.empty();
+                                        result.append(view.render());
+                                      });
+                                    </script>
+                                  </div>
+                                  <input id='responses-apiV1TokenDelete-401-schema-data' type='hidden' value=''></input>
                                 </div>
                             </div>
 

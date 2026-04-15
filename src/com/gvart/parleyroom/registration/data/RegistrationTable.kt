@@ -4,7 +4,6 @@ import com.gvart.parleyroom.common.data.pgEnum
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
 import org.jetbrains.exposed.dao.id.UUIDTable
-import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
 
 object RegistrationTable : UUIDTable("registrations") {

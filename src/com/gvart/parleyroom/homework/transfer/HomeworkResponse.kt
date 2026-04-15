@@ -1,9 +1,11 @@
 package com.gvart.parleyroom.homework.transfer
 
+import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
 import com.gvart.parleyroom.homework.data.AttachmentType
 import com.gvart.parleyroom.homework.data.HomeworkCategory
 import com.gvart.parleyroom.homework.data.HomeworkStatus
 import kotlinx.serialization.Serializable
+import java.time.OffsetDateTime
 
 @Serializable
 data class HomeworkResponse(
@@ -22,6 +24,8 @@ data class HomeworkResponse(
     val attachmentType: AttachmentType? = null,
     val attachmentUrl: String? = null,
     val attachmentName: String? = null,
-    val createdAt: String,
-    val updatedAt: String,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val createdAt: OffsetDateTime,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val updatedAt: OffsetDateTime,
 )

@@ -6,6 +6,7 @@ import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.transfer.CompleteLessonRequest
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.LessonDocumentResponse
+import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.ReflectLessonRequest
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
@@ -24,6 +25,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import java.time.OffsetDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -37,7 +39,7 @@ class LessonIntegrationTest : IntegrationTest() {
         token: String,
         type: LessonType = LessonType.ONE_ON_ONE,
         maxParticipants: Int? = null,
-        scheduledAt: String = "2026-04-10T10:00:00+02:00",
+        scheduledAt: String = "2027-04-10T10:00:00+02:00",
         durationMinutes: Int = 60,
     ): HttpResponse = client.post("/api/v1/lessons") {
         contentType(ContentType.Application.Json)
@@ -48,7 +50,7 @@ class LessonIntegrationTest : IntegrationTest() {
                 studentIds = listOf(STUDENT_ID),
                 title = "German Lesson",
                 type = type,
-                scheduledAt = scheduledAt,
+                scheduledAt = OffsetDateTime.parse(scheduledAt),
                 durationMinutes = durationMinutes,
                 topic = "Conversation practice",
                 maxParticipants = maxParticipants,
@@ -125,7 +127,7 @@ class LessonIntegrationTest : IntegrationTest() {
                     studentIds = listOf(STUDENT_ID),
                     title = "German Lesson",
                     type = LessonType.ONE_ON_ONE,
-                    scheduledAt = "2026-04-10T10:00:00+02:00",
+                    scheduledAt = OffsetDateTime.parse("2027-04-10T10:00:00+02:00"),
                     topic = "Conversation practice",
                 )
             )
@@ -203,10 +205,10 @@ class LessonIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
 
-        val first = createLesson(client, token, scheduledAt = "2026-04-10T10:00:00+02:00", durationMinutes = 60)
+        val first = createLesson(client, token, scheduledAt = "2027-04-10T10:00:00+02:00", durationMinutes = 60)
         assertEquals(HttpStatusCode.Created, first.status)
 
-        val overlapping = createLesson(client, token, scheduledAt = "2026-04-10T10:30:00+02:00", durationMinutes = 60)
+        val overlapping = createLesson(client, token, scheduledAt = "2027-04-10T10:30:00+02:00", durationMinutes = 60)
         assertEquals(HttpStatusCode.Conflict, overlapping.status)
     }
 
@@ -215,10 +217,10 @@ class LessonIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
 
-        val first = createLesson(client, token, scheduledAt = "2026-04-10T10:00:00+02:00", durationMinutes = 60)
+        val first = createLesson(client, token, scheduledAt = "2027-04-10T10:00:00+02:00", durationMinutes = 60)
         assertEquals(HttpStatusCode.Created, first.status)
 
-        val second = createLesson(client, token, scheduledAt = "2026-04-10T11:00:00+02:00", durationMinutes = 60)
+        val second = createLesson(client, token, scheduledAt = "2027-04-10T11:00:00+02:00", durationMinutes = 60)
         assertEquals(HttpStatusCode.Created, second.status)
     }
 
@@ -228,7 +230,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val teacherToken = getTeacherToken(client)
         val adminToken = getAdminToken(client)
 
-        val first = createLesson(client, teacherToken, scheduledAt = "2026-04-10T10:00:00+02:00")
+        val first = createLesson(client, teacherToken, scheduledAt = "2027-04-10T10:00:00+02:00")
         assertEquals(HttpStatusCode.Created, first.status)
 
         // Admin creates a lesson for themselves (different teacher)
@@ -241,7 +243,7 @@ class LessonIntegrationTest : IntegrationTest() {
                     studentIds = listOf(STUDENT_2_ID),
                     title = "Admin Lesson",
                     type = LessonType.ONE_ON_ONE,
-                    scheduledAt = "2026-04-10T10:00:00+02:00",
+                    scheduledAt = OffsetDateTime.parse("2027-04-10T10:00:00+02:00"),
                     topic = "Same time, different teacher",
                 )
             )
@@ -302,14 +304,14 @@ class LessonIntegrationTest : IntegrationTest() {
         val teacherToken = getTeacherToken(client)
 
         createLesson(client, teacherToken)
-        createLesson(client, teacherToken, type = LessonType.SPEAKING_CLUB, scheduledAt = "2026-04-10T12:00:00+02:00")
+        createLesson(client, teacherToken, type = LessonType.SPEAKING_CLUB, scheduledAt = "2027-04-10T12:00:00+02:00")
 
         val response = client.get("/api/v1/lessons") {
             bearerAuth(teacherToken)
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
-        val lessons = response.body<List<LessonResponse>>()
+        val lessons = response.body<LessonPageResponse>().lessons
         assertEquals(2, lessons.size)
         assertTrue(lessons.all { it.teacherId == TEACHER_ID })
     }
@@ -324,20 +326,20 @@ class LessonIntegrationTest : IntegrationTest() {
         // Teacher creates confirmed lesson with student
         createLesson(client, teacherToken)
         // Student creates request lesson (also a participant) at a different time
-        createLesson(client, studentToken, scheduledAt = "2026-04-10T12:00:00+02:00")
+        createLesson(client, studentToken, scheduledAt = "2027-04-10T12:00:00+02:00")
 
         val response = client.get("/api/v1/lessons") {
             bearerAuth(studentToken)
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
-        val lessons = response.body<List<LessonResponse>>()
+        val lessons = response.body<LessonPageResponse>().lessons
         assertEquals(2, lessons.size)
 
         // Student2 has no lessons
         val student2Lessons = client.get("/api/v1/lessons") {
             bearerAuth(student2Token)
-        }.body<List<LessonResponse>>()
+        }.body<LessonPageResponse>().lessons
         assertEquals(0, student2Lessons.size)
     }
 
@@ -349,14 +351,14 @@ class LessonIntegrationTest : IntegrationTest() {
         val adminToken = getAdminToken(client)
 
         createLesson(client, teacherToken)
-        createLesson(client, studentToken, scheduledAt = "2026-04-10T12:00:00+02:00")
+        createLesson(client, studentToken, scheduledAt = "2027-04-10T12:00:00+02:00")
 
         val response = client.get("/api/v1/lessons") {
             bearerAuth(adminToken)
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
-        val lessons = response.body<List<LessonResponse>>()
+        val lessons = response.body<LessonPageResponse>().lessons
         assertEquals(2, lessons.size)
     }
 
@@ -378,30 +380,30 @@ class LessonIntegrationTest : IntegrationTest() {
                     studentIds = listOf(STUDENT_ID),
                     title = "Later Lesson",
                     type = LessonType.ONE_ON_ONE,
-                    scheduledAt = "2026-04-20T10:00:00+02:00",
+                    scheduledAt = OffsetDateTime.parse("2027-04-20T10:00:00+02:00"),
                     topic = "Grammar review",
                 )
             )
         }
 
         // Only April 10 lesson
-        val filtered = client.get("/api/v1/lessons?from=2026-04-09T00:00:00%2B02:00&to=2026-04-11T00:00:00%2B02:00") {
+        val filtered = client.get("/api/v1/lessons?from=2027-04-09T00:00:00%2B02:00&to=2027-04-11T00:00:00%2B02:00") {
             bearerAuth(teacherToken)
         }
         assertEquals(HttpStatusCode.OK, filtered.status)
-        assertEquals(1, filtered.body<List<LessonResponse>>().size)
+        assertEquals(1, filtered.body<LessonPageResponse>().lessons.size)
 
         // Both lessons
-        val all = client.get("/api/v1/lessons?from=2026-04-01T00:00:00%2B02:00&to=2026-04-30T00:00:00%2B02:00") {
+        val all = client.get("/api/v1/lessons?from=2027-04-01T00:00:00%2B02:00&to=2027-04-30T00:00:00%2B02:00") {
             bearerAuth(teacherToken)
         }
-        assertEquals(2, all.body<List<LessonResponse>>().size)
+        assertEquals(2, all.body<LessonPageResponse>().lessons.size)
 
         // No filter returns all
         val noFilter = client.get("/api/v1/lessons") {
             bearerAuth(teacherToken)
         }
-        assertEquals(2, noFilter.body<List<LessonResponse>>().size)
+        assertEquals(2, noFilter.body<LessonPageResponse>().lessons.size)
     }
 
     @Test
@@ -507,7 +509,7 @@ class LessonIntegrationTest : IntegrationTest() {
         // Student2 should now see the lesson
         val lessons = client.get("/api/v1/lessons") {
             bearerAuth(student2Token)
-        }.body<List<LessonResponse>>()
+        }.body<LessonPageResponse>().lessons
 
         assertEquals(1, lessons.size)
 
@@ -541,7 +543,7 @@ class LessonIntegrationTest : IntegrationTest() {
         // Student2 should not see the lesson
         val lessons = client.get("/api/v1/lessons") {
             bearerAuth(student2Token)
-        }.body<List<LessonResponse>>()
+        }.body<LessonPageResponse>().lessons
 
         assertEquals(0, lessons.size)
     }
@@ -601,7 +603,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val response = client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(teacherToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00", note = "Conflict"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00"), note = "Conflict"))
         }
 
         assertEquals(HttpStatusCode.Created, response.status)
@@ -618,7 +620,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val response = client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(studentToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00")))
         }
 
         assertEquals(HttpStatusCode.Created, response.status)
@@ -634,13 +636,13 @@ class LessonIntegrationTest : IntegrationTest() {
         client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(teacherToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00")))
         }
 
         val response = client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(teacherToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-13T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-13T14:00:00+02:00")))
         }
 
         assertEquals(HttpStatusCode.Conflict, response.status)
@@ -657,7 +659,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val response = client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(studentToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00")))
         }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -674,7 +676,7 @@ class LessonIntegrationTest : IntegrationTest() {
         client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(teacherToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00")))
         }
 
         val response = client.post("/api/v1/lessons/${lesson.id}/reschedule/accept") {
@@ -683,7 +685,7 @@ class LessonIntegrationTest : IntegrationTest() {
 
         assertEquals(HttpStatusCode.OK, response.status)
         val updated = response.body<LessonResponse>()
-        assertTrue(updated.scheduledAt.contains("2026-04-12"))
+        assertTrue(updated.scheduledAt.toString().contains("2027-04-12"))
     }
 
     @Test
@@ -697,7 +699,7 @@ class LessonIntegrationTest : IntegrationTest() {
         client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(studentToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00")))
         }
 
         val response = client.post("/api/v1/lessons/${lesson.id}/reschedule/accept") {
@@ -706,7 +708,7 @@ class LessonIntegrationTest : IntegrationTest() {
 
         assertEquals(HttpStatusCode.OK, response.status)
         val updated = response.body<LessonResponse>()
-        assertTrue(updated.scheduledAt.contains("2026-04-12"))
+        assertTrue(updated.scheduledAt.toString().contains("2027-04-12"))
     }
 
     @Test
@@ -719,7 +721,7 @@ class LessonIntegrationTest : IntegrationTest() {
         client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(teacherToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00")))
         }
 
         val response = client.post("/api/v1/lessons/${lesson.id}/reschedule/accept") {
@@ -740,7 +742,7 @@ class LessonIntegrationTest : IntegrationTest() {
         client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(studentToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00")))
         }
 
         val response = client.post("/api/v1/lessons/${lesson.id}/reschedule/reject") {
@@ -761,7 +763,7 @@ class LessonIntegrationTest : IntegrationTest() {
         client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(studentToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00")))
         }
 
         client.post("/api/v1/lessons/${lesson.id}/reschedule/reject") {
@@ -771,7 +773,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val response = client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(studentToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-13T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-13T14:00:00+02:00")))
         }
 
         assertEquals(HttpStatusCode.Created, response.status)
@@ -787,7 +789,7 @@ class LessonIntegrationTest : IntegrationTest() {
         client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(teacherToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00")))
         }
 
         val response = client.post("/api/v1/lessons/${lesson.id}/reschedule/reject") {
@@ -1354,7 +1356,7 @@ class LessonIntegrationTest : IntegrationTest() {
         client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(teacherToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00")))
         }
 
         // Verify reschedule is visible
@@ -1429,7 +1431,7 @@ class LessonIntegrationTest : IntegrationTest() {
         client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(teacherToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00", note = "Conflict"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00"), note = "Conflict"))
         }
 
         val withReschedule = client.get("/api/v1/lessons/${lesson.id}") {
@@ -1437,7 +1439,7 @@ class LessonIntegrationTest : IntegrationTest() {
         }.body<LessonResponse>()
 
         assertNotNull(withReschedule.pendingReschedule)
-        assertTrue(withReschedule.pendingReschedule!!.newScheduledAt.contains("2026-04-12"))
+        assertTrue(withReschedule.pendingReschedule!!.newScheduledAt.toString().contains("2027-04-12"))
         assertEquals("Conflict", withReschedule.pendingReschedule!!.note)
         assertEquals(TEACHER_ID, withReschedule.pendingReschedule!!.requestedBy)
     }
@@ -1453,7 +1455,7 @@ class LessonIntegrationTest : IntegrationTest() {
         client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(teacherToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00")))
         }
 
         client.post("/api/v1/lessons/${lesson.id}/reschedule/accept") {
@@ -1465,7 +1467,7 @@ class LessonIntegrationTest : IntegrationTest() {
         }.body<LessonResponse>()
 
         assertNull(afterAccept.pendingReschedule)
-        assertTrue(afterAccept.scheduledAt.contains("2026-04-12"))
+        assertTrue(afterAccept.scheduledAt.toString().contains("2027-04-12"))
     }
 
     @Test
@@ -1479,7 +1481,7 @@ class LessonIntegrationTest : IntegrationTest() {
         client.post("/api/v1/lessons/${lesson.id}/reschedule") {
             contentType(ContentType.Application.Json)
             bearerAuth(teacherToken)
-            setBody(RescheduleLessonRequest(newScheduledAt = "2026-04-12T14:00:00+02:00"))
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse("2027-04-12T14:00:00+02:00")))
         }
 
         client.post("/api/v1/lessons/${lesson.id}/reschedule/reject") {
@@ -1491,5 +1493,107 @@ class LessonIntegrationTest : IntegrationTest() {
         }.body<LessonResponse>()
 
         assertNull(afterReject.pendingReschedule)
+    }
+
+    @Test
+    fun `create lesson with past date fails validation`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+
+        val response = createLesson(client, token, scheduledAt = "2020-01-01T10:00:00+02:00")
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `create lesson with invalid date format fails validation`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+
+        val response = client.post("/api/v1/lessons") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(token)
+            setBody(
+                """
+                {"teacherId":"$TEACHER_ID","studentIds":["$STUDENT_ID"],"title":"Bad","type":"ONE_ON_ONE","scheduledAt":"not-a-date","topic":"x"}
+                """.trimIndent()
+            )
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `reflect with both fields null fails validation`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/reflect") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(studentToken)
+            setBody(ReflectLessonRequest())
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `reflect with only studentReflection succeeds`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/reflect") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(studentToken)
+            setBody(ReflectLessonRequest(studentReflection = "Good session"))
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+    }
+
+    @Test
+    fun `reflect with only studentHardToday succeeds`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/reflect") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(studentToken)
+            setBody(ReflectLessonRequest(studentHardToday = "Dative case"))
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+    }
+
+    @Test
+    fun `lesson list pagination returns slice and total`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        listOf(
+            "2027-04-10T10:00:00+02:00",
+            "2027-04-11T10:00:00+02:00",
+            "2027-04-12T10:00:00+02:00",
+        ).forEach { at -> createLesson(client, token, scheduledAt = at) }
+
+        val page = client.get("/api/v1/lessons?page=2&pageSize=2") {
+            bearerAuth(token)
+        }.body<LessonPageResponse>()
+
+        assertEquals(3, page.total)
+        assertEquals(2, page.page)
+        assertEquals(2, page.pageSize)
+        assertEquals(1, page.lessons.size)
     }
 }

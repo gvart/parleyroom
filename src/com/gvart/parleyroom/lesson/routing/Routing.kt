@@ -1,11 +1,17 @@
 package com.gvart.parleyroom.lesson.routing
 
+import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
+import com.gvart.parleyroom.lesson.service.LessonDocumentService
+import com.gvart.parleyroom.lesson.service.LessonLifecycleService
+import com.gvart.parleyroom.lesson.service.LessonParticipantService
+import com.gvart.parleyroom.lesson.service.LessonRescheduleService
 import com.gvart.parleyroom.lesson.service.LessonService
 import com.gvart.parleyroom.lesson.transfer.CancelLessonRequest
 import com.gvart.parleyroom.lesson.transfer.CompleteLessonRequest
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.LessonDocumentResponse
+import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.ReflectLessonRequest
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
@@ -31,20 +37,24 @@ import java.util.UUID
 
 fun Application.configureLessonRouting() {
     val lessonService: LessonService by dependencies
+    val lifecycleService: LessonLifecycleService by dependencies
+    val participantService: LessonParticipantService by dependencies
+    val rescheduleService: LessonRescheduleService by dependencies
+    val documentService: LessonDocumentService by dependencies
 
     routing {
         authenticate {
             route("/api/v1/lessons") {
                 get {
                     val principal = call.principal<UserPrincipal>()!!
-                    val from = call.queryParameters["from"]?.let(OffsetDateTime::parse)
-                    val to = call.queryParameters["to"]?.let(OffsetDateTime::parse)
+                    val from = call.request.queryParameters["from"]?.let(OffsetDateTime::parse)
+                    val to = call.request.queryParameters["to"]?.let(OffsetDateTime::parse)
 
-                    val result = lessonService.getLessons(principal, from, to)
+                    val result = lessonService.getLessons(principal, from, to, PageRequest.from(call))
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Get lessons"
-                    description = "Retrieves lessons for the authenticated user. Teachers see their lessons, students see confirmed lessons they participate in, admins see all. Supports date range filtering via 'from' and 'to' query parameters (ISO 8601 with offset)."
+                    description = "Retrieves a paginated list of lessons for the authenticated user. Teachers see their lessons, students see confirmed lessons they participate in, admins see all. Supports date range filtering via 'from' and 'to' query parameters (ISO 8601 with offset)."
                     parameters {
                         query("from") {
                             description = "Start of date range (ISO 8601, e.g. 2026-04-01T00:00:00+02:00)"
@@ -54,11 +64,19 @@ fun Application.configureLessonRouting() {
                             description = "End of date range (ISO 8601, e.g. 2026-04-30T23:59:59+02:00)"
                             required = false
                         }
+                        query("page") {
+                            description = "Page number (1-based, default 1)"
+                            required = false
+                        }
+                        query("pageSize") {
+                            description = "Number of lessons per page (default 20, max 100)"
+                            required = false
+                        }
                     }
                     responses {
                         HttpStatusCode.OK {
-                            description = "List of lessons"
-                            schema = jsonSchema<List<LessonResponse>>()
+                            description = "Paginated list of lessons"
+                            schema = jsonSchema<LessonPageResponse>()
                         }
                         HttpStatusCode.Unauthorized {
                             description = "Missing or invalid authentication token"
@@ -70,7 +88,7 @@ fun Application.configureLessonRouting() {
                 post<CreateLessonRequest> {
                     val principal = call.principal<UserPrincipal>()!!
 
-                    val result = lessonService.createLesson(it, principal)
+                    val result = lifecycleService.createLesson(it, principal)
                     call.respond(HttpStatusCode.Created, result)
                 }.describe {
                     summary = "Create lesson"
@@ -137,7 +155,7 @@ fun Application.configureLessonRouting() {
                         val principal = call.principal<UserPrincipal>()!!
                         val id = UUID.fromString(call.parameters["id"])
 
-                        val result = lessonService.acceptLesson(id, principal)
+                        val result = lifecycleService.acceptLesson(id, principal)
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Accept lesson"
@@ -167,7 +185,7 @@ fun Application.configureLessonRouting() {
                         val principal = call.principal<UserPrincipal>()!!
                         val id = UUID.fromString(call.parameters["id"])
 
-                        val result = lessonService.cancelLesson(id, it, principal)
+                        val result = lifecycleService.cancelLesson(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Cancel lesson"
@@ -208,7 +226,7 @@ fun Application.configureLessonRouting() {
                         val principal = call.principal<UserPrincipal>()!!
                         val id = UUID.fromString(call.parameters["id"])
 
-                        lessonService.joinLesson(id, principal)
+                        participantService.joinLesson(id, principal)
                         call.respond(HttpStatusCode.Created)
                     }.describe {
                         summary = "Request to join lesson"
@@ -241,7 +259,7 @@ fun Application.configureLessonRouting() {
                         val principal = call.principal<UserPrincipal>()!!
                         val id = UUID.fromString(call.parameters["id"])
 
-                        val result = lessonService.startLesson(id, principal)
+                        val result = lifecycleService.startLesson(id, principal)
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Start lesson"
@@ -279,7 +297,7 @@ fun Application.configureLessonRouting() {
                         val principal = call.principal<UserPrincipal>()!!
                         val id = UUID.fromString(call.parameters["id"])
 
-                        val result = lessonService.getVideoAccess(id, principal)
+                        val result = lifecycleService.getVideoAccess(id, principal)
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Get video room access token"
@@ -313,7 +331,7 @@ fun Application.configureLessonRouting() {
                         val principal = call.principal<UserPrincipal>()!!
                         val id = UUID.fromString(call.parameters["id"])
 
-                        val result = lessonService.syncDocument(id, it, principal)
+                        val result = documentService.syncDocument(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Sync lesson document"
@@ -350,7 +368,7 @@ fun Application.configureLessonRouting() {
                         val principal = call.principal<UserPrincipal>()!!
                         val id = UUID.fromString(call.parameters["id"])
 
-                        val result = lessonService.completeLesson(id, it, principal)
+                        val result = lifecycleService.completeLesson(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Complete lesson"
@@ -387,7 +405,7 @@ fun Application.configureLessonRouting() {
                         val principal = call.principal<UserPrincipal>()!!
                         val id = UUID.fromString(call.parameters["id"])
 
-                        val result = lessonService.reflectOnLesson(id, it, principal)
+                        val result = documentService.reflectOnLesson(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Submit student reflection"
@@ -426,7 +444,7 @@ fun Application.configureLessonRouting() {
                             val id = UUID.fromString(call.parameters["id"])
                             val studentId = UUID.fromString(call.parameters["studentId"])
 
-                            lessonService.acceptJoinRequest(id, studentId, principal)
+                            participantService.acceptJoinRequest(id, studentId, principal)
                             call.respond(HttpStatusCode.OK)
                         }.describe {
                             summary = "Accept join request"
@@ -463,7 +481,7 @@ fun Application.configureLessonRouting() {
                             val id = UUID.fromString(call.parameters["id"])
                             val studentId = UUID.fromString(call.parameters["studentId"])
 
-                            lessonService.rejectJoinRequest(id, studentId, principal)
+                            participantService.rejectJoinRequest(id, studentId, principal)
                             call.respond(HttpStatusCode.OK)
                         }.describe {
                             summary = "Reject join request"
@@ -501,7 +519,7 @@ fun Application.configureLessonRouting() {
                             val principal = call.principal<UserPrincipal>()!!
                             val id = UUID.fromString(call.parameters["id"])
 
-                            lessonService.rescheduleLesson(id, it, principal)
+                            rescheduleService.rescheduleLesson(id, it, principal)
                             call.respond(HttpStatusCode.Created)
                         }.describe {
                             summary = "Request lesson reschedule"
@@ -537,7 +555,7 @@ fun Application.configureLessonRouting() {
                             val principal = call.principal<UserPrincipal>()!!
                             val id = UUID.fromString(call.parameters["id"])
 
-                            val result = lessonService.acceptReschedule(id, principal)
+                            val result = rescheduleService.acceptReschedule(id, principal)
                             call.respond(HttpStatusCode.OK, result)
                         }.describe {
                             summary = "Accept reschedule"
@@ -567,7 +585,7 @@ fun Application.configureLessonRouting() {
                             val principal = call.principal<UserPrincipal>()!!
                             val id = UUID.fromString(call.parameters["id"])
 
-                            lessonService.rejectReschedule(id, principal)
+                            rescheduleService.rejectReschedule(id, principal)
                             call.respond(HttpStatusCode.OK)
                         }.describe {
                             summary = "Reject reschedule"

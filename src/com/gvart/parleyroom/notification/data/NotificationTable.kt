@@ -18,6 +18,7 @@ enum class NotificationType {
     JOIN_REJECTED,
     LESSON_STARTED,
     LESSON_COMPLETED,
+    VOCAB_REVIEW_DUE,
 }
 
 object NotificationTable : UUIDTable("notifications") {

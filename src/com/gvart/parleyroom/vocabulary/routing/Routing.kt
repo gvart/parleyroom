@@ -1,10 +1,12 @@
 package com.gvart.parleyroom.vocabulary.routing
 
+import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.vocabulary.data.VocabStatus
 import com.gvart.parleyroom.vocabulary.service.VocabularyService
 import com.gvart.parleyroom.vocabulary.transfer.CreateVocabularyWordRequest
 import com.gvart.parleyroom.vocabulary.transfer.UpdateVocabularyWordRequest
+import com.gvart.parleyroom.vocabulary.transfer.VocabularyPageResponse
 import com.gvart.parleyroom.vocabulary.transfer.VocabularyWordResponse
 import com.gvart.parleyroom.user.security.UserPrincipal
 import io.ktor.http.HttpStatusCode
@@ -31,22 +33,24 @@ fun Application.configureVocabularyRouting() {
             route("/api/v1/vocabulary") {
                 get {
                     val principal = call.principal<UserPrincipal>()!!
-                    val studentId = call.queryParameters["studentId"]?.let(UUID::fromString)
-                    val status = call.queryParameters["status"]?.let { VocabStatus.valueOf(it) }
+                    val studentId = call.request.queryParameters["studentId"]?.let(UUID::fromString)
+                    val status = call.request.queryParameters["status"]?.let { VocabStatus.valueOf(it) }
 
-                    val result = vocabularyService.getWords(principal, studentId, status)
+                    val result = vocabularyService.getWords(principal, studentId, status, PageRequest.from(call))
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Get vocabulary words"
-                    description = "Lists vocabulary words. Students see their own, teachers see their students', admins see all. Supports filtering by studentId and status."
+                    description = "Lists vocabulary words with pagination. Students see their own, teachers see their students', admins see all. Supports filtering by studentId and status."
                     parameters {
                         query("studentId") { description = "Filter by student UUID"; required = false }
                         query("status") { description = "Filter by status (NEW, REVIEW, LEARNED)"; required = false }
+                        query("page") { description = "Page number (1-based, default 1)"; required = false }
+                        query("pageSize") { description = "Items per page (default 20, max 100)"; required = false }
                     }
                     responses {
                         HttpStatusCode.OK {
-                            description = "List of vocabulary words"
-                            schema = jsonSchema<List<VocabularyWordResponse>>()
+                            description = "Paginated list of vocabulary words"
+                            schema = jsonSchema<VocabularyPageResponse>()
                         }
                     }
                 }

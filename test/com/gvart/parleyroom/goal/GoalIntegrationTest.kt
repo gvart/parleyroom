@@ -4,6 +4,7 @@ import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.goal.data.GoalSetBy
 import com.gvart.parleyroom.goal.data.GoalStatus
 import com.gvart.parleyroom.goal.transfer.CreateGoalRequest
+import com.gvart.parleyroom.goal.transfer.GoalPageResponse
 import com.gvart.parleyroom.goal.transfer.GoalResponse
 import com.gvart.parleyroom.goal.transfer.UpdateGoalProgressRequest
 import com.gvart.parleyroom.goal.transfer.UpdateGoalRequest
@@ -97,7 +98,7 @@ class GoalIntegrationTest : IntegrationTest() {
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
-        val goals = response.body<List<GoalResponse>>()
+        val goals = response.body<GoalPageResponse>().goals
         assertEquals(2, goals.size)
     }
 
@@ -128,12 +129,12 @@ class GoalIntegrationTest : IntegrationTest() {
 
         val active = client.get("/api/v1/goals?status=ACTIVE") {
             bearerAuth(token)
-        }.body<List<GoalResponse>>()
+        }.body<GoalPageResponse>().goals
         assertEquals(1, active.size)
 
         val completed = client.get("/api/v1/goals?status=COMPLETED") {
             bearerAuth(token)
-        }.body<List<GoalResponse>>()
+        }.body<GoalPageResponse>().goals
         assertEquals(1, completed.size)
     }
 
@@ -324,5 +325,21 @@ class GoalIntegrationTest : IntegrationTest() {
         }.body<GoalResponse>()
         assertEquals(GoalStatus.COMPLETED, completed.status)
         assertEquals(100, completed.progress)
+    }
+
+    @Test
+    fun `goal list pagination returns slice and total`() = testApp {
+        val client = createJsonClient(this)
+        val token = getStudentToken(client)
+        repeat(3) { i -> createGoal(client, token, description = "Goal $i") }
+
+        val page = client.get("/api/v1/goals?page=2&pageSize=2") {
+            bearerAuth(token)
+        }.body<GoalPageResponse>()
+
+        assertEquals(3, page.total)
+        assertEquals(2, page.page)
+        assertEquals(2, page.pageSize)
+        assertEquals(1, page.goals.size)
     }
 }

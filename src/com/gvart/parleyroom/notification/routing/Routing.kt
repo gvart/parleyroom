@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.notification.routing
 
+import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.notification.service.NotificationSseManager
@@ -33,10 +34,9 @@ fun Application.configureNotificationRouting() {
             route("/api/v1/notifications") {
                 get {
                     val principal = call.principal<UserPrincipal>()!!
-                    val page = (call.queryParameters["page"]?.toIntOrNull() ?: 1).coerceAtLeast(1)
-                    val pageSize = (call.queryParameters["pageSize"]?.toIntOrNull() ?: 20).coerceIn(1, 100)
+                    val pageRequest = PageRequest.from(call)
 
-                    val result = notificationService.getNotifications(principal, page, pageSize)
+                    val result = notificationService.getNotifications(principal, pageRequest.page, pageRequest.pageSize)
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Get notifications"

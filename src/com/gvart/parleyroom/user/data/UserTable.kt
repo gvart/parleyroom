@@ -21,4 +21,6 @@ object UserTable : UUIDTable("users") {
     val locale = varchar("locale", 5).default("en")
     val createdAt = timestampWithTimeZone("created_at")
     val updatedAt = timestampWithTimeZone("updated_at")
+    val failedLoginAttempts = integer("failed_login_attempts").default(0)
+    val lockedUntil = timestampWithTimeZone("locked_until").nullable()
 }

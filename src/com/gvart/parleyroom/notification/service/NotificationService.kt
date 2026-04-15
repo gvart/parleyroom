@@ -60,14 +60,11 @@ class NotificationService(
         referenceId: UUID? = null,
     ): NotificationResponse {
         val response = transaction {
-            val now = OffsetDateTime.now()
-
             val id = NotificationTable.insertAndGetId {
                 it[NotificationTable.userId] = userId
                 it[NotificationTable.actorId] = actorId
                 it[NotificationTable.type] = type
                 it[NotificationTable.referenceId] = referenceId
-                it[NotificationTable.createdAt] = now
             }
 
             NotificationTable
@@ -94,6 +91,6 @@ class NotificationService(
             lastName = row[UserTable.lastName],
             role = row[UserTable.role],
         ),
-        createdAt = row[NotificationTable.createdAt].toString(),
+        createdAt = row[NotificationTable.createdAt],
     )
 }

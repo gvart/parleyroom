@@ -1,22 +1,25 @@
 package com.gvart.parleyroom.user
 
 import com.gvart.parleyroom.IntegrationTest
+import com.gvart.parleyroom.common.transfer.ProblemDetail
+import com.gvart.parleyroom.registration.transfer.ResetPasswordRequest
+import com.gvart.parleyroom.registration.transfer.ResetPasswordResponse
 import com.gvart.parleyroom.user.data.RefreshTokenTable
+import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.transfer.AuthenticateRequest
 import com.gvart.parleyroom.user.transfer.AuthenticateResponse
+import com.gvart.parleyroom.user.transfer.LogoutRequest
 import com.gvart.parleyroom.user.transfer.RefreshTokenRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.delete
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
-import kotlinx.datetime.toKotlinInstant
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
@@ -25,6 +28,7 @@ import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -192,6 +196,237 @@ class AuthenticationIntegrationTest : IntegrationTest() {
                 .count()
         }
         assertEquals(0, remaining)
+    }
+
+    @Test
+    fun `logout with valid refresh token returns 204 and revokes token`() = testApp {
+        val client = createJsonClient(this)
+        val tokens = login(client, "admin@test.com")
+
+        val response = client.delete("/api/v1/token") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(LogoutRequest(tokens.refreshToken))
+        }
+
+        assertEquals(HttpStatusCode.NoContent, response.status)
+
+        // Verify the refresh token is revoked
+        val refreshResponse = client.post("/api/v1/token/refresh") {
+            contentType(ContentType.Application.Json)
+            setBody(RefreshTokenRequest(tokens.refreshToken))
+        }
+        assertEquals(HttpStatusCode.Unauthorized, refreshResponse.status)
+    }
+
+    @Test
+    fun `logout with invalid refresh token returns 401`() = testApp {
+        val client = createJsonClient(this)
+        val tokens = login(client, "admin@test.com")
+
+        val response = client.delete("/api/v1/token") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(LogoutRequest("not-a-real-token"))
+        }
+
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `logout without authentication returns 401`() = testApp {
+        val client = createJsonClient(this)
+
+        val response = client.delete("/api/v1/token") {
+            contentType(ContentType.Application.Json)
+            setBody(LogoutRequest("some-token"))
+        }
+
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `logout does not revoke another user's refresh token`() = testApp {
+        val client = createJsonClient(this)
+        val adminTokens = login(client, "admin@test.com")
+        val teacherTokens = login(client, "teacher@test.com")
+
+        // Admin tries to revoke teacher's refresh token
+        val response = client.delete("/api/v1/token") {
+            bearerAuth(adminTokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(LogoutRequest(teacherTokens.refreshToken))
+        }
+
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+
+        // Teacher's token should still work
+        val refreshResponse = client.post("/api/v1/token/refresh") {
+            contentType(ContentType.Application.Json)
+            setBody(RefreshTokenRequest(teacherTokens.refreshToken))
+        }
+        assertEquals(HttpStatusCode.OK, refreshResponse.status)
+    }
+
+    @Test
+    fun `failed logins below threshold increment counter but do not lock`() = testApp {
+        val client = createJsonClient(this)
+        val adminId = UUID.fromString(ADMIN_ID)
+
+        repeat(4) {
+            val response = client.post("/api/v1/token") {
+                contentType(ContentType.Application.Json)
+                setBody(AuthenticateRequest("admin@test.com", "wrong"))
+            }
+            assertEquals(HttpStatusCode.Unauthorized, response.status)
+        }
+
+        val (count, lock) = transaction {
+            val row = UserTable.selectAll().where { UserTable.id eq adminId }.single()
+            row[UserTable.failedLoginAttempts] to row[UserTable.lockedUntil]
+        }
+        assertEquals(4, count)
+        assertNull(lock)
+    }
+
+    @Test
+    fun `fifth failed login locks account and blocks correct password`() = testApp {
+        val client = createJsonClient(this)
+        val adminId = UUID.fromString(ADMIN_ID)
+
+        repeat(5) {
+            client.post("/api/v1/token") {
+                contentType(ContentType.Application.Json)
+                setBody(AuthenticateRequest("admin@test.com", "wrong"))
+            }
+        }
+
+        val (count, lock) = transaction {
+            val row = UserTable.selectAll().where { UserTable.id eq adminId }.single()
+            row[UserTable.failedLoginAttempts] to row[UserTable.lockedUntil]
+        }
+        assertEquals(0, count)
+        assertNotNull(lock)
+        assertTrue(lock.isAfter(OffsetDateTime.now()))
+
+        val response = client.post("/api/v1/token") {
+            contentType(ContentType.Application.Json)
+            setBody(AuthenticateRequest("admin@test.com", TEST_PASSWORD))
+        }
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+        assertEquals("Account is locked. Try again later.", response.body<ProblemDetail>().detail)
+    }
+
+    @Test
+    fun `expired lockout allows login and clears state`() = testApp {
+        val client = createJsonClient(this)
+        val adminId = UUID.fromString(ADMIN_ID)
+
+        transaction {
+            UserTable.update({ UserTable.id eq adminId }) {
+                it[lockedUntil] = OffsetDateTime.now().minusMinutes(1)
+                it[failedLoginAttempts] = 0
+            }
+        }
+
+        val response = client.post("/api/v1/token") {
+            contentType(ContentType.Application.Json)
+            setBody(AuthenticateRequest("admin@test.com", TEST_PASSWORD))
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+
+        val (count, lock) = transaction {
+            val row = UserTable.selectAll().where { UserTable.id eq adminId }.single()
+            row[UserTable.failedLoginAttempts] to row[UserTable.lockedUntil]
+        }
+        assertEquals(0, count)
+        assertNull(lock)
+    }
+
+    @Test
+    fun `successful login resets failed attempts counter`() = testApp {
+        val client = createJsonClient(this)
+        val adminId = UUID.fromString(ADMIN_ID)
+
+        repeat(4) {
+            client.post("/api/v1/token") {
+                contentType(ContentType.Application.Json)
+                setBody(AuthenticateRequest("admin@test.com", "wrong"))
+            }
+        }
+
+        val ok = client.post("/api/v1/token") {
+            contentType(ContentType.Application.Json)
+            setBody(AuthenticateRequest("admin@test.com", TEST_PASSWORD))
+        }
+        assertEquals(HttpStatusCode.OK, ok.status)
+
+        repeat(4) {
+            client.post("/api/v1/token") {
+                contentType(ContentType.Application.Json)
+                setBody(AuthenticateRequest("admin@test.com", "wrong"))
+            }
+        }
+
+        val (count, lock) = transaction {
+            val row = UserTable.selectAll().where { UserTable.id eq adminId }.single()
+            row[UserTable.failedLoginAttempts] to row[UserTable.lockedUntil]
+        }
+        assertEquals(4, count)
+        assertNull(lock)
+    }
+
+    @Test
+    fun `password reset clears lockout state`() = testApp {
+        val client = createJsonClient(this)
+        val adminId = UUID.fromString(ADMIN_ID)
+        val newPassword = "new-password-123"
+
+        transaction {
+            UserTable.update({ UserTable.id eq adminId }) {
+                it[lockedUntil] = OffsetDateTime.now().plusMinutes(10)
+                it[failedLoginAttempts] = 0
+            }
+        }
+
+        val adminToken = getAdminToken(client)
+        val resetTokenResponse = client.post("/api/v1/password-reset") {
+            bearerAuth(adminToken)
+        }
+        assertEquals(HttpStatusCode.Created, resetTokenResponse.status)
+        val resetToken = resetTokenResponse.body<ResetPasswordResponse>().token
+
+        val confirmResponse = client.post("/api/v1/password-reset/confirm") {
+            contentType(ContentType.Application.Json)
+            setBody(ResetPasswordRequest(resetToken, newPassword))
+        }
+        assertEquals(HttpStatusCode.OK, confirmResponse.status)
+
+        val authResponse = client.post("/api/v1/token") {
+            contentType(ContentType.Application.Json)
+            setBody(AuthenticateRequest("admin@test.com", newPassword))
+        }
+        assertEquals(HttpStatusCode.OK, authResponse.status)
+
+        val (count, lock) = transaction {
+            val row = UserTable.selectAll().where { UserTable.id eq adminId }.single()
+            row[UserTable.failedLoginAttempts] to row[UserTable.lockedUntil]
+        }
+        assertEquals(0, count)
+        assertNull(lock)
+    }
+
+    @Test
+    fun `unknown email returns Invalid credentials not Account locked`() = testApp {
+        val client = createJsonClient(this)
+
+        val response = client.post("/api/v1/token") {
+            contentType(ContentType.Application.Json)
+            setBody(AuthenticateRequest("nobody@test.com", TEST_PASSWORD))
+        }
+
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+        assertEquals("Invalid credentials", response.body<ProblemDetail>().detail)
     }
 
     private suspend fun login(client: HttpClient, email: String): AuthenticateResponse =

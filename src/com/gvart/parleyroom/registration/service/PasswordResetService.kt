@@ -5,9 +5,13 @@ import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.registration.data.PasswordResetTable
 import com.gvart.parleyroom.registration.transfer.ResetPasswordResponse
+import com.gvart.parleyroom.user.data.RefreshTokenTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.security.UserPrincipal
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -25,16 +29,22 @@ class PasswordResetService {
 
     fun requestResetForUser(userId: UUID, principal: UserPrincipal): ResetPasswordResponse {
         if (principal.role != UserRole.ADMIN) throw ForbiddenException("Only admins can reset other users' passwords")
-        transaction {
+        return transaction {
             val exists = UserTable.selectAll()
                 .where { UserTable.id eq userId }
                 .empty().not()
             if (!exists) throw NotFoundException("User not found")
+            createResetToken(userId)
         }
-        return createResetToken(userId)
     }
 
     private fun createResetToken(userId: UUID): ResetPasswordResponse = transaction {
+        PasswordResetTable.update({
+            (PasswordResetTable.userId eq userId) and (PasswordResetTable.used eq false)
+        }) {
+            it[used] = true
+        }
+
         val token = UUID.randomUUID()
         PasswordResetTable.insert {
             it[PasswordResetTable.userId] = userId
@@ -53,13 +63,19 @@ class PasswordResetService {
         if (resetEntry[PasswordResetTable.used]) throw BadRequestException("Reset token already used")
         if (resetEntry[PasswordResetTable.expiresAt].isBefore(OffsetDateTime.now())) throw BadRequestException("Reset token expired")
 
-        UserTable.update({ UserTable.id eq resetEntry[PasswordResetTable.userId] }) {
+        val userId = resetEntry[PasswordResetTable.userId]
+
+        UserTable.update({ UserTable.id eq userId }) {
             it[passwordHash] = BCrypt.hashpw(newPassword, BCrypt.gensalt())
             it[updatedAt] = OffsetDateTime.now()
+            it[failedLoginAttempts] = 0
+            it[lockedUntil] = null
         }
 
         PasswordResetTable.update({ PasswordResetTable.id eq resetEntry[PasswordResetTable.id] }) {
             it[used] = true
         }
+
+        RefreshTokenTable.deleteWhere { RefreshTokenTable.userId eq userId }
     }
 }

@@ -18,6 +18,7 @@ data class RegisterUserRequest(
             if (firstName.isBlank()) add("First name can't be empty")
             if (lastName.isBlank()) add("Last name can't be empty")
             if (password.isBlank()) add("Password can't be empty")
+            else if (password.length < 8) add("Password must be at least 8 characters")
         }
 
         return if (errors.isNotEmpty()) ValidationResult.Invalid(errors)

@@ -11,7 +11,14 @@ import org.mindrot.jbcrypt.BCrypt
 import java.time.OffsetDateTime
 
 fun Application.initializeAdminUser() {
-    val adminEmail = "admin@admin.co"
+    val log = environment.log
+    val adminEmail = environment.config.property("application.admin.email").getString()
+    val adminPassword = environment.config.property("application.admin.default_password").getString()
+
+    if (adminPassword == "admin") {
+        log.warn("Admin default password is set to 'admin'. This is insecure and MUST be changed in production!")
+    }
+
     monitor.subscribe(ApplicationStarted) {
         transaction {
             val exists = UserTable.selectAll()
@@ -25,11 +32,10 @@ fun Application.initializeAdminUser() {
                     it[UserTable.firstName] = "admin"
                     it[UserTable.lastName] = "admin"
                     it[UserTable.initials] = "A"
-                    it[UserTable.createdAt] = OffsetDateTime.now()
-                    it[UserTable.updatedAt] = OffsetDateTime.now()
                     it[UserTable.role] = UserRole.ADMIN
-                    it[UserTable.passwordHash] = BCrypt.hashpw(environment.config.property("application.admin.default_password").getString(), BCrypt.gensalt())
+                    it[UserTable.passwordHash] = BCrypt.hashpw(adminPassword, BCrypt.gensalt())
                 }
+                log.info("Admin user created with email: {}", adminEmail)
             }
         }
     }

@@ -1,45 +1,195 @@
 package com.gvart.parleyroom.user.service
 
-import com.gvart.parleyroom.registration.data.RegistrationTable
+import com.gvart.parleyroom.common.storage.StorageService
+import com.gvart.parleyroom.common.transfer.PageRequest
+import com.gvart.parleyroom.common.transfer.exception.BadRequestException
+import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.security.UserPrincipal
+import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import com.gvart.parleyroom.user.transfer.UserListResponse
+import com.gvart.parleyroom.user.transfer.UserResponse
 import org.jetbrains.exposed.sql.JoinType
+import org.jetbrains.exposed.sql.Query
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
+import org.slf4j.LoggerFactory
+import java.io.InputStream
+import java.time.OffsetDateTime
 
-class UserService {
+class UserService(
+    private val storage: StorageService,
+) {
+    private val log = LoggerFactory.getLogger(UserService::class.java)
 
-    //TODO add pagination
-    fun findAllUsers(principal: UserPrincipal): UserListResponse = transaction {
-        val users = when (principal.role) {
+    companion object {
+        val ALLOWED_AVATAR_CONTENT_TYPES = setOf(
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif",
+        )
+        const val MAX_AVATAR_SIZE_BYTES = 5L * 1024 * 1024
+    }
+
+    fun findAllUsers(principal: UserPrincipal, page: PageRequest): UserListResponse = transaction {
+        val baseQuery: Query = when (principal.role) {
             UserRole.ADMIN -> UserTable.selectAll()
-            UserRole.TEACHER -> UserTable.join(RegistrationTable, JoinType.INNER)
-            { UserTable.email eq RegistrationTable.email }
+            UserRole.TEACHER -> UserTable.join(TeacherStudentTable, JoinType.INNER)
+            { UserTable.id eq TeacherStudentTable.studentId }
                 .selectAll()
-                .where { RegistrationTable.invitedBy eq principal.id }
+                .where { TeacherStudentTable.teacherId eq principal.id }
             UserRole.STUDENT -> UserTable.join(TeacherStudentTable, JoinType.INNER)
             { UserTable.id eq TeacherStudentTable.teacherId }
                 .selectAll()
                 .where { TeacherStudentTable.studentId eq principal.id }
         }
 
-        UserListResponse(
-            users = users.map { UserListResponse.User(
+        val total = baseQuery.count()
+        val users = baseQuery
+            .limit(page.pageSize)
+            .offset(page.offset)
+            .map { UserListResponse.User(
                 it[UserTable.id].value.toString(),
                 it[UserTable.firstName],
                 it[UserTable.lastName],
                 it[UserTable.initials],
                 it[UserTable.role],
-                it[UserTable.avatarUrl],
+                presignAvatar(it[UserTable.avatarUrl]),
                 it[UserTable.level],
                 it[UserTable.status],
-                it[UserTable.createdAt].toString(),
+                it[UserTable.createdAt],
                 it[UserTable.locale],
-
             ) }
+
+        UserListResponse(
+            users = users,
+            total = total,
+            page = page.page,
+            pageSize = page.pageSize,
         )
     }
+
+    fun getProfile(principal: UserPrincipal): UserResponse = transaction {
+        val row = UserTable.selectAll()
+            .where { UserTable.id eq principal.id }
+            .singleOrNull() ?: throw NotFoundException("User not found")
+        toResponse(row)
+    }
+
+    fun updateProfile(principal: UserPrincipal, request: UpdateProfileRequest): UserResponse = transaction {
+        val current = UserTable.selectAll()
+            .where { UserTable.id eq principal.id }
+            .singleOrNull() ?: throw NotFoundException("User not found")
+
+        val newFirstName = request.firstName?.trim() ?: current[UserTable.firstName]
+        val newLastName = request.lastName?.trim() ?: current[UserTable.lastName]
+        val nameChanged = request.firstName != null || request.lastName != null
+
+        UserTable.update({ UserTable.id eq principal.id }) {
+            if (request.firstName != null) it[firstName] = newFirstName
+            if (request.lastName != null) it[lastName] = newLastName
+            if (nameChanged) it[initials] = "${newFirstName[0]}${newLastName[0]}"
+            if (request.locale != null) it[locale] = request.locale
+            if (request.level != null) it[level] = request.level
+            it[updatedAt] = OffsetDateTime.now()
+        }
+
+        val updated = UserTable.selectAll()
+            .where { UserTable.id eq principal.id }
+            .single()
+        toResponse(updated)
+    }
+
+    fun updateAvatar(
+        principal: UserPrincipal,
+        fileName: String,
+        contentType: String,
+        size: Long,
+        stream: InputStream,
+    ): UserResponse {
+        if (contentType !in ALLOWED_AVATAR_CONTENT_TYPES) {
+            throw BadRequestException("Avatar content type must be one of ${ALLOWED_AVATAR_CONTENT_TYPES.joinToString()}")
+        }
+        if (size <= 0 || size > MAX_AVATAR_SIZE_BYTES) {
+            throw BadRequestException("Avatar must be between 1 byte and $MAX_AVATAR_SIZE_BYTES bytes")
+        }
+
+        val newKey = storage.buildAvatarKey(principal.id, fileName)
+        storage.upload(newKey, contentType, stream, size)
+
+        val oldKey = runCatching {
+            transaction {
+                val current = UserTable.selectAll()
+                    .where { UserTable.id eq principal.id }
+                    .singleOrNull() ?: throw NotFoundException("User not found")
+                val previous = current[UserTable.avatarUrl]
+                UserTable.update({ UserTable.id eq principal.id }) {
+                    it[avatarUrl] = newKey
+                    it[updatedAt] = OffsetDateTime.now()
+                }
+                previous
+            }
+        }.getOrElse { e ->
+            runCatching { storage.delete(newKey) }
+                .onFailure { log.warn("Failed to clean up orphaned avatar after DB update failure: {}", newKey, it) }
+            throw e
+        }
+
+        if (oldKey != null && oldKey != newKey) {
+            runCatching { storage.delete(oldKey) }
+                .onFailure { log.warn("Failed to delete previous avatar {}", oldKey, it) }
+        }
+
+        return getProfile(principal)
+    }
+
+    fun deleteAvatar(principal: UserPrincipal): UserResponse {
+        val oldKey = transaction {
+            val current = UserTable.selectAll()
+                .where { UserTable.id eq principal.id }
+                .singleOrNull() ?: throw NotFoundException("User not found")
+            val previous = current[UserTable.avatarUrl]
+            if (previous != null) {
+                UserTable.update({ UserTable.id eq principal.id }) {
+                    it[avatarUrl] = null
+                    it[updatedAt] = OffsetDateTime.now()
+                }
+            }
+            previous
+        }
+
+        if (oldKey != null) {
+            runCatching { storage.delete(oldKey) }
+                .onFailure { log.warn("Failed to delete avatar {}", oldKey, it) }
+        }
+
+        return getProfile(principal)
+    }
+
+    private fun presignAvatar(key: String?): String? =
+        key?.let {
+            runCatching { storage.presignGet(it) }
+                .onFailure { log.warn("Failed to presign avatar key {}", it) }
+                .getOrNull()
+        }
+
+    private fun toResponse(row: ResultRow): UserResponse = UserResponse(
+        id = row[UserTable.id].value.toString(),
+        email = row[UserTable.email],
+        firstName = row[UserTable.firstName],
+        lastName = row[UserTable.lastName],
+        initials = row[UserTable.initials],
+        role = row[UserTable.role],
+        avatarUrl = presignAvatar(row[UserTable.avatarUrl]),
+        level = row[UserTable.level],
+        status = row[UserTable.status],
+        locale = row[UserTable.locale],
+        createdAt = row[UserTable.createdAt],
+    )
 }

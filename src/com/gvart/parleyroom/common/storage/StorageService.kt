@@ -25,7 +25,7 @@ import kotlin.time.toJavaDuration
 
 class StorageService(
     private val config: StorageConfig,
-) {
+) : java.io.Closeable {
     private val log = LoggerFactory.getLogger(StorageService::class.java)
 
     private val credentials = StaticCredentialsProvider.create(
@@ -72,6 +72,11 @@ class StorageService(
         return "$teacherId/$materialId/$safe"
     }
 
+    fun buildAvatarKey(userId: UUID, filename: String): String {
+        val safe = sanitize(filename)
+        return "avatars/$userId/$safe"
+    }
+
     fun healthCheck() {
         s3Client.headBucket(HeadBucketRequest.builder().bucket(config.bucket).build())
     }
@@ -104,6 +109,12 @@ class StorageService(
         } catch (_: NoSuchKeyException) {
             // already gone
         }
+    }
+
+    override fun close() {
+        log.info("Closing StorageService: shutting down S3 client and presigner")
+        runCatching { s3Client.close() }.onFailure { log.warn("Error closing S3 client", it) }
+        runCatching { presigner.close() }.onFailure { log.warn("Error closing S3 presigner", it) }
     }
 
     private fun sanitize(filename: String): String {

@@ -1,12 +1,14 @@
 package com.gvart.parleyroom.homework.service
 
 import com.gvart.parleyroom.common.service.AuthorizationHelper
+import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.homework.data.HomeworkStatus
 import com.gvart.parleyroom.homework.data.HomeworkTable
 import com.gvart.parleyroom.homework.transfer.CreateHomeworkRequest
+import com.gvart.parleyroom.homework.transfer.HomeworkPageResponse
 import com.gvart.parleyroom.homework.transfer.HomeworkResponse
 import com.gvart.parleyroom.homework.transfer.ReviewHomeworkRequest
 import com.gvart.parleyroom.homework.transfer.SubmitHomeworkRequest
@@ -31,7 +33,8 @@ class HomeworkService {
         principal: UserPrincipal,
         studentId: UUID?,
         status: HomeworkStatus?,
-    ): List<HomeworkResponse> = transaction {
+        page: PageRequest,
+    ): HomeworkPageResponse = transaction {
         val query = when (principal.role) {
             UserRole.ADMIN -> HomeworkTable.selectAll()
             UserRole.TEACHER -> HomeworkTable.selectAll()
@@ -49,7 +52,18 @@ class HomeworkService {
             query.andWhere { HomeworkTable.status eq status }
         }
 
-        query.map(::toResponse)
+        val total = query.count()
+        val items = query
+            .limit(page.pageSize)
+            .offset(page.offset)
+            .map(::toResponse)
+
+        HomeworkPageResponse(
+            homework = items,
+            total = total,
+            page = page.page,
+            pageSize = page.pageSize,
+        )
     }
 
     fun getHomeworkById(homeworkId: UUID, principal: UserPrincipal): HomeworkResponse = transaction {
@@ -63,7 +77,7 @@ class HomeworkService {
             throw ForbiddenException("Only teachers and admins can create homework")
 
         val studentId = UUID.fromString(request.studentId)
-        val teacherId = if (principal.role == UserRole.TEACHER) principal.id else principal.id
+        val teacherId = principal.id
 
         AuthorizationHelper.requireAccessToStudent(studentId, principal)
 
@@ -79,8 +93,6 @@ class HomeworkService {
             it[attachmentType] = request.attachmentType
             it[attachmentUrl] = request.attachmentUrl
             it[attachmentName] = request.attachmentName
-            it[createdAt] = now
-            it[updatedAt] = now
         }
 
         HomeworkTable.selectAll()
@@ -102,6 +114,7 @@ class HomeworkService {
             if (request.description != null) it[description] = request.description
             if (request.category != null) it[category] = request.category
             if (request.dueDate != null) it[dueDate] = LocalDate.parse(request.dueDate)
+            it[updatedAt] = OffsetDateTime.now()
         }
 
         HomeworkTable.selectAll()
@@ -135,6 +148,7 @@ class HomeworkService {
             it[submissionText] = request.submissionText
             it[submissionUrl] = request.submissionUrl
             it[status] = HomeworkStatus.SUBMITTED
+            it[updatedAt] = OffsetDateTime.now()
         }
 
         HomeworkTable.selectAll()
@@ -152,9 +166,13 @@ class HomeworkService {
         if (currentStatus != HomeworkStatus.SUBMITTED && currentStatus != HomeworkStatus.IN_REVIEW)
             throw BadRequestException("Can only review homework with SUBMITTED or IN_REVIEW status")
 
+        if (request.status != HomeworkStatus.DONE && request.status != HomeworkStatus.REJECTED)
+            throw BadRequestException("Review status must be DONE or REJECTED")
+
         HomeworkTable.update({ HomeworkTable.id eq homeworkId }) {
             it[status] = request.status
             it[teacherFeedback] = request.teacherFeedback
+            it[updatedAt] = OffsetDateTime.now()
         }
 
         HomeworkTable.selectAll()
@@ -197,7 +215,7 @@ class HomeworkService {
         attachmentType = row[HomeworkTable.attachmentType],
         attachmentUrl = row[HomeworkTable.attachmentUrl],
         attachmentName = row[HomeworkTable.attachmentName],
-        createdAt = row[HomeworkTable.createdAt].toString(),
-        updatedAt = row[HomeworkTable.updatedAt].toString(),
+        createdAt = row[HomeworkTable.createdAt],
+        updatedAt = row[HomeworkTable.updatedAt],
     )
 }

@@ -2,15 +2,18 @@ package com.gvart.parleyroom.lesson.transfer
 
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.LessonType
+import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
 import com.gvart.parleyroom.lesson.data.LessonStatus
 import kotlinx.serialization.Serializable
+import java.time.OffsetDateTime
 
 @Serializable
 data class LessonResponse(
     val id: String,
     val title: String,
     val type: LessonType,
-    val scheduledAt: String,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val scheduledAt: OffsetDateTime,
     val durationMinutes: Int,
     val teacherId: String,
     val status: LessonStatus,
@@ -18,7 +21,8 @@ data class LessonResponse(
     val level: LanguageLevel? = null,
     val maxParticipants: Int? = null,
     val students: List<LessonStudentResponse> = emptyList(),
-    val startedAt: String? = null,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val startedAt: OffsetDateTime? = null,
     val pendingReschedule: PendingRescheduleResponse? = null,
     val teacherNotes: String? = null,
     val studentNotes: String? = null,
@@ -28,13 +32,16 @@ data class LessonResponse(
     val studentHardToday: String? = null,
     val createdBy: String,
     val updatedBy: String? = null,
-    val createdAt: String,
-    val updatedAt: String,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val createdAt: OffsetDateTime,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val updatedAt: OffsetDateTime,
 )
 
 @Serializable
 data class PendingRescheduleResponse(
-    val newScheduledAt: String,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val newScheduledAt: OffsetDateTime,
     val note: String? = null,
     val requestedBy: String,
 )

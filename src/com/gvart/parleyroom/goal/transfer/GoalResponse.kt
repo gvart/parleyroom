@@ -1,8 +1,10 @@
 package com.gvart.parleyroom.goal.transfer
 
+import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
 import com.gvart.parleyroom.goal.data.GoalSetBy
 import com.gvart.parleyroom.goal.data.GoalStatus
 import kotlinx.serialization.Serializable
+import java.time.OffsetDateTime
 
 @Serializable
 data class GoalResponse(
@@ -14,6 +16,8 @@ data class GoalResponse(
     val setBy: GoalSetBy,
     val targetDate: String? = null,
     val status: GoalStatus,
-    val createdAt: String,
-    val updatedAt: String,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val createdAt: OffsetDateTime,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val updatedAt: OffsetDateTime,
 )
