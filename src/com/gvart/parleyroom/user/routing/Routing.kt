@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.user.routing
 
+import com.gvart.parleyroom.common.storage.StorageService
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
@@ -13,6 +14,7 @@ import com.gvart.parleyroom.user.transfer.RefreshTokenRequest
 import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import com.gvart.parleyroom.user.transfer.UserListResponse
 import com.gvart.parleyroom.user.transfer.UserResponse
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.PartData
@@ -24,6 +26,7 @@ import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.request.receive
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondOutputStream
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.openapi.describe
@@ -32,10 +35,12 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.utils.io.jvm.javaio.toInputStream
+import java.util.UUID
 
 fun Application.configureRouting() {
     val authenticationService: AuthenticationService by dependencies
     val userService: UserService by dependencies
+    val storage: StorageService by dependencies
 
     routing {
         route("/api/v1/token") {
@@ -253,6 +258,37 @@ fun Application.configureRouting() {
                         HttpStatusCode.OK {
                             description = "Avatar removed"
                             schema = jsonSchema<UserResponse>()
+                        }
+                        HttpStatusCode.Unauthorized {
+                            description = "Missing or invalid authentication token"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                    }
+                }
+
+                get("/{id}/avatar") {
+                    val id = UUID.fromString(call.parameters["id"])
+                    val key = userService.getAvatarKey(id)
+                    val ext = key.substringAfterLast('.', "").lowercase()
+                    val contentType = when (ext) {
+                        "jpg", "jpeg" -> ContentType.Image.JPEG
+                        "png" -> ContentType.Image.PNG
+                        "webp" -> ContentType("image", "webp")
+                        "gif" -> ContentType.Image.GIF
+                        else -> ContentType.Application.OctetStream
+                    }
+                    call.respondOutputStream(contentType, HttpStatusCode.OK) {
+                        storage.stream(key).use { it.copyTo(this) }
+                    }
+                }.describe {
+                    summary = "Get user avatar"
+                    description = "Streams the avatar image for the given user. Requires authentication."
+                    parameters { path("id") { description = "UUID of the user" } }
+                    responses {
+                        HttpStatusCode.OK { description = "Avatar image bytes" }
+                        HttpStatusCode.NotFound {
+                            description = "User not found or no avatar set"
+                            schema = jsonSchema<ProblemDetail>()
                         }
                         HttpStatusCode.Unauthorized {
                             description = "Missing or invalid authentication token"

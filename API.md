@@ -219,7 +219,7 @@ Null when no pending reschedule.
 
 ## Materials (`/api/v1/materials`)
 
-Teacher-owned study resources stored in S3-compatible storage (MinIO locally, S3 on AWS). Clients upload bytes to the API; the server streams them to storage. Downloads return a short-lived presigned GET URL.
+Teacher-owned study resources stored in S3-compatible storage (MinIO locally, S3 on AWS). Clients upload bytes to the API; the server streams them to storage. Non-LINK materials expose a `downloadUrl` pointing at `GET /api/v1/materials/{id}/file`, which streams the stored bytes through the authenticated API.
 
 Upload flow for `PDF`, `AUDIO`, `VIDEO`: `POST /api/v1/materials` as `multipart/form-data` with two parts:
 - `metadata` (`application/json`): `{ name, type, studentId?, lessonId? }`
@@ -258,10 +258,11 @@ curl -X POST http://localhost:8080/api/v1/materials \
 
 ```
 GET    /api/v1/materials/{id}
+GET    /api/v1/materials/{id}/file
 PUT    /api/v1/materials/{id}    Body: { name? }
 DELETE /api/v1/materials/{id}
 ```
-PUT/DELETE: owning teacher or admin only. DELETE also removes the stored object.
+PUT/DELETE: owning teacher or admin only. DELETE also removes the stored object. GET `/file` streams the stored object for non-LINK materials (same access rules as GET by id).
 
 ### Material response
 ```json
@@ -274,7 +275,7 @@ PUT/DELETE: owning teacher or admin only. DELETE also removes the stored object.
   "type": "PDF | AUDIO | VIDEO | LINK",
   "contentType": "application/pdf | null",
   "fileSize": 12345,
-  "downloadUrl": "short-lived presigned GET for uploads, external URL for LINK",
+  "downloadUrl": "/api/v1/materials/{id}/file for PDF/AUDIO/VIDEO, external URL for LINK, null if no file",
   "createdAt": "ISO8601"
 }
 ```

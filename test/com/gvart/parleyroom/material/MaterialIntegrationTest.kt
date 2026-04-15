@@ -128,7 +128,7 @@ class MaterialIntegrationTest : IntegrationTest() {
         assertEquals("application/pdf", body.contentType)
         assertEquals(bytes.size.toLong(), body.fileSize)
         assertNotNull(body.downloadUrl)
-        assertTrue(body.downloadUrl!!.startsWith("http"), "downloadUrl should be a presigned URL")
+        assertEquals("/api/v1/materials/${body.id}/file", body.downloadUrl)
     }
 
     @Test
@@ -195,7 +195,7 @@ class MaterialIntegrationTest : IntegrationTest() {
     // ---------- Read ----------
 
     @Test
-    fun `get material by id returns fresh presigned downloadUrl`() = testApp {
+    fun `get material by id returns downloadUrl pointing at stream route`() = testApp {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
         val created = createFile(client, teacherToken).body<MaterialResponse>()

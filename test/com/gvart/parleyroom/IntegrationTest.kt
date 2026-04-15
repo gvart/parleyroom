@@ -108,7 +108,6 @@ abstract class IntegrationTest {
                 "storage.access_key" to "minioadmin",
                 "storage.secret_key" to "minioadmin",
                 "storage.bucket" to "parleyroom-test",
-                "storage.download_url_ttl" to "1h",
                 "storage.max_file_size" to "104857600",
                 "storage.path_style_access" to "true",
             )

@@ -3,6 +3,7 @@ package com.gvart.parleyroom.common.storage
 import org.slf4j.LoggerFactory
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
+import software.amazon.awssdk.core.ResponseInputStream
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
@@ -10,18 +11,15 @@ import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
+import software.amazon.awssdk.services.s3.model.GetObjectResponse
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
-import software.amazon.awssdk.services.s3.presigner.S3Presigner
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
 import java.io.InputStream
 import java.net.URI
 import java.util.UUID
-import kotlin.time.Duration
-import kotlin.time.toJavaDuration
 
 class StorageService(
     private val config: StorageConfig,
@@ -37,13 +35,6 @@ class StorageService(
         .build()
 
     private val s3Client: S3Client = S3Client.builder()
-        .region(Region.of(config.region))
-        .credentialsProvider(credentials)
-        .endpointOverride(URI.create(config.endpoint))
-        .serviceConfiguration(s3Configuration)
-        .build()
-
-    private val presigner: S3Presigner = S3Presigner.builder()
         .region(Region.of(config.region))
         .credentialsProvider(credentials)
         .endpointOverride(URI.create(config.endpoint))
@@ -91,16 +82,12 @@ class StorageService(
         s3Client.putObject(put, RequestBody.fromInputStream(stream, contentLength))
     }
 
-    fun presignGet(key: String, ttl: Duration = config.downloadUrlTtl): String {
+    fun stream(key: String): ResponseInputStream<GetObjectResponse> {
         val get = GetObjectRequest.builder()
             .bucket(config.bucket)
             .key(key)
             .build()
-        val request = GetObjectPresignRequest.builder()
-            .signatureDuration(ttl.toJavaDuration())
-            .getObjectRequest(get)
-            .build()
-        return presigner.presignGetObject(request).url().toString()
+        return s3Client.getObject(get)
     }
 
     fun delete(key: String) {
@@ -112,9 +99,8 @@ class StorageService(
     }
 
     override fun close() {
-        log.info("Closing StorageService: shutting down S3 client and presigner")
+        log.info("Closing StorageService: shutting down S3 client")
         runCatching { s3Client.close() }.onFailure { log.warn("Error closing S3 client", it) }
-        runCatching { presigner.close() }.onFailure { log.warn("Error closing S3 presigner", it) }
     }
 
     private fun sanitize(filename: String): String {

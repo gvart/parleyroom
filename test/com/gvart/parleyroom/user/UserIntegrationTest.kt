@@ -278,7 +278,7 @@ class UserIntegrationTest : IntegrationTest() {
     ) + ByteArray(32) { 0 }
 
     @Test
-    fun `POST avatar uploads image and returns presigned URL`() = testApp {
+    fun `POST avatar uploads image and returns stream URL`() = testApp {
         val client = createJsonClient(this)
         val token = getStudentToken(client)
 
@@ -287,7 +287,7 @@ class UserIntegrationTest : IntegrationTest() {
         assertEquals(HttpStatusCode.OK, response.status)
         val body = response.body<UserResponse>()
         assertNotNull(body.avatarUrl)
-        assertTrue(body.avatarUrl!!.startsWith("http"))
+        assertTrue(body.avatarUrl!!.startsWith("/api/v1/users/${body.id}/avatar"))
     }
 
     @Test

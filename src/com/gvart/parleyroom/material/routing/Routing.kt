@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.material.routing
 
 import com.gvart.parleyroom.common.storage.StorageConfig
+import com.gvart.parleyroom.common.storage.StorageService
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
@@ -12,6 +13,8 @@ import com.gvart.parleyroom.material.transfer.MaterialPageResponse
 import com.gvart.parleyroom.material.transfer.MaterialResponse
 import com.gvart.parleyroom.material.transfer.UpdateMaterialRequest
 import com.gvart.parleyroom.user.security.UserPrincipal
+import io.ktor.http.ContentDisposition
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.PartData
@@ -22,7 +25,9 @@ import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.plugins.requestvalidation.ValidationResult
 import io.ktor.server.request.receiveMultipart
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondOutputStream
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.openapi.describe
@@ -38,6 +43,7 @@ import java.util.UUID
 fun Application.configureMaterialRouting() {
     val materialService: MaterialService by dependencies
     val storageConfig: StorageConfig by dependencies
+    val storage: StorageService by dependencies
 
     routing {
         authenticate {
@@ -203,6 +209,40 @@ fun Application.configureMaterialRouting() {
                         parameters { path("id") { description = "UUID of the material" } }
                         responses {
                             HttpStatusCode.NoContent { description = "Material deleted" }
+                        }
+                    }
+
+                    get("/file") {
+                        val principal = call.principal<UserPrincipal>()!!
+                        val id = UUID.fromString(call.parameters["id"])
+
+                        val target = materialService.getDownloadTarget(id, principal)
+                        val contentType = target.contentType
+                            ?.let { runCatching { ContentType.parse(it) }.getOrNull() }
+                            ?: ContentType.Application.OctetStream
+                        call.response.header(
+                            HttpHeaders.ContentDisposition,
+                            ContentDisposition.Inline
+                                .withParameter(ContentDisposition.Parameters.FileName, target.fileName)
+                                .toString(),
+                        )
+                        call.respondOutputStream(contentType, HttpStatusCode.OK) {
+                            storage.stream(target.storageKey).use { it.copyTo(this) }
+                        }
+                    }.describe {
+                        summary = "Download material file"
+                        description = "Streams the stored file for non-LINK materials. Subject to the same access rules as GET by ID."
+                        parameters { path("id") { description = "UUID of the material" } }
+                        responses {
+                            HttpStatusCode.OK { description = "File bytes" }
+                            HttpStatusCode.BadRequest {
+                                description = "Material is a LINK and has no file"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
+                            HttpStatusCode.NotFound {
+                                description = "Material not found or has no stored file"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
                         }
                     }
                 }

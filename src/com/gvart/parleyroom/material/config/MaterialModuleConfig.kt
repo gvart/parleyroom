@@ -7,7 +7,6 @@ import com.gvart.parleyroom.material.service.MaterialService
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStopped
 import io.ktor.server.plugins.di.dependencies
-import kotlin.time.Duration
 
 fun Application.configureMaterialModule() {
     val config = environment.config
@@ -18,7 +17,6 @@ fun Application.configureMaterialModule() {
         accessKey = config.property("storage.access_key").getString(),
         secretKey = config.property("storage.secret_key").getString(),
         bucket = config.property("storage.bucket").getString(),
-        downloadUrlTtl = Duration.parse(config.property("storage.download_url_ttl").getString()),
         maxFileSize = config.property("storage.max_file_size").getString().toLong(),
         pathStyleAccess = config.property("storage.path_style_access").getString().toBoolean(),
     )

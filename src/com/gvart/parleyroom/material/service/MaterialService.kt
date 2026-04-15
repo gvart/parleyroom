@@ -90,6 +90,26 @@ class MaterialService(
         toResponse(row)
     }
 
+    fun getDownloadTarget(materialId: UUID, principal: UserPrincipal): MaterialDownloadTarget = transaction {
+        val row = findMaterial(materialId)
+        requireViewAccess(row, principal)
+        val type = row[MaterialTable.type]
+        if (type == MaterialType.LINK) throw BadRequestException("LINK materials have no downloadable file")
+        val key = row[MaterialTable.url]
+        if (key.isBlank()) throw NotFoundException("Material has no stored file")
+        MaterialDownloadTarget(
+            storageKey = key,
+            fileName = key.substringAfterLast('/'),
+            contentType = row[MaterialTable.contentType],
+        )
+    }
+
+    data class MaterialDownloadTarget(
+        val storageKey: String,
+        val fileName: String,
+        val contentType: String?,
+    )
+
     fun createMaterial(input: CreateMaterialInput, principal: UserPrincipal): MaterialResponse {
         if (principal.role == UserRole.STUDENT)
             throw ForbiddenException("Only teachers and admins can create materials")
@@ -233,13 +253,14 @@ class MaterialService(
     private fun toResponse(row: ResultRow): MaterialResponse {
         val type = row[MaterialTable.type]
         val rawUrl = row[MaterialTable.url]
+        val materialId = row[MaterialTable.id].value
         val downloadUrl = when {
             type == MaterialType.LINK -> rawUrl
             rawUrl.isBlank() -> null
-            else -> storage.presignGet(rawUrl)
+            else -> "/api/v1/materials/$materialId/file"
         }
         return MaterialResponse(
-            id = row[MaterialTable.id].value.toString(),
+            id = materialId.toString(),
             teacherId = row[MaterialTable.teacherId].value.toString(),
             studentId = row[MaterialTable.studentId]?.value?.toString(),
             lessonId = row[MaterialTable.lessonId]?.value?.toString(),

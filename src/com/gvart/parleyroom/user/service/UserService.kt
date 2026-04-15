@@ -14,13 +14,13 @@ import com.gvart.parleyroom.user.transfer.UserResponse
 import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.Query
 import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import org.slf4j.LoggerFactory
 import java.io.InputStream
 import java.time.OffsetDateTime
+import java.util.UUID
 
 class UserService(
     private val storage: StorageService,
@@ -60,7 +60,7 @@ class UserService(
                 it[UserTable.lastName],
                 it[UserTable.initials],
                 it[UserTable.role],
-                presignAvatar(it[UserTable.avatarUrl]),
+                avatarUrl(it[UserTable.id].value, it[UserTable.avatarUrl]),
                 it[UserTable.level],
                 it[UserTable.status],
                 it[UserTable.createdAt],
@@ -172,24 +172,36 @@ class UserService(
         return getProfile(principal)
     }
 
-    private fun presignAvatar(key: String?): String? =
+    fun getAvatarKey(userId: UUID): String {
+        val key = transaction {
+            UserTable.selectAll()
+                .where { UserTable.id eq userId }
+                .singleOrNull()
+                ?.get(UserTable.avatarUrl)
+        }
+        return key ?: throw NotFoundException("Avatar not found")
+    }
+
+    private fun avatarUrl(userId: UUID, key: String?): String? =
         key?.let {
-            runCatching { storage.presignGet(it) }
-                .onFailure { log.warn("Failed to presign avatar key {}", it) }
-                .getOrNull()
+            val cacheBust = it.substringAfterLast('/')
+            "/api/v1/users/$userId/avatar?v=$cacheBust"
         }
 
-    private fun toResponse(row: ResultRow): UserResponse = UserResponse(
-        id = row[UserTable.id].value.toString(),
-        email = row[UserTable.email],
-        firstName = row[UserTable.firstName],
-        lastName = row[UserTable.lastName],
-        initials = row[UserTable.initials],
-        role = row[UserTable.role],
-        avatarUrl = presignAvatar(row[UserTable.avatarUrl]),
-        level = row[UserTable.level],
-        status = row[UserTable.status],
-        locale = row[UserTable.locale],
-        createdAt = row[UserTable.createdAt],
-    )
+    private fun toResponse(row: ResultRow): UserResponse {
+        val userId = row[UserTable.id].value
+        return UserResponse(
+            id = userId.toString(),
+            email = row[UserTable.email],
+            firstName = row[UserTable.firstName],
+            lastName = row[UserTable.lastName],
+            initials = row[UserTable.initials],
+            role = row[UserTable.role],
+            avatarUrl = avatarUrl(userId, row[UserTable.avatarUrl]),
+            level = row[UserTable.level],
+            status = row[UserTable.status],
+            locale = row[UserTable.locale],
+            createdAt = row[UserTable.createdAt],
+        )
+    }
 }
