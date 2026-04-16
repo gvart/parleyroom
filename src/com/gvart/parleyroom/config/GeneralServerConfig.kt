@@ -51,12 +51,11 @@ import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.ContentTransformationException
 import io.ktor.server.request.authorization
 import io.ktor.server.request.header
-import io.ktor.server.request.host
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.response.respond
+import io.ktor.server.routing.host
 import io.ktor.server.routing.routing
-import io.ktor.server.application.ApplicationCallPipeline
 import org.slf4j.event.Level
 import java.util.UUID
 import kotlin.time.Duration
@@ -233,25 +232,17 @@ fun Application.generalConfig() {
             .split(",")
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .toSet()
 
-        // Guard /swagger and /docs.json by Host header — the same backend pod serves both
-        // the LAN ingress (rose.local) and the public Cloudflare tunnel (api.<domain>),
-        // so a host-level allowlist is the only way to keep docs off the public surface.
-        intercept(ApplicationCallPipeline.Plugins) {
-            val path = call.request.path()
-            if (path.startsWith("/swagger") || path == "/docs.json") {
-                val host = call.request.host()
-                if (host !in swaggerAllowedHosts) {
-                    call.respond(HttpStatusCode.NotFound)
-                    finish()
+        // The same backend pod serves both the LAN ingress (rose.local) and the public
+        // Cloudflare tunnel (api.<domain>). The host() selector only registers the docs
+        // routes for allowlisted Host headers, so public requests fall through to 404.
+        if (swaggerAllowedHosts.isNotEmpty()) {
+            routing {
+                host(swaggerAllowedHosts) {
+                    openAPI("docs.json")
+                    swaggerUI("/swagger")
                 }
             }
-        }
-
-        routing {
-            openAPI("docs.json")
-            swaggerUI("/swagger")
         }
     }
 }
