@@ -34,6 +34,7 @@ dependencies:
   - $ktor.server.netty
   - $ktor.server.contentNegotiation
   - $ktor.server.requestValidation
+  - $ktor.server.cors
   - $ktor.serialization.kotlinx.json
   - $ktor.server.statusPages
   - $ktor.server.callLogging

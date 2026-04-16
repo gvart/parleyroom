@@ -30,6 +30,7 @@ import com.gvart.parleyroom.user.transfer.AuthenticateRequest
 import com.gvart.parleyroom.user.transfer.RefreshTokenRequest
 import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -40,6 +41,7 @@ import io.ktor.server.plugins.callid.CallId
 import io.ktor.server.plugins.callid.callIdMdc
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.plugins.openapi.openAPI
 import io.ktor.server.plugins.swagger.swaggerUI
@@ -49,10 +51,12 @@ import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.ContentTransformationException
 import io.ktor.server.request.authorization
 import io.ktor.server.request.header
+import io.ktor.server.request.host
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
+import io.ktor.server.application.ApplicationCallPipeline
 import org.slf4j.event.Level
 import java.util.UUID
 import kotlin.time.Duration
@@ -86,6 +90,30 @@ fun Application.generalConfig() {
 
     install(ContentNegotiation) {
         json()
+    }
+
+    install(CORS) {
+        allowMethod(HttpMethod.Options)
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Put)
+        allowMethod(HttpMethod.Patch)
+        allowMethod(HttpMethod.Delete)
+        allowHeader(HttpHeaders.Authorization)
+        allowHeader(HttpHeaders.ContentType)
+        allowHeader(HttpHeaders.Accept)
+        allowHeader(HttpHeaders.XRequestId)
+
+        config.property("cors.allowed_origins").getString()
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .forEach { origin ->
+                val (scheme, hostPort) = origin.split("://", limit = 2).let {
+                    if (it.size == 2) it[0] to it[1] else "https" to it[0]
+                }
+                allowHost(hostPort, schemes = listOf(scheme))
+            }
     }
 
     install(CallId) {
@@ -201,6 +229,26 @@ fun Application.generalConfig() {
 
     val openApiEnabled = config.propertyOrNull("application.openapi.enabled")?.getString()?.toBoolean() ?: true
     if (openApiEnabled) {
+        val swaggerAllowedHosts = config.property("swagger.allowed_hosts").getString()
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+
+        // Guard /swagger and /docs.json by Host header — the same backend pod serves both
+        // the LAN ingress (rose.local) and the public Cloudflare tunnel (api.<domain>),
+        // so a host-level allowlist is the only way to keep docs off the public surface.
+        intercept(ApplicationCallPipeline.Plugins) {
+            val path = call.request.path()
+            if (path.startsWith("/swagger") || path == "/docs.json") {
+                val host = call.request.host()
+                if (host !in swaggerAllowedHosts) {
+                    call.respond(HttpStatusCode.NotFound)
+                    finish()
+                }
+            }
+        }
+
         routing {
             openAPI("docs.json")
             swaggerUI("/swagger")
