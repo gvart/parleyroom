@@ -8,12 +8,14 @@ import com.gvart.parleyroom.notification.transfer.MarkViewedRequest
 import com.gvart.parleyroom.notification.transfer.NotificationPageResponse
 import com.gvart.parleyroom.user.security.UserPrincipal
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondTextWriter
 import io.ktor.server.routing.get
@@ -21,7 +23,12 @@ import io.ktor.server.routing.openapi.describe
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
-import kotlinx.serialization.encodeToString
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import java.util.UUID
 
@@ -90,11 +97,33 @@ fun Application.configureNotificationRouting() {
                     val principal = call.principal<UserPrincipal>()!!
                     val flow = sseManager.subscribe(principal.id)
 
+                    call.response.header(HttpHeaders.CacheControl, "no-cache")
+                    call.response.header("X-Accel-Buffering", "no")
+                    call.response.header(HttpHeaders.Connection, "keep-alive")
+
                     try {
                         call.respondTextWriter(contentType = ContentType.Text.EventStream) {
-                            flow.collect { notification ->
-                                write("data: ${Json.encodeToString(notification)}\n\n")
-                                flush()
+                            val writeMutex = Mutex()
+                            coroutineScope {
+                                val heartbeat = launch {
+                                    while (isActive) {
+                                        delay(20_000)
+                                        writeMutex.withLock {
+                                            write(": ping\n\n")
+                                            flush()
+                                        }
+                                    }
+                                }
+                                try {
+                                    flow.collect { notification ->
+                                        writeMutex.withLock {
+                                            write("data: ${Json.encodeToString(notification)}\n\n")
+                                            flush()
+                                        }
+                                    }
+                                } finally {
+                                    heartbeat.cancel()
+                                }
                             }
                         }
                     } finally {
