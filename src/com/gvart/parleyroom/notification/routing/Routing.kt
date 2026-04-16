@@ -31,6 +31,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import java.util.UUID
+import kotlin.time.Duration.Companion.milliseconds
 
 fun Application.configureNotificationRouting() {
     val notificationService: NotificationService by dependencies
@@ -103,15 +104,19 @@ fun Application.configureNotificationRouting() {
 
                     try {
                         call.respondTextWriter(contentType = ContentType.Text.EventStream) {
+                            write(": connected\n\n")
+                            flush()
+
                             val writeMutex = Mutex()
                             coroutineScope {
                                 val heartbeat = launch {
+                                    delay(5_000.milliseconds)
                                     while (isActive) {
-                                        delay(20_000)
                                         writeMutex.withLock {
                                             write(": ping\n\n")
                                             flush()
                                         }
+                                        delay(20_000.milliseconds)
                                     }
                                 }
                                 try {
