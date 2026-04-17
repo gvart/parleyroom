@@ -65,7 +65,10 @@ class StorageService(
 
     fun buildAvatarKey(userId: UUID, filename: String): String {
         val safe = sanitize(filename)
-        return "avatars/$userId/$safe"
+        // Prefix with upload timestamp so successive uploads with the same filename
+        // produce distinct keys -> distinct cache-bust query params, avoiding stale
+        // avatar rendering from browser HTTP cache.
+        return "avatars/$userId/${System.currentTimeMillis()}-$safe"
     }
 
     fun healthCheck() {
