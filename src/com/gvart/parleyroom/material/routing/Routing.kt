@@ -2,6 +2,7 @@ package com.gvart.parleyroom.material.routing
 
 import com.gvart.parleyroom.common.storage.StorageConfig
 import com.gvart.parleyroom.common.storage.StorageService
+import com.gvart.parleyroom.common.storage.readBoundedBytes
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
@@ -119,17 +120,14 @@ fun Application.configureMaterialRouting() {
                                     ?: throw BadRequestException("file part is missing a filename")
                                 val partContentType = fp.contentType?.toString()
                                     ?: throw BadRequestException("file part is missing Content-Type")
-                                val size = fp.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-                                    ?: throw BadRequestException("file part is missing Content-Length")
-                                if (size > storageConfig.maxFileSize) {
-                                    throw BadRequestException("file exceeds max size of ${storageConfig.maxFileSize} bytes")
-                                }
+                                val bytes = fp.provider().toInputStream()
+                                    .readBoundedBytes(storageConfig.maxFileSize)
                                 CreateMaterialInput.File(
                                     request = meta,
                                     fileName = fileName,
                                     contentType = partContentType,
-                                    size = size,
-                                    stream = fp.provider().toInputStream(),
+                                    size = bytes.size.toLong(),
+                                    stream = bytes.inputStream(),
                                 )
                             }
                         }

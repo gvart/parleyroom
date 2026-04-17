@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.user.routing
 
 import com.gvart.parleyroom.common.storage.StorageService
+import com.gvart.parleyroom.common.storage.readBoundedBytes
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
@@ -15,7 +16,6 @@ import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import com.gvart.parleyroom.user.transfer.UserListResponse
 import com.gvart.parleyroom.user.transfer.UserResponse
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.PartData
 import io.ktor.openapi.jsonSchema
@@ -215,15 +215,16 @@ fun Application.configureRouting() {
                             ?: throw BadRequestException("file part is missing a filename")
                         val partContentType = fp.contentType?.toString()
                             ?: throw BadRequestException("file part is missing Content-Type")
-                        val size = fp.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-                            ?: throw BadRequestException("file part is missing Content-Length")
+
+                        val bytes = fp.provider().toInputStream()
+                            .readBoundedBytes(UserService.MAX_AVATAR_SIZE_BYTES)
 
                         val result = userService.updateAvatar(
                             principal = principal,
                             fileName = fileName,
                             contentType = partContentType,
-                            size = size,
-                            stream = fp.provider().toInputStream(),
+                            size = bytes.size.toLong(),
+                            stream = bytes.inputStream(),
                         )
                         call.respond(HttpStatusCode.OK, result)
                     } finally {
