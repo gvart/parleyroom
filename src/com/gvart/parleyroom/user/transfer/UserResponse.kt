@@ -21,4 +21,6 @@ data class UserResponse(
     val locale: String,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
+    val telegramId: Long? = null,
+    val telegramUsername: String? = null,
 )

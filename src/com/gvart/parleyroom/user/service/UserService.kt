@@ -149,6 +149,15 @@ class UserService(
         return getProfile(principal)
     }
 
+    fun unlinkTelegram(principal: UserPrincipal) = transaction {
+        val updated = UserTable.update({ UserTable.id eq principal.id }) {
+            it[telegramId] = null
+            it[telegramUsername] = null
+            it[updatedAt] = OffsetDateTime.now()
+        }
+        if (updated == 0) throw NotFoundException("User not found")
+    }
+
     fun deleteAvatar(principal: UserPrincipal): UserResponse {
         val oldKey = transaction {
             val current = UserTable.selectAll()
@@ -202,6 +211,8 @@ class UserService(
             status = row[UserTable.status],
             locale = row[UserTable.locale],
             createdAt = row[UserTable.createdAt],
+            telegramId = row[UserTable.telegramId],
+            telegramUsername = row[UserTable.telegramUsername],
         )
     }
 }

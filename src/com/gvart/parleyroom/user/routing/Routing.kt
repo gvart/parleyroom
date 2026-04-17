@@ -7,11 +7,14 @@ import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.user.service.AuthenticationService
+import com.gvart.parleyroom.user.service.TelegramAuthService
 import com.gvart.parleyroom.user.service.UserService
 import com.gvart.parleyroom.user.transfer.AuthenticateRequest
 import com.gvart.parleyroom.user.transfer.AuthenticateResponse
 import com.gvart.parleyroom.user.transfer.LogoutRequest
 import com.gvart.parleyroom.user.transfer.RefreshTokenRequest
+import com.gvart.parleyroom.user.transfer.TelegramAuthRequest
+import com.gvart.parleyroom.user.transfer.TelegramLinkResult
 import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import com.gvart.parleyroom.user.transfer.UserListResponse
 import com.gvart.parleyroom.user.transfer.UserResponse
@@ -40,6 +43,7 @@ import java.util.UUID
 fun Application.configureRouting() {
     val authenticationService: AuthenticationService by dependencies
     val userService: UserService by dependencies
+    val telegramAuthService: TelegramAuthService by dependencies
     val storage: StorageService by dependencies
 
     routing {
@@ -65,6 +69,35 @@ fun Application.configureRouting() {
                     }
                     HttpStatusCode.Unauthorized {
                         description = "Invalid credentials"
+                        schema = jsonSchema<ProblemDetail>()
+                    }
+                }
+            }
+
+            post<TelegramAuthRequest>("/telegram-miniapp") {
+                val result = telegramAuthService.signInWithMiniApp(it.initData)
+                call.respond(HttpStatusCode.OK, result)
+            }.describe {
+                summary = "Authenticate via Telegram Mini App initData"
+                description = "Verifies Telegram Mini App initData signed with the bot token and returns the same access+refresh token pair as /token. Responds 404 if the Telegram account has not been linked to a user yet; the client should then email-login and call /users/me/telegram/link."
+                requestBody {
+                    schema = jsonSchema<TelegramAuthRequest>()
+                }
+                responses {
+                    HttpStatusCode.OK {
+                        description = "Authentication successful"
+                        schema = jsonSchema<AuthenticateResponse>()
+                    }
+                    HttpStatusCode.NotFound {
+                        description = "Telegram account is not linked to any user"
+                        schema = jsonSchema<ProblemDetail>()
+                    }
+                    HttpStatusCode.Unauthorized {
+                        description = "initData signature invalid or expired"
+                        schema = jsonSchema<ProblemDetail>()
+                    }
+                    HttpStatusCode.BadRequest {
+                        description = "initData is missing or malformed"
                         schema = jsonSchema<ProblemDetail>()
                     }
                 }
@@ -186,6 +219,52 @@ fun Application.configureRouting() {
                             description = "Invalid request body or validation error"
                             schema = jsonSchema<ProblemDetail>()
                         }
+                        HttpStatusCode.Unauthorized {
+                            description = "Missing or invalid authentication token"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                    }
+                }
+
+                post<TelegramAuthRequest>("/me/telegram/link") {
+                    val principal = call.principal<UserPrincipal>()!!
+                    val result = telegramAuthService.linkTelegram(principal.id, it.initData)
+                    call.respond(HttpStatusCode.OK, result)
+                }.describe {
+                    summary = "Link Telegram account to current user"
+                    description = "Verifies a Mini App initData payload and persists its telegram_id + username on the authenticated user. Idempotent: re-linking the same telegram_id to the same user succeeds; trying to link an id already owned by another account returns 409."
+                    requestBody {
+                        schema = jsonSchema<TelegramAuthRequest>()
+                    }
+                    responses {
+                        HttpStatusCode.OK {
+                            description = "Telegram account linked"
+                            schema = jsonSchema<TelegramLinkResult>()
+                        }
+                        HttpStatusCode.Conflict {
+                            description = "This Telegram account is already linked to a different user"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.Unauthorized {
+                            description = "Missing auth token or invalid initData signature"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.BadRequest {
+                            description = "initData is missing or malformed"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                    }
+                }
+
+                delete("/me/telegram") {
+                    val principal = call.principal<UserPrincipal>()!!
+                    userService.unlinkTelegram(principal)
+                    call.respond(HttpStatusCode.NoContent)
+                }.describe {
+                    summary = "Unlink Telegram account from current user"
+                    description = "Clears telegram_id and telegram_username on the authenticated user's row."
+                    responses {
+                        HttpStatusCode.NoContent { description = "Telegram account unlinked" }
                         HttpStatusCode.Unauthorized {
                             description = "Missing or invalid authentication token"
                             schema = jsonSchema<ProblemDetail>()

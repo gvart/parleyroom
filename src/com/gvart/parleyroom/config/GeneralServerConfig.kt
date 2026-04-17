@@ -28,6 +28,7 @@ import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.transfer.LogoutRequest
 import com.gvart.parleyroom.user.security.AuthLockoutConfig
 import com.gvart.parleyroom.user.security.JwtConfig
+import com.gvart.parleyroom.user.security.TelegramConfig
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.user.transfer.AuthenticateRequest
 import com.gvart.parleyroom.user.transfer.RefreshTokenRequest
@@ -86,6 +87,16 @@ fun Application.generalConfig() {
             AuthLockoutConfig(
                 maxFailedAttempts = config.property("authentication.lockout.max_failed_attempts").getString().toInt(),
                 lockoutDuration = Duration.parse(config.property("authentication.lockout.duration").getString()),
+            )
+        }
+        provide {
+            val token = config.property("telegram.bot_token").getString()
+            if (token.isBlank()) {
+                log.warn("TELEGRAM_BOT_TOKEN is empty. /token/telegram-miniapp will reject all requests until it is set.")
+            }
+            TelegramConfig(
+                botToken = token,
+                initDataMaxAge = Duration.parse(config.property("telegram.init_data_max_age").getString()),
             )
         }
     }

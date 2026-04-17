@@ -52,6 +52,7 @@ abstract class IntegrationTest {
         const val STUDENT_ID = "00000000-0000-0000-0000-000000000003"
         const val STUDENT_2_ID = "00000000-0000-0000-0000-000000000004"
         const val TEST_PASSWORD = "password123"
+        const val TEST_TELEGRAM_BOT_TOKEN = "123456:test-bot-token-for-integration-tests"
 
         init {
             postgres.start()
@@ -112,6 +113,8 @@ abstract class IntegrationTest {
                 "storage.path_style_access" to "true",
                 "cors.allowed_origins" to "",
                 "swagger.allowed_hosts" to "",
+                "telegram.bot_token" to TEST_TELEGRAM_BOT_TOKEN,
+                "telegram.init_data_max_age" to "24h",
             )
         }
         application {

@@ -115,7 +115,7 @@ class AuthenticationService(
         }
     }
 
-    private fun issueTokens(user: ResultRow): AuthenticateResponse {
+    internal fun issueTokens(user: ResultRow): AuthenticateResponse {
         val userId = user[UserTable.id].value
         val accessToken = buildAccessToken(
             userId = userId,
