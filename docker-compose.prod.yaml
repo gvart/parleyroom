@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/gvart/parleyroom:0.3.0 # x-release-please-version
+    image: ghcr.io/gvart/parleyroom:0.4.0 # x-release-please-version
     restart: unless-stopped
     depends_on:
       - postgres

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/gvart/parleyroom/compare/v0.3.0...v0.4.0) (2026-04-17)
+
+
+### Features
+
+* **telegram:** add Mini App authentication and account linking ([8a8bf43](https://github.com/gvart/parleyroom/commit/8a8bf43e23305ef1fabc9646c8da6306d5c94405))
+
 ## [0.3.0](https://github.com/gvart/parleyroom/compare/v0.2.0...v0.3.0) (2026-04-17)
 
 
