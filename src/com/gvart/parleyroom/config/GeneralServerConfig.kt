@@ -2,6 +2,9 @@ package com.gvart.parleyroom.config
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
+import com.gvart.parleyroom.admin.transfer.AdminSetPasswordRequest
+import com.gvart.parleyroom.admin.transfer.AdminUpdateUserRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
@@ -151,6 +154,9 @@ fun Application.generalConfig() {
         validate<ReflectLessonRequest> { it.validate() }
         validate<MarkViewedRequest> { it.validate() }
         validate<UpdateProfileRequest> { it.validate() }
+        validate<AdminCreateUserRequest> { it.validate() }
+        validate<AdminUpdateUserRequest> { it.validate() }
+        validate<AdminSetPasswordRequest> { it.validate() }
     }
 
 

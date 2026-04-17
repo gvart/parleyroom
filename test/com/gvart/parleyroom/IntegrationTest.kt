@@ -110,6 +110,8 @@ abstract class IntegrationTest {
                 "storage.bucket" to "parleyroom-test",
                 "storage.max_file_size" to "104857600",
                 "storage.path_style_access" to "true",
+                "cors.allowed_origins" to "",
+                "swagger.allowed_hosts" to "",
             )
         }
         application {

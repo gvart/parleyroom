@@ -10,6 +10,11 @@ import java.util.UUID
 
 object AuthorizationHelper {
 
+    fun requireAdmin(principal: UserPrincipal) {
+        if (principal.role != UserRole.ADMIN)
+            throw ForbiddenException("Admin privileges required")
+    }
+
     fun requireAccessToStudent(studentId: UUID, principal: UserPrincipal) {
         if (principal.role == UserRole.ADMIN) return
         if (principal.role == UserRole.STUDENT) {
