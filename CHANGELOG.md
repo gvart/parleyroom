@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/gvart/parleyroom/compare/v0.2.0...v0.3.0) (2026-04-17)
+
+
+### Features
+
+* **admin:** add admin module with user CRUD, unlock, password, status, and stats ([d886718](https://github.com/gvart/parleyroom/commit/d8867181746134112728bc7dc6f89cbf48f9f065))
+
 ## [0.2.0](https://github.com/gvart/parleyroom/compare/v0.1.0...v0.2.0) (2026-04-17)
 
 
