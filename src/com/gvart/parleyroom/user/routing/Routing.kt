@@ -15,6 +15,7 @@ import com.gvart.parleyroom.user.transfer.LogoutRequest
 import com.gvart.parleyroom.user.transfer.RefreshTokenRequest
 import com.gvart.parleyroom.user.transfer.TelegramAuthRequest
 import com.gvart.parleyroom.user.transfer.TelegramLinkResult
+import com.gvart.parleyroom.user.transfer.TelegramLoginWidgetRequest
 import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import com.gvart.parleyroom.user.transfer.UserListResponse
 import com.gvart.parleyroom.user.transfer.UserResponse
@@ -251,6 +252,36 @@ fun Application.configureRouting() {
                         }
                         HttpStatusCode.BadRequest {
                             description = "initData is missing or malformed"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                    }
+                }
+
+                post<TelegramLoginWidgetRequest>("/me/telegram/link-widget") {
+                    val principal = call.principal<UserPrincipal>()!!
+                    val result = telegramAuthService.linkTelegramFromWidget(principal.id, it)
+                    call.respond(HttpStatusCode.OK, result)
+                }.describe {
+                    summary = "Link Telegram account via Login Widget"
+                    description = "Verifies a Telegram Login Widget payload (HMAC-SHA256 with SHA256(bot_token) as secret, per https://core.telegram.org/widgets/login#checking-authorization) and persists its telegram_id + username on the authenticated user. Used by the web portal where Mini App initData is not available. Idempotent like /me/telegram/link; returns 409 when the telegram_id is already owned by another user."
+                    requestBody {
+                        schema = jsonSchema<TelegramLoginWidgetRequest>()
+                    }
+                    responses {
+                        HttpStatusCode.OK {
+                            description = "Telegram account linked"
+                            schema = jsonSchema<TelegramLinkResult>()
+                        }
+                        HttpStatusCode.Conflict {
+                            description = "This Telegram account is already linked to a different user"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.Unauthorized {
+                            description = "Missing auth token, invalid widget signature, or payload expired"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.BadRequest {
+                            description = "Widget payload is missing required fields"
                             schema = jsonSchema<ProblemDetail>()
                         }
                     }
