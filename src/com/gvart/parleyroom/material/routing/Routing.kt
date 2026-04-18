@@ -80,63 +80,63 @@ fun Application.configureMaterialRouting() {
                     val multipart = call.receiveMultipart()
 
                     var metadata: CreateMaterialRequest? = null
-                    var fileItem: PartData.FileItem? = null
+                    var fileBytes: ByteArray? = null
+                    var fileName: String? = null
+                    var fileContentType: String? = null
 
-                    try {
-                        while (fileItem == null) {
-                            val part = multipart.readPart() ?: break
+                    while (true) {
+                        val part = multipart.readPart() ?: break
+                        try {
                             when (part) {
                                 is PartData.FormItem -> {
                                     if (part.name == "metadata" && metadata == null) {
                                         metadata = parseMetadata(part.value)
                                     }
-                                    part.dispose()
                                 }
                                 is PartData.FileItem -> {
-                                    if (part.name == "file") {
-                                        fileItem = part
-                                    } else {
-                                        part.dispose()
+                                    if (part.name == "file" && fileBytes == null) {
+                                        fileName = part.originalFileName?.takeIf { it.isNotBlank() }
+                                        fileContentType = part.contentType?.toString()
+                                        fileBytes = part.provider().toInputStream()
+                                            .readBoundedBytes(storageConfig.maxFileSize)
                                     }
                                 }
-                                else -> part.dispose()
+                                else -> Unit
                             }
+                        } finally {
+                            part.dispose()
                         }
-
-                        val meta = metadata
-                            ?: throw BadRequestException("metadata part is required and must be sent before the file part")
-
-                        val input = when (meta.type) {
-                            MaterialType.LINK -> {
-                                if (fileItem != null) {
-                                    throw BadRequestException("file part must be omitted for LINK materials")
-                                }
-                                CreateMaterialInput.Link(meta)
-                            }
-                            else -> {
-                                val fp = fileItem
-                                    ?: throw BadRequestException("file part is required for ${meta.type}")
-                                val fileName = fp.originalFileName?.takeIf { it.isNotBlank() }
-                                    ?: throw BadRequestException("file part is missing a filename")
-                                val partContentType = fp.contentType?.toString()
-                                    ?: throw BadRequestException("file part is missing Content-Type")
-                                val bytes = fp.provider().toInputStream()
-                                    .readBoundedBytes(storageConfig.maxFileSize)
-                                CreateMaterialInput.File(
-                                    request = meta,
-                                    fileName = fileName,
-                                    contentType = partContentType,
-                                    size = bytes.size.toLong(),
-                                    stream = bytes.inputStream(),
-                                )
-                            }
-                        }
-
-                        val result = materialService.createMaterial(input, principal)
-                        call.respond(HttpStatusCode.Created, result)
-                    } finally {
-                        fileItem?.dispose()
                     }
+
+                    val meta = metadata
+                        ?: throw BadRequestException("metadata part is required")
+
+                    val input = when (meta.type) {
+                        MaterialType.LINK -> {
+                            if (fileBytes != null) {
+                                throw BadRequestException("file part must be omitted for LINK materials")
+                            }
+                            CreateMaterialInput.Link(meta)
+                        }
+                        else -> {
+                            val bytes = fileBytes
+                                ?: throw BadRequestException("file part is required for ${meta.type}")
+                            val name = fileName
+                                ?: throw BadRequestException("file part is missing a filename")
+                            val contentType = fileContentType
+                                ?: throw BadRequestException("file part is missing Content-Type")
+                            CreateMaterialInput.File(
+                                request = meta,
+                                fileName = name,
+                                contentType = contentType,
+                                size = bytes.size.toLong(),
+                                stream = bytes.inputStream(),
+                            )
+                        }
+                    }
+
+                    val result = materialService.createMaterial(input, principal)
+                    call.respond(HttpStatusCode.Created, result)
                 }.describe {
                     summary = "Create material"
                     description = "Creates a material via multipart/form-data. Send a JSON `metadata` part and, for PDF/AUDIO/VIDEO, a binary `file` part. For LINK, omit the file and supply `url` in metadata."
