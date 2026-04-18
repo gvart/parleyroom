@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/gvart/parleyroom/compare/v0.4.0...v0.5.0) (2026-04-18)
+
+
+### Features
+
+* **telegram:** add Login Widget endpoint for web portal linking ([#4](https://github.com/gvart/parleyroom/issues/4)) ([0f9d4e3](https://github.com/gvart/parleyroom/commit/0f9d4e39cd70d08d333f5aff23c583870c07acb9))
+
 ## [0.4.0](https://github.com/gvart/parleyroom/compare/v0.3.0...v0.4.0) (2026-04-17)
 
 
