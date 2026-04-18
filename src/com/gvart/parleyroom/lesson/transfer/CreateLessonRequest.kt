@@ -23,11 +23,17 @@ data class CreateLessonRequest(
     fun validate(): ValidationResult {
         val errors = buildList {
             if (teacherId.isBlank()) add("Teacher ID can't be empty")
-            if (studentIds.isEmpty()) add("At least one student is required")
+            if (type == LessonType.ONE_ON_ONE && studentIds.size != 1) {
+                add("One-on-one lessons must have exactly one student")
+            }
             if (title.isBlank()) add("Title can't be empty")
             if (scheduledAt.isBefore(OffsetDateTime.now())) add("Scheduled time must be in the future")
             if (topic.isBlank()) add("Topic can't be empty")
             if (durationMinutes <= 0) add("Duration must be positive")
+            maxParticipants?.let {
+                if (it <= 0) add("maxParticipants must be positive")
+                if (studentIds.size > it) add("studentIds exceeds maxParticipants")
+            }
         }
 
         return if (errors.isNotEmpty()) ValidationResult.Invalid(errors)

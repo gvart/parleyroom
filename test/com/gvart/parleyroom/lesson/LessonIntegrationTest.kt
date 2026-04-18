@@ -41,13 +41,14 @@ class LessonIntegrationTest : IntegrationTest() {
         maxParticipants: Int? = null,
         scheduledAt: String = "2027-04-10T10:00:00+02:00",
         durationMinutes: Int = 60,
+        studentIds: List<String> = listOf(STUDENT_ID),
     ): HttpResponse = client.post("/api/v1/lessons") {
         contentType(ContentType.Application.Json)
         bearerAuth(token)
         setBody(
             CreateLessonRequest(
                 teacherId = TEACHER_ID,
-                studentIds = listOf(STUDENT_ID),
+                studentIds = studentIds,
                 title = "German Lesson",
                 type = type,
                 scheduledAt = OffsetDateTime.parse(scheduledAt),
@@ -113,6 +114,81 @@ class LessonIntegrationTest : IntegrationTest() {
         assertEquals(HttpStatusCode.Created, response.status)
         val lesson = response.body<LessonResponse>()
         assertEquals(LessonType.SPEAKING_CLUB, lesson.type)
+    }
+
+    @Test
+    fun `teacher can create an open group lesson with no students`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+
+        val response = createLesson(
+            client,
+            token,
+            type = LessonType.SPEAKING_CLUB,
+            studentIds = emptyList(),
+        )
+
+        assertEquals(HttpStatusCode.Created, response.status)
+        val lesson = response.body<LessonResponse>()
+        assertEquals(LessonType.SPEAKING_CLUB, lesson.type)
+        assertTrue(lesson.students.isEmpty())
+    }
+
+    @Test
+    fun `one-on-one with zero students is rejected`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+
+        val response = createLesson(client, token, studentIds = emptyList())
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `one-on-one with multiple students is rejected`() = testApp {
+        val client = createJsonClient(this)
+        val token = getAdminToken(client)
+
+        val response = createLesson(
+            client,
+            token,
+            studentIds = listOf(STUDENT_ID, STUDENT_2_ID),
+        )
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `admin can create a group lesson with multiple students`() = testApp {
+        val client = createJsonClient(this)
+        val token = getAdminToken(client)
+
+        val response = createLesson(
+            client,
+            token,
+            type = LessonType.READING_CLUB,
+            studentIds = listOf(STUDENT_ID, STUDENT_2_ID),
+        )
+
+        assertEquals(HttpStatusCode.Created, response.status)
+        val lesson = response.body<LessonResponse>()
+        assertEquals(2, lesson.students.size)
+    }
+
+    @Test
+    fun `studentIds exceeding maxParticipants is rejected`() = testApp {
+        val client = createJsonClient(this)
+        val token = getAdminToken(client)
+
+        val response = createLesson(
+            client,
+            token,
+            type = LessonType.SPEAKING_CLUB,
+            studentIds = listOf(STUDENT_ID, STUDENT_2_ID),
+            maxParticipants = 1,
+        )
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 
     @Test

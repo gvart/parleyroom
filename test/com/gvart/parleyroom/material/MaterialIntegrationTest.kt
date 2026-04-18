@@ -170,6 +170,41 @@ class MaterialIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    fun `PDF material accepts file part before metadata part`() = testApp {
+        val client = createJsonClient(this)
+        val metadata = CreateMaterialRequest(
+            name = "out-of-order.pdf",
+            type = MaterialType.PDF,
+            studentId = STUDENT_ID,
+        )
+        val bytes = "pdf content here".toByteArray()
+        val response = client.submitFormWithBinaryData(
+            url = "/api/v1/materials",
+            formData = formData {
+                append(
+                    "file",
+                    InputProvider(bytes.size.toLong()) { ByteReadPacket(bytes) },
+                    Headers.build {
+                        append(HttpHeaders.ContentDisposition, "filename=\"out-of-order.pdf\"")
+                        append(HttpHeaders.ContentType, "application/pdf")
+                    },
+                )
+                append(
+                    "metadata",
+                    json.encodeToString(CreateMaterialRequest.serializer(), metadata),
+                    Headers.build { append(HttpHeaders.ContentType, "application/json") },
+                )
+            },
+        ) {
+            bearerAuth(getTeacherToken(client))
+        }
+        assertEquals(HttpStatusCode.Created, response.status)
+        val body = response.body<MaterialResponse>()
+        assertEquals("out-of-order.pdf", body.name)
+        assertEquals(MaterialType.PDF, body.type)
+    }
+
+    @Test
     fun `PDF material without file part returns 400`() = testApp {
         val client = createJsonClient(this)
         val metadata = CreateMaterialRequest(
