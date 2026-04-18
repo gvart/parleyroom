@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/gvart/parleyroom/compare/v0.5.0...v0.5.1) (2026-04-18)
+
+
+### Bug Fixes
+
+* **materials,lessons:** accept any multipart order, allow group lessons with 0..N students ([#6](https://github.com/gvart/parleyroom/issues/6)) ([17e0d6e](https://github.com/gvart/parleyroom/commit/17e0d6ee936a0c82924ba2f13d2069ce997fc152))
+
 ## [0.5.0](https://github.com/gvart/parleyroom/compare/v0.4.0...v0.5.0) (2026-04-18)
 
 
