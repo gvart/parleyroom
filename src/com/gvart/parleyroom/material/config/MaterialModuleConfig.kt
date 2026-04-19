@@ -2,8 +2,13 @@ package com.gvart.parleyroom.material.config
 
 import com.gvart.parleyroom.common.storage.StorageConfig
 import com.gvart.parleyroom.common.storage.StorageService
+import com.gvart.parleyroom.material.routing.configureMaterialFolderRouting
 import com.gvart.parleyroom.material.routing.configureMaterialRouting
+import com.gvart.parleyroom.material.service.LessonMaterialService
+import com.gvart.parleyroom.material.service.MaterialAccessResolver
+import com.gvart.parleyroom.material.service.MaterialFolderService
 import com.gvart.parleyroom.material.service.MaterialService
+import com.gvart.parleyroom.material.service.MaterialShareService
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStopped
 import io.ktor.server.plugins.di.dependencies
@@ -22,14 +27,20 @@ fun Application.configureMaterialModule() {
     )
 
     val storageService = StorageService(storageConfig)
+    val accessResolver = MaterialAccessResolver()
 
     dependencies {
         provide { storageConfig }
         provide { storageService }
+        provide { accessResolver }
         provide(MaterialService::class)
+        provide(MaterialFolderService::class)
+        provide(MaterialShareService::class)
+        provide(LessonMaterialService::class)
     }
 
     monitor.subscribe(ApplicationStopped) { storageService.close() }
 
     configureMaterialRouting()
+    configureMaterialFolderRouting()
 }
