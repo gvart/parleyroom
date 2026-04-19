@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/gvart/parleyroom/compare/v0.5.1...v0.6.0) (2026-04-19)
+
+
+### Features
+
+* **lessons:** student club discovery + busy blocks + public calendar ([#8](https://github.com/gvart/parleyroom/issues/8)) ([c5c0591](https://github.com/gvart/parleyroom/commit/c5c0591cc4859da7b568ad361bfe4cf91e30077d))
+
 ## [0.5.1](https://github.com/gvart/parleyroom/compare/v0.5.0...v0.5.1) (2026-04-18)
 
 
