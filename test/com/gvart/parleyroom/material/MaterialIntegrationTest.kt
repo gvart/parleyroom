@@ -1,21 +1,27 @@
 package com.gvart.parleyroom.material
 
 import com.gvart.parleyroom.IntegrationTest
+import com.gvart.parleyroom.common.data.LanguageLevel
+import com.gvart.parleyroom.material.data.MaterialSkill
 import com.gvart.parleyroom.material.data.MaterialType
+import com.gvart.parleyroom.material.transfer.CreateFolderRequest
 import com.gvart.parleyroom.material.transfer.CreateMaterialRequest
+import com.gvart.parleyroom.material.transfer.MaterialFolderResponse
 import com.gvart.parleyroom.material.transfer.MaterialPageResponse
 import com.gvart.parleyroom.material.transfer.MaterialResponse
+import com.gvart.parleyroom.material.transfer.ShareRequest
 import com.gvart.parleyroom.material.transfer.UpdateMaterialRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
+import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
 import io.ktor.client.request.forms.InputProvider
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
-import io.ktor.client.request.get
-import io.ktor.client.request.put
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.Headers
@@ -34,17 +40,23 @@ class MaterialIntegrationTest : IntegrationTest() {
 
     private val json = Json { encodeDefaults = true }
 
+    // ---------- Helpers ----------
+
     private suspend fun createLink(
         client: HttpClient,
         token: String,
         name: String = "Grammar Reference",
-        studentId: String? = STUDENT_ID,
         url: String = "https://example.com/grammar.html",
+        folderId: String? = null,
+        level: LanguageLevel? = null,
+        skill: MaterialSkill? = null,
     ): HttpResponse {
         val metadata = CreateMaterialRequest(
             name = name,
             type = MaterialType.LINK,
-            studentId = studentId,
+            folderId = folderId,
+            level = level,
+            skill = skill,
             url = url,
         )
         return client.submitFormWithBinaryData(
@@ -65,16 +77,16 @@ class MaterialIntegrationTest : IntegrationTest() {
         client: HttpClient,
         token: String,
         name: String = "chapter-1.pdf",
-        studentId: String? = STUDENT_ID,
         type: MaterialType = MaterialType.PDF,
         fileName: String = "chapter-1.pdf",
         fileContentType: String = "application/pdf",
         bytes: ByteArray = "pdf content here".toByteArray(),
+        folderId: String? = null,
     ): HttpResponse {
         val metadata = CreateMaterialRequest(
             name = name,
             type = type,
-            studentId = studentId,
+            folderId = folderId,
         )
         return client.submitFormWithBinaryData(
             url = "/api/v1/materials",
@@ -98,6 +110,19 @@ class MaterialIntegrationTest : IntegrationTest() {
         }
     }
 
+    private suspend fun shareWith(
+        client: HttpClient,
+        token: String,
+        materialId: String,
+        studentId: String,
+    ) {
+        client.post("/api/v1/materials/$materialId/shares") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(ShareRequest(listOf(studentId)))
+        }
+    }
+
     // ---------- Create ----------
 
     @Test
@@ -110,10 +135,10 @@ class MaterialIntegrationTest : IntegrationTest() {
         assertEquals("Grammar Reference", body.name)
         assertEquals(MaterialType.LINK, body.type)
         assertEquals(TEACHER_ID, body.teacherId)
-        assertEquals(STUDENT_ID, body.studentId)
         assertEquals("https://example.com/grammar.html", body.downloadUrl)
         assertNull(body.fileSize)
         assertNull(body.contentType)
+        assertNull(body.folderId)
     }
 
     @Test
@@ -139,19 +164,11 @@ class MaterialIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `teacher cannot create material for unrelated student`() = testApp {
-        val client = createJsonClient(this)
-        val response = createLink(client, getTeacherToken(client), studentId = STUDENT_2_ID)
-        assertEquals(HttpStatusCode.Forbidden, response.status)
-    }
-
-    @Test
     fun `LINK material without url returns 400`() = testApp {
         val client = createJsonClient(this)
         val metadata = CreateMaterialRequest(
             name = "Broken link",
             type = MaterialType.LINK,
-            studentId = STUDENT_ID,
             url = null,
         )
         val response = client.submitFormWithBinaryData(
@@ -175,7 +192,6 @@ class MaterialIntegrationTest : IntegrationTest() {
         val metadata = CreateMaterialRequest(
             name = "out-of-order.pdf",
             type = MaterialType.PDF,
-            studentId = STUDENT_ID,
         )
         val bytes = "pdf content here".toByteArray()
         val response = client.submitFormWithBinaryData(
@@ -210,7 +226,6 @@ class MaterialIntegrationTest : IntegrationTest() {
         val metadata = CreateMaterialRequest(
             name = "Missing file",
             type = MaterialType.PDF,
-            studentId = STUDENT_ID,
         )
         val response = client.submitFormWithBinaryData(
             url = "/api/v1/materials",
@@ -260,31 +275,6 @@ class MaterialIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `student sees materials assigned to them`() = testApp {
-        val client = createJsonClient(this)
-        createLink(client, getTeacherToken(client))
-
-        val page = client.get("/api/v1/materials") {
-            bearerAuth(getStudentToken(client))
-        }.body<MaterialPageResponse>()
-
-        assertEquals(1, page.materials.size)
-        assertEquals(STUDENT_ID, page.materials.single().studentId)
-    }
-
-    @Test
-    fun `student without assignment sees empty list`() = testApp {
-        val client = createJsonClient(this)
-        createLink(client, getTeacherToken(client))
-
-        val page = client.get("/api/v1/materials") {
-            bearerAuth(getStudent2Token(client))
-        }.body<MaterialPageResponse>()
-
-        assertEquals(0, page.total)
-    }
-
-    @Test
     fun `material list pagination returns slice and total`() = testApp {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
@@ -298,6 +288,64 @@ class MaterialIntegrationTest : IntegrationTest() {
         assertEquals(2, page.page)
         assertEquals(2, page.pageSize)
         assertEquals(1, page.materials.size)
+    }
+
+    @Test
+    fun `student sees shared material in list`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val created = createLink(client, teacherToken).body<MaterialResponse>()
+        shareWith(client, teacherToken, created.id, STUDENT_ID)
+
+        val page = client.get("/api/v1/materials") {
+            bearerAuth(getStudentToken(client))
+        }.body<MaterialPageResponse>()
+
+        assertEquals(1, page.total)
+        assertEquals(created.id, page.materials.single().id)
+    }
+
+    @Test
+    fun `student without share sees empty list`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        // Create and share with STUDENT only
+        val created = createLink(client, teacherToken).body<MaterialResponse>()
+        shareWith(client, teacherToken, created.id, STUDENT_ID)
+
+        val page = client.get("/api/v1/materials") {
+            bearerAuth(getStudent2Token(client))
+        }.body<MaterialPageResponse>()
+
+        assertEquals(0, page.total)
+    }
+
+    @Test
+    fun `student can stream file for a shared material`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val bytes = "real pdf data".toByteArray()
+        val created = createFile(client, teacherToken, bytes = bytes).body<MaterialResponse>()
+        shareWith(client, teacherToken, created.id, STUDENT_ID)
+
+        val response = client.get("/api/v1/materials/${created.id}/file") {
+            bearerAuth(getStudentToken(client))
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+    }
+
+    @Test
+    fun `student without share gets 403 on file stream`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val created = createFile(client, teacherToken).body<MaterialResponse>()
+        // Share with STUDENT, NOT with STUDENT_2
+        shareWith(client, teacherToken, created.id, STUDENT_ID)
+
+        val response = client.get("/api/v1/materials/${created.id}/file") {
+            bearerAuth(getStudent2Token(client))
+        }
+        assertEquals(HttpStatusCode.Forbidden, response.status)
     }
 
     // ---------- Update ----------
@@ -318,6 +366,45 @@ class MaterialIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    fun `teacher can set folderId and level on update`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val created = createLink(client, teacherToken).body<MaterialResponse>()
+
+        // Create a folder first
+        val folder = client.post("/api/v1/material-folders") {
+            bearerAuth(teacherToken)
+            contentType(ContentType.Application.Json)
+            setBody(CreateFolderRequest(name = "My Folder"))
+        }.body<MaterialFolderResponse>()
+
+        val response = client.put("/api/v1/materials/${created.id}") {
+            bearerAuth(teacherToken)
+            contentType(ContentType.Application.Json)
+            setBody(UpdateMaterialRequest(folderId = folder.id, level = LanguageLevel.B1))
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.body<MaterialResponse>()
+        assertEquals(folder.id, body.folderId)
+        assertEquals(LanguageLevel.B1, body.level)
+    }
+
+    @Test
+    fun `teacher can set skill on update`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val created = createLink(client, teacherToken).body<MaterialResponse>()
+
+        val response = client.put("/api/v1/materials/${created.id}") {
+            bearerAuth(teacherToken)
+            contentType(ContentType.Application.Json)
+            setBody(UpdateMaterialRequest(skill = MaterialSkill.GRAMMAR))
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals(MaterialSkill.GRAMMAR, response.body<MaterialResponse>().skill)
+    }
+
+    @Test
     fun `student cannot update a material`() = testApp {
         val client = createJsonClient(this)
         val created = createLink(client, getTeacherToken(client)).body<MaterialResponse>()
@@ -328,6 +415,57 @@ class MaterialIntegrationTest : IntegrationTest() {
             setBody(UpdateMaterialRequest(name = "Hijacked"))
         }
         assertEquals(HttpStatusCode.Forbidden, response.status)
+    }
+
+    // ---------- Clear sub-resources ----------
+
+    @Test
+    fun `teacher can clear folder tag via DELETE sub-resource`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+
+        val folder = client.post("/api/v1/material-folders") {
+            bearerAuth(teacherToken)
+            contentType(ContentType.Application.Json)
+            setBody(CreateFolderRequest(name = "Folder to clear"))
+        }.body<MaterialFolderResponse>()
+
+        val created = createLink(client, teacherToken, folderId = folder.id).body<MaterialResponse>()
+        assertNotNull(created.folderId)
+
+        val response = client.delete("/api/v1/materials/${created.id}/folder") {
+            bearerAuth(teacherToken)
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertNull(response.body<MaterialResponse>().folderId)
+    }
+
+    @Test
+    fun `teacher can clear level tag via DELETE sub-resource`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val created = createLink(client, teacherToken, level = LanguageLevel.A2).body<MaterialResponse>()
+        assertEquals(LanguageLevel.A2, created.level)
+
+        val response = client.delete("/api/v1/materials/${created.id}/level") {
+            bearerAuth(teacherToken)
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertNull(response.body<MaterialResponse>().level)
+    }
+
+    @Test
+    fun `teacher can clear skill tag via DELETE sub-resource`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val created = createLink(client, teacherToken, skill = MaterialSkill.LISTENING).body<MaterialResponse>()
+        assertEquals(MaterialSkill.LISTENING, created.skill)
+
+        val response = client.delete("/api/v1/materials/${created.id}/skill") {
+            bearerAuth(teacherToken)
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertNull(response.body<MaterialResponse>().skill)
     }
 
     // ---------- Delete ----------

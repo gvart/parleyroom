@@ -19,6 +19,9 @@ enum class NotificationType {
     LESSON_STARTED,
     LESSON_COMPLETED,
     VOCAB_REVIEW_DUE,
+    MATERIAL_SHARED,
+    FOLDER_SHARED,
+    MATERIAL_ATTACHED_TO_LESSON,
 }
 
 object NotificationTable : UUIDTable("notifications") {

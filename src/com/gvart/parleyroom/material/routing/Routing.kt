@@ -1,17 +1,24 @@
 package com.gvart.parleyroom.material.routing
 
+import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.storage.StorageConfig
 import com.gvart.parleyroom.common.storage.StorageService
 import com.gvart.parleyroom.common.storage.readBoundedBytes
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
+import com.gvart.parleyroom.material.data.MaterialSkill
 import com.gvart.parleyroom.material.data.MaterialType
 import com.gvart.parleyroom.material.service.MaterialService
+import com.gvart.parleyroom.material.service.MaterialShareService
+import com.gvart.parleyroom.material.transfer.BulkMaterialRequest
+import com.gvart.parleyroom.material.transfer.BulkMaterialResponse
 import com.gvart.parleyroom.material.transfer.CreateMaterialInput
 import com.gvart.parleyroom.material.transfer.CreateMaterialRequest
 import com.gvart.parleyroom.material.transfer.MaterialPageResponse
 import com.gvart.parleyroom.material.transfer.MaterialResponse
+import com.gvart.parleyroom.material.transfer.ShareListResponse
+import com.gvart.parleyroom.material.transfer.ShareRequest
 import com.gvart.parleyroom.material.transfer.UpdateMaterialRequest
 import com.gvart.parleyroom.user.security.UserPrincipal
 import io.ktor.http.ContentDisposition
@@ -43,6 +50,7 @@ import java.util.UUID
 
 fun Application.configureMaterialRouting() {
     val materialService: MaterialService by dependencies
+    val shareService: MaterialShareService by dependencies
     val storageConfig: StorageConfig by dependencies
     val storage: StorageService by dependencies
 
@@ -51,27 +59,32 @@ fun Application.configureMaterialRouting() {
             route("/api/v1/materials") {
                 get {
                     val principal = call.principal<UserPrincipal>()!!
-                    val studentId = call.request.queryParameters["studentId"]?.let(UUID::fromString)
+                    val folderId = call.request.queryParameters["folderId"]?.let(UUID::fromString)
+                    val unfiled = call.request.queryParameters["unfiled"]?.toBoolean() ?: false
                     val lessonId = call.request.queryParameters["lessonId"]?.let(UUID::fromString)
                     val type = call.request.queryParameters["type"]?.let { MaterialType.valueOf(it) }
+                    val level = call.request.queryParameters["level"]?.let { LanguageLevel.valueOf(it) }
+                    val skill = call.request.queryParameters["skill"]?.let { MaterialSkill.valueOf(it) }
 
-                    val result = materialService.listMaterials(principal, studentId, lessonId, type, PageRequest.from(call))
+                    val result = materialService.listMaterials(
+                        principal, folderId, unfiled, lessonId, type, level, skill, PageRequest.from(call),
+                    )
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "List materials"
-                    description = "Lists materials with pagination. Students see materials assigned to them or attached to lessons they attend. Teachers see materials they own. Admins see all."
+                    description = "Paginated list. Teachers see their own library. Students see everything visible through direct material shares, folder shares (cascading), or lesson attachments for confirmed lessons. Admin sees all."
                     parameters {
-                        query("studentId") { description = "Filter by student UUID"; required = false }
-                        query("lessonId") { description = "Filter by lesson UUID"; required = false }
-                        query("type") { description = "Filter by type (PDF, AUDIO, VIDEO, LINK)"; required = false }
+                        query("folderId") { description = "Filter by folder UUID (contents of the folder, not descendants)"; required = false }
+                        query("unfiled") { description = "true to list root-level materials with no folder"; required = false }
+                        query("lessonId") { description = "Filter by lesson UUID (attached materials only)"; required = false }
+                        query("type") { description = "PDF, AUDIO, VIDEO, LINK"; required = false }
+                        query("level") { description = "A1..C2"; required = false }
+                        query("skill") { description = "SPEAKING, LISTENING, READING, WRITING, GRAMMAR, VOCAB"; required = false }
                         query("page") { description = "Page number (1-based, default 1)"; required = false }
                         query("pageSize") { description = "Items per page (default 20, max 100)"; required = false }
                     }
                     responses {
-                        HttpStatusCode.OK {
-                            description = "Paginated list of materials"
-                            schema = jsonSchema<MaterialPageResponse>()
-                        }
+                        HttpStatusCode.OK { schema = jsonSchema<MaterialPageResponse>() }
                     }
                 }
 
@@ -139,75 +152,63 @@ fun Application.configureMaterialRouting() {
                     call.respond(HttpStatusCode.Created, result)
                 }.describe {
                     summary = "Create material"
-                    description = "Creates a material via multipart/form-data. Send a JSON `metadata` part and, for PDF/AUDIO/VIDEO, a binary `file` part. For LINK, omit the file and supply `url` in metadata."
+                    description = "Multipart/form-data. Send a JSON `metadata` part (fields: name, type, folderId?, level?, skill?, url?) and, for non-LINK types, a binary `file` part. Materials are private by default — share them explicitly or attach to a lesson to grant student access."
                     requestBody { schema = jsonSchema<CreateMaterialRequest>() }
                     responses {
-                        HttpStatusCode.Created {
-                            description = "Material created"
-                            schema = jsonSchema<MaterialResponse>()
-                        }
-                        HttpStatusCode.Forbidden {
-                            description = "Students cannot create materials"
-                            schema = jsonSchema<ProblemDetail>()
-                        }
+                        HttpStatusCode.Created { schema = jsonSchema<MaterialResponse>() }
+                        HttpStatusCode.Forbidden { schema = jsonSchema<ProblemDetail>() }
                     }
+                }
+
+                post<BulkMaterialRequest>("/bulk") { request ->
+                    val principal = call.principal<UserPrincipal>()!!
+                    val validation = request.validate()
+                    if (validation is ValidationResult.Invalid) {
+                        throw BadRequestException(validation.reasons.joinToString())
+                    }
+                    call.respond(HttpStatusCode.OK, materialService.bulk(request, principal))
+                }.describe {
+                    summary = "Bulk material operation"
+                    description = "Apply MOVE, SHARE or DELETE to many materials in one request."
+                    requestBody { schema = jsonSchema<BulkMaterialRequest>() }
+                    responses { HttpStatusCode.OK { schema = jsonSchema<BulkMaterialResponse>() } }
                 }
 
                 route("/{id}") {
                     get {
                         val principal = call.principal<UserPrincipal>()!!
                         val id = UUID.fromString(call.parameters["id"])
-
-                        val result = materialService.getMaterial(id, principal)
-                        call.respond(HttpStatusCode.OK, result)
+                        call.respond(HttpStatusCode.OK, materialService.getMaterial(id, principal))
                     }.describe {
                         summary = "Get material by ID"
-                        description = "Returns material metadata with a short-lived downloadUrl."
                         parameters { path("id") { description = "UUID of the material" } }
                         responses {
-                            HttpStatusCode.OK {
-                                description = "Material details"
-                                schema = jsonSchema<MaterialResponse>()
-                            }
-                            HttpStatusCode.NotFound {
-                                description = "Material not found"
-                                schema = jsonSchema<ProblemDetail>()
-                            }
+                            HttpStatusCode.OK { schema = jsonSchema<MaterialResponse>() }
+                            HttpStatusCode.NotFound { schema = jsonSchema<ProblemDetail>() }
                         }
                     }
 
                     put<UpdateMaterialRequest> {
                         val principal = call.principal<UserPrincipal>()!!
                         val id = UUID.fromString(call.parameters["id"])
-
-                        val result = materialService.updateMaterial(id, it, principal)
-                        call.respond(HttpStatusCode.OK, result)
+                        call.respond(HttpStatusCode.OK, materialService.updateMaterial(id, it, principal))
                     }.describe {
                         summary = "Update material"
-                        description = "Renames a material. Only the owning teacher or admin."
+                        description = "PATCH-style: only non-null fields are applied. To clear a tag or move to root, use the dedicated DELETE sub-resources."
                         requestBody { schema = jsonSchema<UpdateMaterialRequest>() }
                         parameters { path("id") { description = "UUID of the material" } }
-                        responses {
-                            HttpStatusCode.OK {
-                                description = "Material updated"
-                                schema = jsonSchema<MaterialResponse>()
-                            }
-                        }
+                        responses { HttpStatusCode.OK { schema = jsonSchema<MaterialResponse>() } }
                     }
 
                     delete {
                         val principal = call.principal<UserPrincipal>()!!
                         val id = UUID.fromString(call.parameters["id"])
-
                         materialService.deleteMaterial(id, principal)
                         call.respond(HttpStatusCode.NoContent)
                     }.describe {
                         summary = "Delete material"
-                        description = "Removes the stored object (if any) and the record. Only the owning teacher or admin."
                         parameters { path("id") { description = "UUID of the material" } }
-                        responses {
-                            HttpStatusCode.NoContent { description = "Material deleted" }
-                        }
+                        responses { HttpStatusCode.NoContent { description = "Deleted" } }
                     }
 
                     get("/file") {
@@ -229,18 +230,80 @@ fun Application.configureMaterialRouting() {
                         }
                     }.describe {
                         summary = "Download material file"
-                        description = "Streams the stored file for non-LINK materials. Subject to the same access rules as GET by ID."
                         parameters { path("id") { description = "UUID of the material" } }
                         responses {
                             HttpStatusCode.OK { description = "File bytes" }
-                            HttpStatusCode.BadRequest {
-                                description = "Material is a LINK and has no file"
-                                schema = jsonSchema<ProblemDetail>()
+                            HttpStatusCode.BadRequest { schema = jsonSchema<ProblemDetail>() }
+                            HttpStatusCode.NotFound { schema = jsonSchema<ProblemDetail>() }
+                        }
+                    }
+
+                    delete("/folder") {
+                        val principal = call.principal<UserPrincipal>()!!
+                        val id = UUID.fromString(call.parameters["id"])
+                        call.respond(HttpStatusCode.OK, materialService.clearMaterialFolder(id, principal))
+                    }.describe {
+                        summary = "Remove material from its folder (move to root)"
+                        parameters { path("id") { description = "UUID of the material" } }
+                        responses { HttpStatusCode.OK { schema = jsonSchema<MaterialResponse>() } }
+                    }
+
+                    delete("/level") {
+                        val principal = call.principal<UserPrincipal>()!!
+                        val id = UUID.fromString(call.parameters["id"])
+                        call.respond(HttpStatusCode.OK, materialService.clearMaterialLevel(id, principal))
+                    }.describe {
+                        summary = "Clear CEFR level tag"
+                        parameters { path("id") { description = "UUID of the material" } }
+                        responses { HttpStatusCode.OK { schema = jsonSchema<MaterialResponse>() } }
+                    }
+
+                    delete("/skill") {
+                        val principal = call.principal<UserPrincipal>()!!
+                        val id = UUID.fromString(call.parameters["id"])
+                        call.respond(HttpStatusCode.OK, materialService.clearMaterialSkill(id, principal))
+                    }.describe {
+                        summary = "Clear skill tag"
+                        parameters { path("id") { description = "UUID of the material" } }
+                        responses { HttpStatusCode.OK { schema = jsonSchema<MaterialResponse>() } }
+                    }
+
+                    route("/shares") {
+                        get {
+                            val principal = call.principal<UserPrincipal>()!!
+                            val id = UUID.fromString(call.parameters["id"])
+                            call.respond(HttpStatusCode.OK, shareService.listMaterialShares(id, principal))
+                        }.describe {
+                            summary = "List students this material is shared with"
+                            parameters { path("id") { description = "UUID of the material" } }
+                            responses { HttpStatusCode.OK { schema = jsonSchema<ShareListResponse>() } }
+                        }
+
+                        post<ShareRequest> {
+                            val principal = call.principal<UserPrincipal>()!!
+                            val id = UUID.fromString(call.parameters["id"])
+                            call.respond(HttpStatusCode.OK, shareService.shareMaterial(id, it, principal))
+                        }.describe {
+                            summary = "Share material with students"
+                            description = "Adds one grant per listed studentId. Idempotent. Each newly-granted student receives a MATERIAL_SHARED notification."
+                            requestBody { schema = jsonSchema<ShareRequest>() }
+                            parameters { path("id") { description = "UUID of the material" } }
+                            responses { HttpStatusCode.OK { schema = jsonSchema<ShareListResponse>() } }
+                        }
+
+                        delete("/{studentId}") {
+                            val principal = call.principal<UserPrincipal>()!!
+                            val id = UUID.fromString(call.parameters["id"])
+                            val studentId = UUID.fromString(call.parameters["studentId"])
+                            shareService.revokeMaterial(id, studentId, principal)
+                            call.respond(HttpStatusCode.NoContent)
+                        }.describe {
+                            summary = "Revoke a student's access"
+                            parameters {
+                                path("id") { description = "UUID of the material" }
+                                path("studentId") { description = "UUID of the student" }
                             }
-                            HttpStatusCode.NotFound {
-                                description = "Material not found or has no stored file"
-                                schema = jsonSchema<ProblemDetail>()
-                            }
+                            responses { HttpStatusCode.NoContent { description = "Revoked" } }
                         }
                     }
                 }
@@ -261,3 +324,4 @@ private fun parseMetadata(value: String): CreateMaterialRequest {
     }
     return request
 }
+
