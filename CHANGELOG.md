@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/gvart/parleyroom/compare/v0.7.0...v0.8.0) (2026-04-19)
+
+
+### Features
+
+* **materials:** folders, cascading sharing, N:M lesson attachments ([#12](https://github.com/gvart/parleyroom/issues/12)) ([e34b0f0](https://github.com/gvart/parleyroom/commit/e34b0f0b34a8822bf677cfbd6c9fd8b273b6ca4c))
+
 ## [0.7.0](https://github.com/gvart/parleyroom/compare/v0.6.0...v0.7.0) (2026-04-19)
 
 
