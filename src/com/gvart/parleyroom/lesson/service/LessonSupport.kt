@@ -80,8 +80,35 @@ class LessonSupport {
         scheduledAt: OffsetDateTime,
         durationMinutes: Int,
         excludeLessonId: UUID? = null,
+        bufferMinutes: Int = 0,
     ) {
-        val newEnd = scheduledAt.plusMinutes(durationMinutes.toLong())
+        // Hard overlap first (buffer=0). A real collision takes precedence over a
+        // buffer-zone conflict so the error code reflects the actual cause.
+        if (hasOverlap(teacherId, scheduledAt, durationMinutes, excludeLessonId, bufferMinutes = 0)) {
+            throw ConflictException(
+                "Teacher already has a lesson scheduled during this time",
+                code = "AVAILABILITY_OVERLAP",
+            )
+        }
+        if (bufferMinutes > 0 &&
+            hasOverlap(teacherId, scheduledAt, durationMinutes, excludeLessonId, bufferMinutes)
+        ) {
+            throw ConflictException(
+                "Booking is too close to another lesson (buffer $bufferMinutes min)",
+                code = "AVAILABILITY_BUFFER_CONFLICT",
+            )
+        }
+    }
+
+    private fun hasOverlap(
+        teacherId: UUID,
+        scheduledAt: OffsetDateTime,
+        durationMinutes: Int,
+        excludeLessonId: UUID?,
+        bufferMinutes: Int,
+    ): Boolean {
+        val newStart = scheduledAt.minusMinutes(bufferMinutes.toLong())
+        val newEnd = scheduledAt.plusMinutes(durationMinutes.toLong()).plusMinutes(bufferMinutes.toLong())
 
         val existingLessonEnd = object : Expression<OffsetDateTime>() {
             override fun toQueryBuilder(queryBuilder: QueryBuilder) {
@@ -92,7 +119,7 @@ class LessonSupport {
             }
         }
 
-        val newStartParam = QueryParameter(scheduledAt, LessonTable.scheduledAt.columnType)
+        val newStartParam = QueryParameter(newStart, LessonTable.scheduledAt.columnType)
 
         val query = LessonTable.selectAll().where {
             (LessonTable.teacherId eq teacherId) and
@@ -105,9 +132,7 @@ class LessonSupport {
             query.andWhere { LessonTable.id neq excludeLessonId }
         }
 
-        if (!query.empty()) {
-            throw ConflictException("Teacher already has a lesson scheduled during this time")
-        }
+        return !query.empty()
     }
 
     fun getStudentIds(lessonId: UUID): List<UUID> =

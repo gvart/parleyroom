@@ -97,6 +97,9 @@ class UserService(
             if (nameChanged) it[initials] = "${newFirstName[0]}${newLastName[0]}"
             if (request.locale != null) it[locale] = request.locale
             if (request.level != null) it[level] = request.level
+            if (request.timezone != null) it[timezone] = request.timezone
+            if (request.bookingBufferMinutes != null) it[bookingBufferMinutes] = request.bookingBufferMinutes
+            if (request.bookingMinNoticeHours != null) it[bookingMinNoticeHours] = request.bookingMinNoticeHours
             it[updatedAt] = OffsetDateTime.now()
         }
 
@@ -210,6 +213,9 @@ class UserService(
             level = row[UserTable.level],
             status = row[UserTable.status],
             locale = row[UserTable.locale],
+            timezone = row[UserTable.timezone],
+            bookingBufferMinutes = row[UserTable.bookingBufferMinutes],
+            bookingMinNoticeHours = row[UserTable.bookingMinNoticeHours],
             createdAt = row[UserTable.createdAt],
             telegramId = row[UserTable.telegramId],
             telegramUsername = row[UserTable.telegramUsername],

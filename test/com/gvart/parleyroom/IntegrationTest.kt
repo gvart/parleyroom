@@ -126,7 +126,12 @@ abstract class IntegrationTest {
 
     private fun loadTestData() {
         transaction {
-            exec("TRUNCATE refresh_tokens, learning_goals, homework, vocabulary_words, lesson_events, lesson_students, lessons, password_resets, registrations, teacher_students, materials, users CASCADE")
+            exec(
+                "TRUNCATE refresh_tokens, learning_goals, homework, vocabulary_words, " +
+                        "lesson_events, lesson_students, lessons, password_resets, registrations, " +
+                        "teacher_students, materials, teacher_availability_exception, " +
+                        "teacher_weekly_availability, users CASCADE"
+            )
             exec(testDataSql)
         }
     }

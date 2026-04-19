@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.lesson.service
 
+import com.gvart.parleyroom.availability.service.AvailabilityService
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
@@ -28,6 +29,7 @@ import java.util.UUID
 
 class LessonService(
     private val support: LessonSupport,
+    private val availabilityService: AvailabilityService,
 ) {
 
     fun getLessons(
@@ -204,12 +206,15 @@ class LessonService(
             )
         }
 
+        val availability = availabilityService.getPublicAvailability(teacherId, from, to)
+
         PublicCalendarResponse(
             teacher = PublicTeacher(
                 firstName = teacherRow[UserTable.firstName],
                 lastName = teacherRow[UserTable.lastName],
             ),
             lessons = lessons,
+            availability = availability,
         )
     }
 }

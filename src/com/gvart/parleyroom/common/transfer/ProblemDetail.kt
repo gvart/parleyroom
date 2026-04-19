@@ -10,13 +10,15 @@ data class ProblemDetail(
     val status: Int? = null,
     val detail: String? = null,
     val instance: String? = null,
+    val code: String? = null,
 ) {
     companion object {
-        fun of(httpStatus: HttpStatusCode, detail: String? = null): ProblemDetail {
+        fun of(httpStatus: HttpStatusCode, detail: String? = null, code: String? = null): ProblemDetail {
             return ProblemDetail(
                 title = httpStatus.description,
                 status = httpStatus.value,
                 detail = detail,
+                code = code,
             )
         }
     }
