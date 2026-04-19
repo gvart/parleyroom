@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.lesson.transfer
 
+import com.gvart.parleyroom.availability.transfer.PublicAvailability
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
@@ -11,6 +12,7 @@ import java.time.OffsetDateTime
 data class PublicCalendarResponse(
     val teacher: PublicTeacher,
     val lessons: List<PublicLesson>,
+    val availability: PublicAvailability? = null,
 )
 
 @Serializable

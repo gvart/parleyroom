@@ -19,6 +19,9 @@ data class UserResponse(
     val level: LanguageLevel?,
     val status: UserStatus,
     val locale: String,
+    val timezone: String,
+    val bookingBufferMinutes: Int?,
+    val bookingMinNoticeHours: Int?,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
     val telegramId: Long? = null,

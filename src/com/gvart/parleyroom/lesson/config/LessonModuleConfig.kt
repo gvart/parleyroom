@@ -7,6 +7,9 @@ import com.gvart.parleyroom.lesson.service.LessonParticipantService
 import com.gvart.parleyroom.lesson.service.LessonRescheduleService
 import com.gvart.parleyroom.lesson.service.LessonService
 import com.gvart.parleyroom.lesson.service.LessonSupport
+import com.gvart.parleyroom.availability.service.AvailabilityService
+import com.gvart.parleyroom.availability.service.AvailabilityValidator
+import com.gvart.parleyroom.availability.service.SlotComputationService
 import io.ktor.server.application.Application
 import io.ktor.server.plugins.di.dependencies
 

@@ -5,6 +5,8 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetPasswordRequest
 import com.gvart.parleyroom.admin.transfer.AdminUpdateUserRequest
+import com.gvart.parleyroom.availability.transfer.CreateAvailabilityExceptionRequest
+import com.gvart.parleyroom.availability.transfer.ReplaceWeeklyAvailabilityRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
@@ -168,6 +170,8 @@ fun Application.generalConfig() {
         validate<AdminCreateUserRequest> { it.validate() }
         validate<AdminUpdateUserRequest> { it.validate() }
         validate<AdminSetPasswordRequest> { it.validate() }
+        validate<ReplaceWeeklyAvailabilityRequest> { it.validate() }
+        validate<CreateAvailabilityExceptionRequest> { it.validate() }
     }
 
 
@@ -198,11 +202,11 @@ fun Application.generalConfig() {
         }
 
         exception<BadRequestException> { call, cause ->
-            call.respond(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message))
+            call.respond(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, cause.code))
         }
 
         exception<ConflictException> { call, cause ->
-            call.respond(HttpStatusCode.Conflict, ProblemDetail.of(HttpStatusCode.Conflict, cause.message))
+            call.respond(HttpStatusCode.Conflict, ProblemDetail.of(HttpStatusCode.Conflict, cause.message, cause.code))
         }
 
         exception<IllegalArgumentException> { call, cause ->

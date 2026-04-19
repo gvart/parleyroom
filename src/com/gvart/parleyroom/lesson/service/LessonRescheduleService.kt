@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.lesson.service
 
+import com.gvart.parleyroom.availability.service.AvailabilityValidator
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
@@ -11,6 +12,7 @@ import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.notification.data.NotificationType
 import com.gvart.parleyroom.notification.service.NotificationService
+import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.security.UserPrincipal
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
@@ -24,6 +26,7 @@ import java.util.UUID
 class LessonRescheduleService(
     private val notificationService: NotificationService,
     private val support: LessonSupport,
+    private val availabilityValidator: AvailabilityValidator,
 ) {
 
     fun rescheduleLesson(lessonId: UUID, request: RescheduleLessonRequest, principal: UserPrincipal) = transaction {
@@ -33,6 +36,18 @@ class LessonRescheduleService(
             throw BadRequestException("Only confirmed lessons can be rescheduled")
 
         support.requireLessonParticipant(lessonId, lesson, principal)
+
+        // Students moving into a teacher's blocked window get an early, targeted
+        // error. Teachers and admins rescheduling their own lessons keep the
+        // existing lenient flow (buffer still enforced when accepted).
+        if (principal.role == UserRole.STUDENT) {
+            availabilityValidator.validate(
+                lesson[LessonTable.teacherId].value,
+                request.newScheduledAt,
+                lesson[LessonTable.durationMinutes],
+                OffsetDateTime.now(),
+            )
+        }
 
         val hasPending = LessonEventTable.selectAll()
             .where {
@@ -75,11 +90,15 @@ class LessonRescheduleService(
 
         val newScheduledAt = pendingEvent[LessonEventTable.newScheduledAt]!!
 
+        val bufferMinutes = if (principal.role == UserRole.ADMIN) 0
+        else availabilityValidator.loadSettings(lesson[LessonTable.teacherId].value).bufferMinutes
+
         support.checkTeacherOverlap(
             lesson[LessonTable.teacherId].value,
             newScheduledAt,
             lesson[LessonTable.durationMinutes],
             excludeLessonId = lessonId,
+            bufferMinutes = bufferMinutes,
         )
 
         LessonEventTable.update({ LessonEventTable.id eq pendingEvent[LessonEventTable.id] }) {

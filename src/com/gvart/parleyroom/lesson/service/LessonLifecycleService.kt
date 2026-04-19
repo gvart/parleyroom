@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.lesson.service
 
+import com.gvart.parleyroom.availability.service.AvailabilityValidator
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
@@ -41,6 +42,7 @@ class LessonLifecycleService(
     private val notificationService: NotificationService,
     private val videoTokenService: VideoTokenService,
     private val support: LessonSupport,
+    private val availabilityValidator: AvailabilityValidator,
 ) {
 
     fun createLesson(request: CreateLessonRequest, principal: UserPrincipal): LessonResponse = transaction {
@@ -90,7 +92,17 @@ class LessonLifecycleService(
 
         val scheduledAt = request.scheduledAt
 
-        support.checkTeacherOverlap(teacherId, scheduledAt, request.durationMinutes)
+        // Teachers booking their own calendar + admins bypass the availability
+        // guardrails — both should be able to self-override their schedule.
+        // Students go through the full validation (weekly + exceptions + min notice).
+        if (principal.role == UserRole.STUDENT) {
+            availabilityValidator.validate(teacherId, scheduledAt, request.durationMinutes, OffsetDateTime.now())
+        }
+
+        val bufferMinutes = if (principal.role == UserRole.ADMIN) 0
+        else availabilityValidator.loadSettings(teacherId).bufferMinutes
+
+        support.checkTeacherOverlap(teacherId, scheduledAt, request.durationMinutes, bufferMinutes = bufferMinutes)
 
         val lessonId = LessonTable.insertAndGetId {
             it[LessonTable.title] = request.title
