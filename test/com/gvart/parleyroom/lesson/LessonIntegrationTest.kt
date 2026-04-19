@@ -8,6 +8,8 @@ import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.LessonDocumentResponse
 import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
+import com.gvart.parleyroom.lesson.transfer.PublicCalendarResponse
+import java.util.UUID
 import com.gvart.parleyroom.lesson.transfer.ReflectLessonRequest
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.lesson.transfer.StartLessonResponse
@@ -1671,5 +1673,129 @@ class LessonIntegrationTest : IntegrationTest() {
         assertEquals(2, page.page)
         assertEquals(2, page.pageSize)
         assertEquals(1, page.lessons.size)
+    }
+
+    // -- Student calendar discovery & scrubbing --
+
+    @Test
+    fun `student sees teacher's open club lesson in list`() = testApp {
+        val client = createJsonClient(this)
+
+        val teacherToken = getTeacherToken(client)
+        createLesson(
+            client,
+            teacherToken,
+            type = LessonType.SPEAKING_CLUB,
+            studentIds = emptyList(),
+        ).also { assertEquals(HttpStatusCode.Created, it.status) }
+
+        val page = client.get("/api/v1/lessons") {
+            bearerAuth(getStudentToken(client))
+        }.body<LessonPageResponse>()
+
+        val club = page.lessons.single { it.type == LessonType.SPEAKING_CLUB }
+        assertEquals("German Lesson", club.title)
+        assertEquals("Conversation practice", club.topic)
+        assertTrue(club.students.isEmpty())
+    }
+
+    @Test
+    fun `student sees another students 1-on-1 as a scrubbed busy block`() = testApp {
+        val client = createJsonClient(this)
+
+        // Admin creates a 1:1 between teacher and student2, bypassing the
+        // teacher-student relationship check.
+        createLesson(
+            client,
+            getAdminToken(client),
+            type = LessonType.ONE_ON_ONE,
+            studentIds = listOf(STUDENT_2_ID),
+        ).also { assertEquals(HttpStatusCode.Created, it.status) }
+
+        val page = client.get("/api/v1/lessons") {
+            bearerAuth(getStudentToken(client))
+        }.body<LessonPageResponse>()
+
+        val busy = page.lessons.single { it.type == LessonType.ONE_ON_ONE }
+        // Lesson still surfaces so the student knows the teacher is busy,
+        // but every identifying field is scrubbed.
+        assertEquals("", busy.title)
+        assertEquals("", busy.topic)
+        assertTrue(busy.students.isEmpty())
+        assertNull(busy.level)
+        assertNull(busy.teacherNotes)
+        assertNull(busy.studentNotes)
+    }
+
+    @Test
+    fun `student's own 1-on-1 lesson keeps full data`() = testApp {
+        val client = createJsonClient(this)
+
+        createLesson(client, getTeacherToken(client))
+            .also { assertEquals(HttpStatusCode.Created, it.status) }
+
+        val page = client.get("/api/v1/lessons") {
+            bearerAuth(getStudentToken(client))
+        }.body<LessonPageResponse>()
+
+        val mine = page.lessons.single { it.type == LessonType.ONE_ON_ONE }
+        assertEquals("German Lesson", mine.title)
+        assertEquals("Conversation practice", mine.topic)
+        assertEquals(1, mine.students.size)
+        assertEquals(STUDENT_ID, mine.students[0].id)
+    }
+
+    // -- Public calendar --
+
+    @Test
+    fun `public teacher calendar returns scrubbed lessons without auth`() = testApp {
+        val client = createJsonClient(this)
+
+        createLesson(
+            client,
+            getTeacherToken(client),
+            type = LessonType.SPEAKING_CLUB,
+            studentIds = emptyList(),
+            scheduledAt = "2027-04-10T10:00:00+02:00",
+        ).also { assertEquals(HttpStatusCode.Created, it.status) }
+
+        createLesson(
+            client,
+            getAdminToken(client),
+            type = LessonType.ONE_ON_ONE,
+            studentIds = listOf(STUDENT_ID),
+            scheduledAt = "2027-04-10T14:00:00+02:00",
+        ).also { assertEquals(HttpStatusCode.Created, it.status) }
+
+        val response = client.get("/api/v1/public/teachers/$TEACHER_ID/calendar")
+        assertEquals(HttpStatusCode.OK, response.status)
+
+        val body = response.body<PublicCalendarResponse>()
+        assertEquals("Test", body.teacher.firstName)
+        assertEquals("Teacher", body.teacher.lastName)
+        assertEquals(2, body.lessons.size)
+
+        val club = body.lessons.single { it.type == LessonType.SPEAKING_CLUB }
+        assertEquals("German Lesson", club.title)
+        assertEquals("Conversation practice", club.topic)
+
+        val oneOnOne = body.lessons.single { it.type == LessonType.ONE_ON_ONE }
+        assertNull(oneOnOne.title)
+        assertNull(oneOnOne.topic)
+        assertEquals(1, oneOnOne.participantCount)
+    }
+
+    @Test
+    fun `public calendar returns 404 for unknown teacher`() = testApp {
+        val client = createJsonClient(this)
+        val response = client.get("/api/v1/public/teachers/${UUID.randomUUID()}/calendar")
+        assertEquals(HttpStatusCode.NotFound, response.status)
+    }
+
+    @Test
+    fun `public calendar returns 404 when id belongs to a non-teacher`() = testApp {
+        val client = createJsonClient(this)
+        val response = client.get("/api/v1/public/teachers/$STUDENT_ID/calendar")
+        assertEquals(HttpStatusCode.NotFound, response.status)
     }
 }

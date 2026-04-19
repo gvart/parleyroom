@@ -13,6 +13,7 @@ import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.LessonDocumentResponse
 import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
+import com.gvart.parleyroom.lesson.transfer.PublicCalendarResponse
 import com.gvart.parleyroom.lesson.transfer.ReflectLessonRequest
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.lesson.transfer.StartLessonResponse
@@ -43,6 +44,42 @@ fun Application.configureLessonRouting() {
     val documentService: LessonDocumentService by dependencies
 
     routing {
+        // Public (no auth) teacher calendar — used by the portal's shareable
+        // /teachers/{id}/schedule page. 1:1 slots are scrubbed to busy blocks.
+        route("/api/v1/public/teachers/{teacherId}/calendar") {
+            get {
+                val teacherId = UUID.fromString(call.parameters["teacherId"])
+                val from = call.request.queryParameters["from"]?.let(OffsetDateTime::parse)
+                val to = call.request.queryParameters["to"]?.let(OffsetDateTime::parse)
+                val result = lessonService.getPublicCalendar(teacherId, from, to)
+                call.respond(HttpStatusCode.OK, result)
+            }.describe {
+                summary = "Public teacher calendar"
+                description = "Returns a teacher's non-cancelled lessons with private fields scrubbed. No authentication required. 1:1 lessons are returned as opaque busy blocks (title/topic null); group clubs keep their title, topic, level, and spot count so anyone can browse what's on the schedule."
+                parameters {
+                    path("teacherId") { description = "UUID of the teacher" }
+                    query("from") {
+                        description = "Start of date range (ISO 8601)"
+                        required = false
+                    }
+                    query("to") {
+                        description = "End of date range (ISO 8601)"
+                        required = false
+                    }
+                }
+                responses {
+                    HttpStatusCode.OK {
+                        description = "Scrubbed calendar payload"
+                        schema = jsonSchema<PublicCalendarResponse>()
+                    }
+                    HttpStatusCode.NotFound {
+                        description = "No teacher with that id"
+                        schema = jsonSchema<ProblemDetail>()
+                    }
+                }
+            }
+        }
+
         authenticate {
             route("/api/v1/lessons") {
                 get {
