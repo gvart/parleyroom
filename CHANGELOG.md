@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/gvart/parleyroom/compare/v0.6.0...v0.7.0) (2026-04-19)
+
+
+### Features
+
+* **availability:** teacher weekly schedule + slot-based booking ([#10](https://github.com/gvart/parleyroom/issues/10)) ([9cafd9b](https://github.com/gvart/parleyroom/commit/9cafd9b92100bde7d68b8cbbb7553068ca14eee8))
+
 ## [0.6.0](https://github.com/gvart/parleyroom/compare/v0.5.1...v0.6.0) (2026-04-19)
 
 
