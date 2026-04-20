@@ -15,6 +15,17 @@ object AuthorizationHelper {
             throw ForbiddenException("Admin privileges required")
     }
 
+    /**
+     * ADMIN is always allowed. Otherwise the principal's id must equal [ownerId].
+     * Role is not checked explicitly — a STUDENT's id can never equal a teacher's
+     * id in this schema, and callers that need to reject STUDENT outright do so
+     * at a higher level (e.g. "only teachers and admins can create homework").
+     */
+    fun requireOwnerOrAdmin(ownerId: UUID, principal: UserPrincipal, message: String) {
+        if (principal.role == UserRole.ADMIN) return
+        if (principal.id != ownerId) throw ForbiddenException(message)
+    }
+
     fun requireAccessToStudent(studentId: UUID, principal: UserPrincipal) {
         if (principal.role == UserRole.ADMIN) return
         if (principal.role == UserRole.STUDENT) {

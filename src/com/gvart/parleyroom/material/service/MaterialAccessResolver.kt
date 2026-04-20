@@ -154,14 +154,9 @@ class MaterialAccessResolver {
     }
 
     /** Caller must already be inside an Exposed transaction. */
-    fun requireFolderOwnership(folderRow: ResultRow, principal: UserPrincipal) {
-        if (principal.role == UserRole.ADMIN) return
-        if (principal.role != UserRole.TEACHER ||
-            folderRow[MaterialFolderTable.teacherId].value != principal.id
-        ) {
-            throw com.gvart.parleyroom.common.transfer.exception.ForbiddenException(
-                "Only the owning teacher can modify this folder"
-            )
-        }
-    }
+    fun requireFolderOwnership(folderRow: ResultRow, principal: UserPrincipal) =
+        com.gvart.parleyroom.common.service.AuthorizationHelper.requireOwnerOrAdmin(
+            folderRow[MaterialFolderTable.teacherId].value, principal,
+            "Only the owning teacher can modify this folder",
+        )
 }

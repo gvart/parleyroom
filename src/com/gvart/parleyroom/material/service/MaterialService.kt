@@ -377,11 +377,11 @@ class MaterialService(
         throw ForbiddenException("No access to this material")
     }
 
-    private fun requireOwnerOrAdmin(row: ResultRow, principal: UserPrincipal) {
-        if (principal.role == UserRole.ADMIN) return
-        if (row[MaterialTable.teacherId].value != principal.id)
-            throw ForbiddenException("Only the owning teacher can perform this action")
-    }
+    private fun requireOwnerOrAdmin(row: ResultRow, principal: UserPrincipal) =
+        AuthorizationHelper.requireOwnerOrAdmin(
+            row[MaterialTable.teacherId].value, principal,
+            "Only the owning teacher can perform this action",
+        )
 
     private fun toResponse(row: ResultRow): MaterialResponse {
         val type = row[MaterialTable.type]

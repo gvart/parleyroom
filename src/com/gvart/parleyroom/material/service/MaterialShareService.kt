@@ -177,9 +177,9 @@ class MaterialShareService(
         ShareListResponse(grants)
     }
 
-    private fun requireOwnerOrAdmin(ownerId: UUID, principal: UserPrincipal) {
-        if (principal.role == UserRole.ADMIN) return
-        if (principal.role != UserRole.TEACHER || ownerId != principal.id)
-            throw ForbiddenException("Only the owning teacher or an admin can manage shares")
-    }
+    private fun requireOwnerOrAdmin(ownerId: UUID, principal: UserPrincipal) =
+        AuthorizationHelper.requireOwnerOrAdmin(
+            ownerId, principal,
+            "Only the owning teacher or an admin can manage shares",
+        )
 }
