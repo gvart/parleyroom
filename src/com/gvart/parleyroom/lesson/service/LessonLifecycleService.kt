@@ -201,7 +201,18 @@ class LessonLifecycleService(
             .let(support::toResponse)
     }
 
-    fun cancelLesson(lessonId: UUID, request: CancelLessonRequest, principal: UserPrincipal): LessonResponse = transaction {
+    fun cancelLesson(lessonId: UUID, request: CancelLessonRequest, principal: UserPrincipal): LessonResponse {
+        val wasInProgress = transaction {
+            support.findLesson(lessonId)[LessonTable.status] == LessonStatus.IN_PROGRESS
+        }
+        val response = doCancelLesson(lessonId, request, principal)
+        if (wasInProgress) {
+            runCatching { videoTokenService.deleteRoom("lesson-$lessonId") }
+        }
+        return response
+    }
+
+    private fun doCancelLesson(lessonId: UUID, request: CancelLessonRequest, principal: UserPrincipal): LessonResponse = transaction {
         val lesson = support.findLesson(lessonId)
         val currentStatus = lesson[LessonTable.status]
 
@@ -309,7 +320,16 @@ class LessonLifecycleService(
         StartLessonResponse(document = document, videoRoom = videoRoom)
     }
 
-    fun completeLesson(lessonId: UUID, request: CompleteLessonRequest, principal: UserPrincipal): LessonDocumentResponse = transaction {
+    fun completeLesson(lessonId: UUID, request: CompleteLessonRequest, principal: UserPrincipal): LessonDocumentResponse {
+        val response = doCompleteLesson(lessonId, request, principal)
+        // Kick everyone out of the LiveKit room so students don't linger in
+        // a dead call after the teacher wraps. Fire-and-forget — failure here
+        // doesn't undo the completion.
+        runCatching { videoTokenService.deleteRoom("lesson-$lessonId") }
+        return response
+    }
+
+    private fun doCompleteLesson(lessonId: UUID, request: CompleteLessonRequest, principal: UserPrincipal): LessonDocumentResponse = transaction {
         val lesson = support.findLesson(lessonId)
 
         if (principal.role == UserRole.STUDENT)
