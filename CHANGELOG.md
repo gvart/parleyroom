@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/gvart/parleyroom/compare/v0.8.0...v0.9.0) (2026-04-20)
+
+
+### Features
+
+* **lesson:** shared document, pre-start sync, 10-min student early-join ([#14](https://github.com/gvart/parleyroom/issues/14)) ([fb148c5](https://github.com/gvart/parleyroom/commit/fb148c5589145e1b0b09edf44817f49f0b6df085))
+
 ## [0.8.0](https://github.com/gvart/parleyroom/compare/v0.7.0...v0.8.0) (2026-04-19)
 
 
