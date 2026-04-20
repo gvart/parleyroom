@@ -14,6 +14,7 @@ import com.gvart.parleyroom.lesson.transfer.ReflectLessonRequest
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.lesson.transfer.StartLessonResponse
 import com.gvart.parleyroom.lesson.transfer.SyncLessonDocumentRequest
+import com.gvart.parleyroom.video.transfer.VideoAccess
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import com.gvart.parleyroom.lesson.transfer.CancelLessonRequest
@@ -989,7 +990,7 @@ class LessonIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `cannot sync before lesson is started`() = testApp {
+    fun `teacher can sync notes before lesson is started`() = testApp {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
 
@@ -998,7 +999,70 @@ class LessonIntegrationTest : IntegrationTest() {
         val response = client.put("/api/v1/lessons/${lesson.id}/sync") {
             contentType(ContentType.Application.Json)
             bearerAuth(teacherToken)
-            setBody(SyncLessonDocumentRequest(notes = "Notes"))
+            setBody(SyncLessonDocumentRequest(notes = "Prep notes"))
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val doc = response.body<LessonDocumentResponse>()
+        assertEquals("Prep notes", doc.teacherNotes)
+    }
+
+    @Test
+    fun `teacher can write sharedDocument on a confirmed lesson`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+
+        val response = client.put("/api/v1/lessons/${lesson.id}/sync") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(teacherToken)
+            setBody(SyncLessonDocumentRequest(field = "sharedDocument", value = "<p>Lesson plan</p>"))
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val doc = response.body<LessonDocumentResponse>()
+        assertEquals("<p>Lesson plan</p>", doc.sharedDocument)
+
+        val refetched = client.get("/api/v1/lessons/${lesson.id}") {
+            bearerAuth(teacherToken)
+        }.body<LessonResponse>()
+        assertEquals("<p>Lesson plan</p>", refetched.sharedDocument)
+    }
+
+    @Test
+    fun `student cannot write sharedDocument`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+
+        val response = client.put("/api/v1/lessons/${lesson.id}/sync") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(studentToken)
+            setBody(SyncLessonDocumentRequest(field = "sharedDocument", value = "hijack"))
+        }
+
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+    }
+
+    @Test
+    fun `cannot sync a cancelled lesson`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        client.post("/api/v1/lessons/${lesson.id}/cancel") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(teacherToken)
+            setBody(CancelLessonRequest(reason = "conflict"))
+        }
+
+        val response = client.put("/api/v1/lessons/${lesson.id}/sync") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(teacherToken)
+            setBody(SyncLessonDocumentRequest(notes = "late note"))
         }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -1065,6 +1129,88 @@ class LessonIntegrationTest : IntegrationTest() {
         }
 
         assertEquals(HttpStatusCode.Forbidden, response.status)
+    }
+
+    @Test
+    fun `teacher can complete lesson with empty feedback`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/complete") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(teacherToken)
+            setBody(CompleteLessonRequest())
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val doc = response.body<LessonDocumentResponse>()
+        assertNull(doc.teacherWentWell)
+        assertNull(doc.teacherWorkingOn)
+    }
+
+    // -- Video token (early-join window) --
+
+    @Test
+    fun `teacher can get video token on a confirmed lesson`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/video-token") {
+            bearerAuth(teacherToken)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val access = response.body<VideoAccess>()
+        assertEquals("lesson-${lesson.id}", access.roomName)
+        assertTrue(access.accessToken.isNotBlank())
+    }
+
+    @Test
+    fun `student cannot get video token outside early-join window`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        // Scheduled far in the future — well outside the 10 min window
+        val lesson = createLesson(
+            client,
+            teacherToken,
+            scheduledAt = "2099-04-10T10:00:00+02:00",
+        ).body<LessonResponse>()
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/video-token") {
+            bearerAuth(studentToken)
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `student can get video token within early-join window`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        // Scheduled ~5 minutes from now — inside the 10 min window
+        val scheduled = OffsetDateTime.now().plusMinutes(5)
+        val lesson = createLesson(
+            client,
+            teacherToken,
+            scheduledAt = scheduled.toString(),
+        ).body<LessonResponse>()
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/video-token") {
+            bearerAuth(studentToken)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val access = response.body<VideoAccess>()
+        assertTrue(access.accessToken.isNotBlank())
     }
 
     @Test
