@@ -35,15 +35,22 @@ import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
+import java.time.Duration
 import java.time.OffsetDateTime
 import java.util.UUID
 
 class LessonLifecycleService(
     private val notificationService: NotificationService,
     private val videoTokenService: VideoTokenService,
+    private val documentService: LessonDocumentService,
     private val support: LessonSupport,
     private val availabilityValidator: AvailabilityValidator,
 ) {
+
+    companion object {
+        /** Students may dial in this many minutes before scheduledAt; teachers have no such gate. */
+        const val EARLY_JOIN_MINUTES: Long = 10
+    }
 
     fun createLesson(request: CreateLessonRequest, principal: UserPrincipal): LessonResponse = transaction {
         val teacherId = UUID.fromString(request.teacherId)
@@ -274,12 +281,7 @@ class LessonLifecycleService(
             it[attended] = true
         }
 
-        val docId = LessonDocumentTable.insertAndGetId {
-            it[LessonDocumentTable.lessonId] = lessonId
-            it[updatedAt] = now
-            it[teacherNotes] = ""
-            it[studentNotes] = ""
-        }
+        val docId = documentService.ensureDocument(lessonId)
 
         LessonEventTable.insert {
             it[LessonEventTable.lessonId] = lessonId
@@ -362,8 +364,21 @@ class LessonLifecycleService(
         val lesson = support.findLesson(lessonId)
         support.requireLessonParticipant(lessonId, lesson, principal)
 
-        if (lesson[LessonTable.status] != LessonStatus.IN_PROGRESS)
-            throw BadRequestException("Video room is only available while the lesson is in progress")
+        val status = lesson[LessonTable.status]
+        val allowed = when {
+            status == LessonStatus.IN_PROGRESS -> true
+            status == LessonStatus.CONFIRMED && principal.role != UserRole.STUDENT -> true
+            status == LessonStatus.CONFIRMED && principal.role == UserRole.STUDENT -> {
+                val minutesToStart = Duration.between(
+                    OffsetDateTime.now(),
+                    lesson[LessonTable.scheduledAt],
+                ).toMinutes()
+                minutesToStart <= EARLY_JOIN_MINUTES
+            }
+            else -> false
+        }
+        if (!allowed)
+            throw BadRequestException("Video room is not yet available for this lesson")
 
         mintVideoAccess(lessonId, principal)
     }

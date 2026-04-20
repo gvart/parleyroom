@@ -6,6 +6,7 @@ import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
 object LessonDocumentTable : UUIDTable("lesson_documents") {
     val lessonId = reference("lesson_id", LessonTable).uniqueIndex()
     val aiSummary = text("ai_summary").nullable()
+    val sharedDocument = text("shared_document").nullable()
     val teacherNotes = text("teacher_notes").nullable()
     val studentNotes = text("student_notes").nullable()
     val teacherWentWell = text("teacher_went_well").nullable()

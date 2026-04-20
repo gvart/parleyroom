@@ -338,7 +338,7 @@ fun Application.configureLessonRouting() {
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Get video room access token"
-                        description = "Returns a LiveKit access token for the authenticated participant to join the lesson's video room. Lesson must be IN_PROGRESS."
+                        description = "Returns a LiveKit access token for the authenticated participant to join the lesson's video room. Teachers/admins can request a token while the lesson is CONFIRMED or IN_PROGRESS; students can request one while IN_PROGRESS or within 10 minutes of scheduledAt."
                         parameters {
                             path("id") {
                                 description = "UUID of the lesson"
@@ -350,7 +350,7 @@ fun Application.configureLessonRouting() {
                                 schema = jsonSchema<VideoAccess>()
                             }
                             HttpStatusCode.BadRequest {
-                                description = "Lesson is not in progress"
+                                description = "Video room not yet available (outside early-join window or lesson not confirmed)"
                                 schema = jsonSchema<ProblemDetail>()
                             }
                             HttpStatusCode.Forbidden {
@@ -372,7 +372,7 @@ fun Application.configureLessonRouting() {
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Sync lesson document"
-                        description = "Syncs lesson notes. Teachers update teacherNotes, students update studentNotes."
+                        description = "Patches one field of the lesson document. Body takes {field, value}; legacy {notes} is treated as the role-appropriate private notes. Allowed in CONFIRMED or IN_PROGRESS."
                         requestBody {
                             schema = jsonSchema<SyncLessonDocumentRequest>()
                         }
@@ -387,11 +387,11 @@ fun Application.configureLessonRouting() {
                                 schema = jsonSchema<LessonDocumentResponse>()
                             }
                             HttpStatusCode.BadRequest {
-                                description = "Lesson has not been started yet"
+                                description = "Unknown field, invalid status, or malformed request"
                                 schema = jsonSchema<ProblemDetail>()
                             }
                             HttpStatusCode.Forbidden {
-                                description = "Not a participant of this lesson"
+                                description = "Not a participant of this lesson, or role not allowed to write this field"
                                 schema = jsonSchema<ProblemDetail>()
                             }
                             HttpStatusCode.NotFound {

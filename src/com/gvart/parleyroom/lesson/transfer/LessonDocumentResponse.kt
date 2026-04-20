@@ -8,6 +8,7 @@ import java.time.OffsetDateTime
 data class LessonDocumentResponse(
     val id: String,
     val lessonId: String,
+    val sharedDocument: String? = null,
     val teacherNotes: String? = null,
     val studentNotes: String? = null,
     val teacherWentWell: String? = null,

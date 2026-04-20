@@ -203,6 +203,7 @@ class LessonSupport {
                 students = studentsByLesson[lessonId] ?: emptyList(),
                 startedAt = row[LessonTable.startedAt],
                 pendingReschedule = pendingByLesson[lessonId],
+                sharedDocument = doc?.get(LessonDocumentTable.sharedDocument),
                 teacherNotes = doc?.get(LessonDocumentTable.teacherNotes),
                 studentNotes = doc?.get(LessonDocumentTable.studentNotes),
                 teacherWentWell = doc?.get(LessonDocumentTable.teacherWentWell),
@@ -220,6 +221,7 @@ class LessonSupport {
     fun toDocumentResponse(row: ResultRow) = LessonDocumentResponse(
         id = row[LessonDocumentTable.id].value.toString(),
         lessonId = row[LessonDocumentTable.lessonId].value.toString(),
+        sharedDocument = row[LessonDocumentTable.sharedDocument],
         teacherNotes = row[LessonDocumentTable.teacherNotes],
         studentNotes = row[LessonDocumentTable.studentNotes],
         teacherWentWell = row[LessonDocumentTable.teacherWentWell],

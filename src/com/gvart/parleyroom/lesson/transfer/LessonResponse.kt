@@ -24,6 +24,7 @@ data class LessonResponse(
     @Serializable(with = OffsetDateTimeSerializer::class)
     val startedAt: OffsetDateTime? = null,
     val pendingReschedule: PendingRescheduleResponse? = null,
+    val sharedDocument: String? = null,
     val teacherNotes: String? = null,
     val studentNotes: String? = null,
     val teacherWentWell: String? = null,
