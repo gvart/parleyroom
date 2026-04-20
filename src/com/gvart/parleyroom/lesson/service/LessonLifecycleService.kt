@@ -202,17 +202,20 @@ class LessonLifecycleService(
     }
 
     fun cancelLesson(lessonId: UUID, request: CancelLessonRequest, principal: UserPrincipal): LessonResponse {
-        val wasInProgress = transaction {
-            support.findLesson(lessonId)[LessonTable.status] == LessonStatus.IN_PROGRESS
-        }
-        val response = doCancelLesson(lessonId, request, principal)
-        if (wasInProgress) {
-            runCatching { videoTokenService.deleteRoom("lesson-$lessonId") }
+        val (response, priorStatus) = doCancelLesson(lessonId, request, principal)
+        // Only tear the LiveKit room down if the lesson was actually live —
+        // cancelling a REQUEST/CONFIRMED lesson never opened one.
+        if (priorStatus == LessonStatus.IN_PROGRESS) {
+            videoTokenService.deleteRoom("lesson-$lessonId")
         }
         return response
     }
 
-    private fun doCancelLesson(lessonId: UUID, request: CancelLessonRequest, principal: UserPrincipal): LessonResponse = transaction {
+    private fun doCancelLesson(
+        lessonId: UUID,
+        request: CancelLessonRequest,
+        principal: UserPrincipal,
+    ): Pair<LessonResponse, LessonStatus> = transaction {
         val lesson = support.findLesson(lessonId)
         val currentStatus = lesson[LessonTable.status]
 
@@ -255,10 +258,11 @@ class LessonLifecycleService(
             )
         }
 
-        LessonTable.selectAll()
+        val response = LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
             .single()
             .let(support::toResponse)
+        response to currentStatus
     }
 
     fun startLesson(lessonId: UUID, principal: UserPrincipal): StartLessonResponse = transaction {
@@ -323,9 +327,10 @@ class LessonLifecycleService(
     fun completeLesson(lessonId: UUID, request: CompleteLessonRequest, principal: UserPrincipal): LessonDocumentResponse {
         val response = doCompleteLesson(lessonId, request, principal)
         // Kick everyone out of the LiveKit room so students don't linger in
-        // a dead call after the teacher wraps. Fire-and-forget — failure here
-        // doesn't undo the completion.
-        runCatching { videoTokenService.deleteRoom("lesson-$lessonId") }
+        // a dead call after the teacher wraps. `deleteRoom` is already async
+        // and internally catches failures — failure here doesn't undo the
+        // completion.
+        videoTokenService.deleteRoom("lesson-$lessonId")
         return response
     }
 

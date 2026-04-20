@@ -11,12 +11,17 @@ import io.livekit.server.CanSubscribe
 import io.livekit.server.RoomJoin
 import io.livekit.server.RoomName
 import io.livekit.server.RoomServiceClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
+import java.util.Date
 import java.util.UUID
 
-class VideoTokenService(
+open class VideoTokenService(
     private val videoConfig: VideoConfig,
 ) {
     private val log = LoggerFactory.getLogger(VideoTokenService::class.java)
@@ -28,6 +33,10 @@ class VideoTokenService(
         apiKey = videoConfig.apiKey,
         secret = videoConfig.apiSecret,
     )
+
+    /** Runs the LiveKit admin REST calls off the request thread so a slow or
+     *  unreachable LiveKit never holds up `/complete` or `/cancel`. */
+    private val adminScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun mintToken(
         roomName: String,
@@ -45,6 +54,9 @@ class VideoTokenService(
             this.identity = identity.toString()
             name = displayName
             ttl = videoConfig.tokenTtl.inWholeMilliseconds
+            // 30s of clock-skew slack — keeps pace with the hand-rolled token
+            // we replaced, which set `nbf = now - 30s`.
+            notBefore = Date(System.currentTimeMillis() - CLOCK_SKEW_SLACK_MS)
             metadata = Json.encodeToString(
                 VideoTokenMetadata.serializer(),
                 VideoTokenMetadata(role = role.name, lessonId = lessonId.toString()),
@@ -71,17 +83,17 @@ class VideoTokenService(
      * connected participant. Used when the teacher finishes or cancels a
      * lesson so students aren't left dangling in a dead call.
      *
-     * Fire-and-forget. If LiveKit is unreachable we log and move on — the
-     * lesson status is the source of truth, and an empty room gets reaped
-     * by LiveKit's idle timeout anyway.
+     * Returns immediately; the REST call runs on an IO dispatcher. Failures
+     * are logged and swallowed — the lesson status is the source of truth,
+     * and an empty room gets reaped by LiveKit's idle timeout anyway.
+     *
+     * `open` so tests can substitute a counting fake via Ktor DI.
      */
-    fun deleteRoom(roomName: String) {
-        runCatching {
-            roomService.deleteRoom(roomName).execute()
-        }.onSuccess {
-            log.info("LiveKit room {} deleted", roomName)
-        }.onFailure { err ->
-            log.warn("Failed to delete LiveKit room {}: {}", roomName, err.message)
+    open fun deleteRoom(roomName: String) {
+        adminScope.launch {
+            runCatching { roomService.deleteRoom(roomName).execute() }
+                .onSuccess { log.info("LiveKit room {} deleted", roomName) }
+                .onFailure { err -> log.warn("Failed to delete LiveKit room {}: {}", roomName, err.message) }
         }
     }
 
@@ -89,6 +101,8 @@ class VideoTokenService(
     private data class VideoTokenMetadata(val role: String, val lessonId: String)
 
     companion object {
+        private const val CLOCK_SKEW_SLACK_MS = 30_000L
+
         /** LiveKit client URL is ws:// or wss://; the server SDK wants http(s). */
         internal fun httpBase(url: String): String {
             val trimmed = url.trim().removeSuffix("/")
