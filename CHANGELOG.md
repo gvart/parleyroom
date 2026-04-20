@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/gvart/parleyroom/compare/v0.10.0...v0.11.0) (2026-04-20)
+
+
+### Miscellaneous Chores
+
+* release 0.11.0 ([#20](https://github.com/gvart/parleyroom/issues/20)) ([9d7ab7a](https://github.com/gvart/parleyroom/commit/9d7ab7ad4cf92611be141860f36fde6091d58d6e))
+
 ## [0.10.0](https://github.com/gvart/parleyroom/compare/v0.9.0...v0.10.0) (2026-04-20)
 
 
