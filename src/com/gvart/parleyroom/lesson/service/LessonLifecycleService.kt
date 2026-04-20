@@ -201,7 +201,21 @@ class LessonLifecycleService(
             .let(support::toResponse)
     }
 
-    fun cancelLesson(lessonId: UUID, request: CancelLessonRequest, principal: UserPrincipal): LessonResponse = transaction {
+    fun cancelLesson(lessonId: UUID, request: CancelLessonRequest, principal: UserPrincipal): LessonResponse {
+        val (response, priorStatus) = doCancelLesson(lessonId, request, principal)
+        // Only tear the LiveKit room down if the lesson was actually live —
+        // cancelling a REQUEST/CONFIRMED lesson never opened one.
+        if (priorStatus == LessonStatus.IN_PROGRESS) {
+            videoTokenService.deleteRoom("lesson-$lessonId")
+        }
+        return response
+    }
+
+    private fun doCancelLesson(
+        lessonId: UUID,
+        request: CancelLessonRequest,
+        principal: UserPrincipal,
+    ): Pair<LessonResponse, LessonStatus> = transaction {
         val lesson = support.findLesson(lessonId)
         val currentStatus = lesson[LessonTable.status]
 
@@ -244,10 +258,11 @@ class LessonLifecycleService(
             )
         }
 
-        LessonTable.selectAll()
+        val response = LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
             .single()
             .let(support::toResponse)
+        response to currentStatus
     }
 
     fun startLesson(lessonId: UUID, principal: UserPrincipal): StartLessonResponse = transaction {
@@ -309,7 +324,17 @@ class LessonLifecycleService(
         StartLessonResponse(document = document, videoRoom = videoRoom)
     }
 
-    fun completeLesson(lessonId: UUID, request: CompleteLessonRequest, principal: UserPrincipal): LessonDocumentResponse = transaction {
+    fun completeLesson(lessonId: UUID, request: CompleteLessonRequest, principal: UserPrincipal): LessonDocumentResponse {
+        val response = doCompleteLesson(lessonId, request, principal)
+        // Kick everyone out of the LiveKit room so students don't linger in
+        // a dead call after the teacher wraps. `deleteRoom` is already async
+        // and internally catches failures — failure here doesn't undo the
+        // completion.
+        videoTokenService.deleteRoom("lesson-$lessonId")
+        return response
+    }
+
+    private fun doCompleteLesson(lessonId: UUID, request: CompleteLessonRequest, principal: UserPrincipal): LessonDocumentResponse = transaction {
         val lesson = support.findLesson(lessonId)
 
         if (principal.role == UserRole.STUDENT)
