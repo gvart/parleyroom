@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/gvart/parleyroom/compare/v0.9.0...v0.10.0) (2026-04-20)
+
+
+### Features
+
+* **lesson:** end LiveKit room on complete/cancel via server SDK ([#16](https://github.com/gvart/parleyroom/issues/16)) ([8f3ab3f](https://github.com/gvart/parleyroom/commit/8f3ab3ff919995f4699f2fc0bc822d6d9a02370e))
+
 ## [0.9.0](https://github.com/gvart/parleyroom/compare/v0.8.0...v0.9.0) (2026-04-20)
 
 
