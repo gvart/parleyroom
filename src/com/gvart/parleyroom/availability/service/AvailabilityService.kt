@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.availability.service
 
+import com.gvart.parleyroom.common.service.singleOrNotFound
 import com.gvart.parleyroom.availability.data.AvailabilityExceptionType
 import com.gvart.parleyroom.availability.data.TeacherAvailabilityExceptionTable
 import com.gvart.parleyroom.availability.data.TeacherWeeklyAvailabilityTable
@@ -143,7 +144,7 @@ class AvailabilityService {
     fun getPublicAvailability(teacherId: UUID, from: OffsetDateTime?, to: OffsetDateTime?): PublicAvailability = transaction {
         val teacherRow = UserTable.selectAll()
             .where { (UserTable.id eq teacherId) and (UserTable.role eq UserRole.TEACHER) }
-            .singleOrNull() ?: throw NotFoundException("Teacher not found")
+            .singleOrNotFound("Teacher")
 
         val weekly = TeacherWeeklyAvailabilityTable.selectAll()
             .where { TeacherWeeklyAvailabilityTable.teacherId eq teacherId }

@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.lesson.service
 
+import com.gvart.parleyroom.common.service.singleOrNotFound
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
@@ -34,13 +35,13 @@ class LessonSupport {
     fun findLesson(lessonId: UUID): ResultRow =
         LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
-            .singleOrNull() ?: throw NotFoundException("Lesson not found")
+            .singleOrNotFound("Lesson")
 
     fun findLessonForUpdate(lessonId: UUID): ResultRow =
         LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
             .forUpdate()
-            .singleOrNull() ?: throw NotFoundException("Lesson not found")
+            .singleOrNotFound("Lesson")
 
     fun findPendingReschedule(lessonId: UUID): ResultRow =
         LessonEventTable.selectAll()

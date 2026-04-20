@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.admin.routing
 
+import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.admin.service.AdminService
 import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetPasswordRequest
@@ -14,12 +15,10 @@ import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
-import com.gvart.parleyroom.user.security.UserPrincipal
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.response.respond
 import io.ktor.server.routing.delete
@@ -38,7 +37,7 @@ fun Application.configureAdminRouting() {
         authenticate {
             route("/api/v1/admin") {
                 get("/users") {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     requireAdmin(principal)
 
                     val params = call.request.queryParameters
@@ -71,7 +70,7 @@ fun Application.configureAdminRouting() {
                 }
 
                 get("/users/{id}") {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     requireAdmin(principal)
                     val id = parseUuid(call.parameters["id"])
                     call.respond(HttpStatusCode.OK, adminService.getUser(id))
@@ -87,7 +86,7 @@ fun Application.configureAdminRouting() {
                 }
 
                 post<AdminCreateUserRequest>("/users") { request ->
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     requireAdmin(principal)
                     val result = adminService.createUser(request)
                     call.respond(HttpStatusCode.Created, result)
@@ -104,7 +103,7 @@ fun Application.configureAdminRouting() {
                 }
 
                 patch<AdminUpdateUserRequest>("/users/{id}") { request ->
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     requireAdmin(principal)
                     val id = parseUuid(call.parameters["id"])
                     val result = adminService.updateUser(id, principal, request)
@@ -124,7 +123,7 @@ fun Application.configureAdminRouting() {
                 }
 
                 delete("/users/{id}") {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     requireAdmin(principal)
                     val id = parseUuid(call.parameters["id"])
                     val hard = call.request.queryParameters["hard"]?.toBoolean() ?: false
@@ -148,7 +147,7 @@ fun Application.configureAdminRouting() {
                 }
 
                 post("/users/{id}/unlock") {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     requireAdmin(principal)
                     val id = parseUuid(call.parameters["id"])
                     call.respond(HttpStatusCode.OK, adminService.unlockUser(id))
@@ -164,7 +163,7 @@ fun Application.configureAdminRouting() {
                 }
 
                 post<AdminSetPasswordRequest>("/users/{id}/password") { request ->
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     requireAdmin(principal)
                     val id = parseUuid(call.parameters["id"])
                     adminService.setPassword(id, request.newPassword)
@@ -183,7 +182,7 @@ fun Application.configureAdminRouting() {
                 }
 
                 post<AdminSetStatusRequest>("/users/{id}/status") { request ->
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     requireAdmin(principal)
                     val id = parseUuid(call.parameters["id"])
                     val result = adminService.setStatus(id, principal, request.status)
@@ -202,7 +201,7 @@ fun Application.configureAdminRouting() {
                 }
 
                 get("/stats") {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     requireAdmin(principal)
                     call.respond(HttpStatusCode.OK, adminService.getStats())
                 }.describe {

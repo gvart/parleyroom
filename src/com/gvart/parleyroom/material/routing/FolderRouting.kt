@@ -1,5 +1,8 @@
 package com.gvart.parleyroom.material.routing
 
+
+import com.gvart.parleyroom.common.routing.getPathUUID
+import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.material.service.LessonMaterialService
@@ -13,12 +16,10 @@ import com.gvart.parleyroom.material.transfer.MaterialFolderResponse
 import com.gvart.parleyroom.material.transfer.ShareListResponse
 import com.gvart.parleyroom.material.transfer.ShareRequest
 import com.gvart.parleyroom.material.transfer.UpdateFolderRequest
-import com.gvart.parleyroom.user.security.UserPrincipal
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.plugins.requestvalidation.ValidationResult
 import io.ktor.server.response.respond
@@ -40,7 +41,7 @@ fun Application.configureMaterialFolderRouting() {
         authenticate {
             route("/api/v1/material-folders") {
                 get {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val tree = call.request.queryParameters["tree"]?.toBoolean() ?: false
                     call.respond(HttpStatusCode.OK, folderService.listFolders(principal, tree))
                 }.describe {
@@ -55,7 +56,7 @@ fun Application.configureMaterialFolderRouting() {
                 }
 
                 post<CreateFolderRequest> { request ->
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val validation = request.validate()
                     if (validation is ValidationResult.Invalid) {
                         throw BadRequestException(validation.reasons.joinToString())
@@ -73,8 +74,8 @@ fun Application.configureMaterialFolderRouting() {
 
                 route("/{id}") {
                     get {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
                         call.respond(HttpStatusCode.OK, folderService.getFolder(id, principal))
                     }.describe {
                         summary = "Get folder metadata"
@@ -86,8 +87,8 @@ fun Application.configureMaterialFolderRouting() {
                     }
 
                     put<UpdateFolderRequest> { request ->
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
                         call.respond(HttpStatusCode.OK, folderService.updateFolder(id, request, principal))
                     }.describe {
                         summary = "Rename / move folder"
@@ -98,8 +99,8 @@ fun Application.configureMaterialFolderRouting() {
                     }
 
                     delete {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
                         val cascade = call.request.queryParameters["cascade"]?.toBoolean() ?: false
                         folderService.deleteFolder(id, cascade, principal)
                         call.respond(HttpStatusCode.NoContent)
@@ -118,8 +119,8 @@ fun Application.configureMaterialFolderRouting() {
 
                     route("/shares") {
                         get {
-                            val principal = call.principal<UserPrincipal>()!!
-                            val id = UUID.fromString(call.parameters["id"])
+                            val principal = call.requirePrincipal()
+                            val id = call.getPathUUID()
                             call.respond(HttpStatusCode.OK, shareService.listFolderShares(id, principal))
                         }.describe {
                             summary = "List students this folder is shared with"
@@ -128,8 +129,8 @@ fun Application.configureMaterialFolderRouting() {
                         }
 
                         post<ShareRequest> { request ->
-                            val principal = call.principal<UserPrincipal>()!!
-                            val id = UUID.fromString(call.parameters["id"])
+                            val principal = call.requirePrincipal()
+                            val id = call.getPathUUID()
                             call.respond(HttpStatusCode.OK, shareService.shareFolder(id, request, principal))
                         }.describe {
                             summary = "Share folder with students (cascades to all contents & future items)"
@@ -139,9 +140,9 @@ fun Application.configureMaterialFolderRouting() {
                         }
 
                         delete("/{studentId}") {
-                            val principal = call.principal<UserPrincipal>()!!
-                            val id = UUID.fromString(call.parameters["id"])
-                            val studentId = UUID.fromString(call.parameters["studentId"])
+                            val principal = call.requirePrincipal()
+                            val id = call.getPathUUID()
+                            val studentId = call.getPathUUID("studentId")
                             shareService.revokeFolder(id, studentId, principal)
                             call.respond(HttpStatusCode.NoContent)
                         }.describe {
@@ -158,8 +159,8 @@ fun Application.configureMaterialFolderRouting() {
 
             route("/api/v1/lessons/{lessonId}/materials") {
                 get {
-                    val principal = call.principal<UserPrincipal>()!!
-                    val lessonId = UUID.fromString(call.parameters["lessonId"])
+                    val principal = call.requirePrincipal()
+                    val lessonId = call.getPathUUID("lessonId")
                     call.respond(HttpStatusCode.OK, lessonMaterialService.list(lessonId, principal))
                 }.describe {
                     summary = "List materials attached to a lesson"
@@ -172,8 +173,8 @@ fun Application.configureMaterialFolderRouting() {
                 }
 
                 post<AttachMaterialsRequest> { request ->
-                    val principal = call.principal<UserPrincipal>()!!
-                    val lessonId = UUID.fromString(call.parameters["lessonId"])
+                    val principal = call.requirePrincipal()
+                    val lessonId = call.getPathUUID("lessonId")
                     call.respond(HttpStatusCode.OK, lessonMaterialService.attach(lessonId, request, principal))
                 }.describe {
                     summary = "Attach existing materials to a lesson"
@@ -184,9 +185,9 @@ fun Application.configureMaterialFolderRouting() {
                 }
 
                 delete("/{materialId}") {
-                    val principal = call.principal<UserPrincipal>()!!
-                    val lessonId = UUID.fromString(call.parameters["lessonId"])
-                    val materialId = UUID.fromString(call.parameters["materialId"])
+                    val principal = call.requirePrincipal()
+                    val lessonId = call.getPathUUID("lessonId")
+                    val materialId = call.getPathUUID("materialId")
                     lessonMaterialService.detach(lessonId, materialId, principal)
                     call.respond(HttpStatusCode.NoContent)
                 }.describe {

@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.lesson.service
 
+import com.gvart.parleyroom.common.service.singleOrNotFound
 import com.gvart.parleyroom.availability.service.AvailabilityService
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.transfer.PageRequest
@@ -164,7 +165,7 @@ class LessonService(
     ): PublicCalendarResponse = transaction {
         val teacherRow = UserTable.selectAll()
             .where { (UserTable.id eq teacherId) and (UserTable.role eq UserRole.TEACHER) }
-            .singleOrNull() ?: throw NotFoundException("Teacher not found")
+            .singleOrNotFound("Teacher")
 
         val query = LessonTable.selectAll().where {
             (LessonTable.teacherId eq teacherId) and

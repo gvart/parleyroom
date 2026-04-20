@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.admin.service
 
+import com.gvart.parleyroom.common.service.singleOrNotFound
 import com.gvart.parleyroom.admin.transfer.ActivityStats
 import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminStatsResponse
@@ -87,7 +88,7 @@ class AdminService {
     fun getUser(id: UUID): AdminUserResponse = transaction {
         val row = UserTable.selectAll()
             .where { UserTable.id eq id }
-            .singleOrNull() ?: throw NotFoundException("User not found")
+            .singleOrNotFound("User")
         toResponse(row)
     }
 
@@ -295,7 +296,7 @@ class AdminService {
     private fun loadById(id: UUID): ResultRow =
         UserTable.selectAll()
             .where { UserTable.id eq id }
-            .singleOrNull() ?: throw NotFoundException("User not found")
+            .singleOrNotFound("User")
 
     private fun toResponse(row: ResultRow): AdminUserResponse {
         val userId = row[UserTable.id].value

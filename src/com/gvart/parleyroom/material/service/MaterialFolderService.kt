@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.material.service
 
+import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.storage.StorageService
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
@@ -241,9 +242,7 @@ class MaterialFolderService(
     }
 
     private fun findFolderRow(id: UUID): ResultRow =
-        MaterialFolderTable.selectAll()
-            .where { MaterialFolderTable.id eq id }
-            .singleOrNull() ?: throw NotFoundException("Folder not found")
+        MaterialFolderTable.findByIdOrThrow(id, "Folder")
 
     internal fun toResponse(row: ResultRow): MaterialFolderResponse {
         val folderId = row[MaterialFolderTable.id].value

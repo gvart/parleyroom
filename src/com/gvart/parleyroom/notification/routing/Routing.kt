@@ -1,19 +1,18 @@
 package com.gvart.parleyroom.notification.routing
 
+import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.notification.service.NotificationSseManager
 import com.gvart.parleyroom.notification.transfer.MarkViewedRequest
 import com.gvart.parleyroom.notification.transfer.NotificationPageResponse
-import com.gvart.parleyroom.user.security.UserPrincipal
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
@@ -41,7 +40,7 @@ fun Application.configureNotificationRouting() {
         authenticate {
             route("/api/v1/notifications") {
                 get {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val pageRequest = PageRequest.from(call)
 
                     val result = notificationService.getNotifications(principal, pageRequest.page, pageRequest.pageSize)
@@ -72,7 +71,7 @@ fun Application.configureNotificationRouting() {
                 }
 
                 post<MarkViewedRequest>("/viewed") {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val ids = it.notificationIds.map(UUID::fromString)
 
                     notificationService.markAsViewed(ids, principal)
@@ -95,7 +94,7 @@ fun Application.configureNotificationRouting() {
                 }
 
                 get("/stream") {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val flow = sseManager.subscribe(principal.id)
 
                     call.response.header(HttpHeaders.CacheControl, "no-cache")

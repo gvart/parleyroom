@@ -1,5 +1,8 @@
 package com.gvart.parleyroom.material.routing
 
+
+import com.gvart.parleyroom.common.routing.getPathUUID
+import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.storage.StorageConfig
 import com.gvart.parleyroom.common.storage.StorageService
@@ -20,7 +23,6 @@ import com.gvart.parleyroom.material.transfer.MaterialResponse
 import com.gvart.parleyroom.material.transfer.ShareListResponse
 import com.gvart.parleyroom.material.transfer.ShareRequest
 import com.gvart.parleyroom.material.transfer.UpdateMaterialRequest
-import com.gvart.parleyroom.user.security.UserPrincipal
 import io.ktor.http.ContentDisposition
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -29,7 +31,6 @@ import io.ktor.http.content.PartData
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.plugins.requestvalidation.ValidationResult
 import io.ktor.server.request.receiveMultipart
@@ -58,7 +59,7 @@ fun Application.configureMaterialRouting() {
         authenticate {
             route("/api/v1/materials") {
                 get {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val folderId = call.request.queryParameters["folderId"]?.let(UUID::fromString)
                     val unfiled = call.request.queryParameters["unfiled"]?.toBoolean() ?: false
                     val lessonId = call.request.queryParameters["lessonId"]?.let(UUID::fromString)
@@ -89,7 +90,7 @@ fun Application.configureMaterialRouting() {
                 }
 
                 post {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val multipart = call.receiveMultipart()
 
                     var metadata: CreateMaterialRequest? = null
@@ -161,7 +162,7 @@ fun Application.configureMaterialRouting() {
                 }
 
                 post<BulkMaterialRequest>("/bulk") { request ->
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val validation = request.validate()
                     if (validation is ValidationResult.Invalid) {
                         throw BadRequestException(validation.reasons.joinToString())
@@ -176,8 +177,8 @@ fun Application.configureMaterialRouting() {
 
                 route("/{id}") {
                     get {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
                         call.respond(HttpStatusCode.OK, materialService.getMaterial(id, principal))
                     }.describe {
                         summary = "Get material by ID"
@@ -189,8 +190,8 @@ fun Application.configureMaterialRouting() {
                     }
 
                     put<UpdateMaterialRequest> {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
                         call.respond(HttpStatusCode.OK, materialService.updateMaterial(id, it, principal))
                     }.describe {
                         summary = "Update material"
@@ -201,8 +202,8 @@ fun Application.configureMaterialRouting() {
                     }
 
                     delete {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
                         materialService.deleteMaterial(id, principal)
                         call.respond(HttpStatusCode.NoContent)
                     }.describe {
@@ -212,8 +213,8 @@ fun Application.configureMaterialRouting() {
                     }
 
                     get("/file") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val target = materialService.getDownloadTarget(id, principal)
                         val contentType = target.contentType
@@ -239,8 +240,8 @@ fun Application.configureMaterialRouting() {
                     }
 
                     delete("/folder") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
                         call.respond(HttpStatusCode.OK, materialService.clearMaterialFolder(id, principal))
                     }.describe {
                         summary = "Remove material from its folder (move to root)"
@@ -249,8 +250,8 @@ fun Application.configureMaterialRouting() {
                     }
 
                     delete("/level") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
                         call.respond(HttpStatusCode.OK, materialService.clearMaterialLevel(id, principal))
                     }.describe {
                         summary = "Clear CEFR level tag"
@@ -259,8 +260,8 @@ fun Application.configureMaterialRouting() {
                     }
 
                     delete("/skill") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
                         call.respond(HttpStatusCode.OK, materialService.clearMaterialSkill(id, principal))
                     }.describe {
                         summary = "Clear skill tag"
@@ -270,8 +271,8 @@ fun Application.configureMaterialRouting() {
 
                     route("/shares") {
                         get {
-                            val principal = call.principal<UserPrincipal>()!!
-                            val id = UUID.fromString(call.parameters["id"])
+                            val principal = call.requirePrincipal()
+                            val id = call.getPathUUID()
                             call.respond(HttpStatusCode.OK, shareService.listMaterialShares(id, principal))
                         }.describe {
                             summary = "List students this material is shared with"
@@ -280,8 +281,8 @@ fun Application.configureMaterialRouting() {
                         }
 
                         post<ShareRequest> {
-                            val principal = call.principal<UserPrincipal>()!!
-                            val id = UUID.fromString(call.parameters["id"])
+                            val principal = call.requirePrincipal()
+                            val id = call.getPathUUID()
                             call.respond(HttpStatusCode.OK, shareService.shareMaterial(id, it, principal))
                         }.describe {
                             summary = "Share material with students"
@@ -292,9 +293,9 @@ fun Application.configureMaterialRouting() {
                         }
 
                         delete("/{studentId}") {
-                            val principal = call.principal<UserPrincipal>()!!
-                            val id = UUID.fromString(call.parameters["id"])
-                            val studentId = UUID.fromString(call.parameters["studentId"])
+                            val principal = call.requirePrincipal()
+                            val id = call.getPathUUID()
+                            val studentId = call.getPathUUID("studentId")
                             shareService.revokeMaterial(id, studentId, principal)
                             call.respond(HttpStatusCode.NoContent)
                         }.describe {
