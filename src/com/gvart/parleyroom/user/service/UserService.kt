@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.user.service
 
+import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.storage.StorageService
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
@@ -76,16 +77,12 @@ class UserService(
     }
 
     fun getProfile(principal: UserPrincipal): UserResponse = transaction {
-        val row = UserTable.selectAll()
-            .where { UserTable.id eq principal.id }
-            .singleOrNull() ?: throw NotFoundException("User not found")
+        val row = UserTable.findByIdOrThrow(principal.id, "User")
         toResponse(row)
     }
 
     fun updateProfile(principal: UserPrincipal, request: UpdateProfileRequest): UserResponse = transaction {
-        val current = UserTable.selectAll()
-            .where { UserTable.id eq principal.id }
-            .singleOrNull() ?: throw NotFoundException("User not found")
+        val current = UserTable.findByIdOrThrow(principal.id, "User")
 
         val newFirstName = request.firstName?.trim() ?: current[UserTable.firstName]
         val newLastName = request.lastName?.trim() ?: current[UserTable.lastName]
@@ -128,9 +125,7 @@ class UserService(
 
         val oldKey = runCatching {
             transaction {
-                val current = UserTable.selectAll()
-                    .where { UserTable.id eq principal.id }
-                    .singleOrNull() ?: throw NotFoundException("User not found")
+                val current = UserTable.findByIdOrThrow(principal.id, "User")
                 val previous = current[UserTable.avatarUrl]
                 UserTable.update({ UserTable.id eq principal.id }) {
                     it[avatarUrl] = newKey
@@ -163,9 +158,7 @@ class UserService(
 
     fun deleteAvatar(principal: UserPrincipal): UserResponse {
         val oldKey = transaction {
-            val current = UserTable.selectAll()
-                .where { UserTable.id eq principal.id }
-                .singleOrNull() ?: throw NotFoundException("User not found")
+            val current = UserTable.findByIdOrThrow(principal.id, "User")
             val previous = current[UserTable.avatarUrl]
             if (previous != null) {
                 UserTable.update({ UserTable.id eq principal.id }) {

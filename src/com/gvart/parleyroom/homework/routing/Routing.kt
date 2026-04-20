@@ -1,5 +1,8 @@
 package com.gvart.parleyroom.homework.routing
 
+import com.gvart.parleyroom.common.routing.getPathUUID
+import com.gvart.parleyroom.common.routing.getQueryUUID
+import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.homework.data.HomeworkStatus
@@ -10,12 +13,10 @@ import com.gvart.parleyroom.homework.transfer.HomeworkResponse
 import com.gvart.parleyroom.homework.transfer.ReviewHomeworkRequest
 import com.gvart.parleyroom.homework.transfer.SubmitHomeworkRequest
 import com.gvart.parleyroom.homework.transfer.UpdateHomeworkRequest
-import com.gvart.parleyroom.user.security.UserPrincipal
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.response.respond
 import io.ktor.server.routing.delete
@@ -25,7 +26,6 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
-import java.util.UUID
 
 fun Application.configureHomeworkRouting() {
     val homeworkService: HomeworkService by dependencies
@@ -34,8 +34,8 @@ fun Application.configureHomeworkRouting() {
         authenticate {
             route("/api/v1/homework") {
                 get {
-                    val principal = call.principal<UserPrincipal>()!!
-                    val studentId = call.request.queryParameters["studentId"]?.let(UUID::fromString)
+                    val principal = call.requirePrincipal()
+                    val studentId = call.getQueryUUID("studentId")
                     val status = call.request.queryParameters["status"]?.let { HomeworkStatus.valueOf(it) }
 
                     val result = homeworkService.getHomework(principal, studentId, status, PageRequest.from(call))
@@ -58,7 +58,7 @@ fun Application.configureHomeworkRouting() {
                 }
 
                 post<CreateHomeworkRequest> {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
 
                     val result = homeworkService.createHomework(it, principal)
                     call.respond(HttpStatusCode.Created, result)
@@ -80,8 +80,8 @@ fun Application.configureHomeworkRouting() {
 
                 route("/{id}") {
                     get {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = homeworkService.getHomeworkById(id, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -102,8 +102,8 @@ fun Application.configureHomeworkRouting() {
                     }
 
                     put<UpdateHomeworkRequest> {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = homeworkService.updateHomework(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -121,8 +121,8 @@ fun Application.configureHomeworkRouting() {
                     }
 
                     delete {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         homeworkService.deleteHomework(id, principal)
                         call.respond(HttpStatusCode.NoContent)
@@ -136,8 +136,8 @@ fun Application.configureHomeworkRouting() {
                     }
 
                     post<SubmitHomeworkRequest>("/submit") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = homeworkService.submitHomework(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -159,8 +159,8 @@ fun Application.configureHomeworkRouting() {
                     }
 
                     post<ReviewHomeworkRequest>("/review") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = homeworkService.reviewHomework(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)

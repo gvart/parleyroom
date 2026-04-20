@@ -1,5 +1,8 @@
 package com.gvart.parleyroom.goal.routing
 
+
+import com.gvart.parleyroom.common.routing.getPathUUID
+import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.goal.data.GoalStatus
@@ -9,12 +12,10 @@ import com.gvart.parleyroom.goal.transfer.GoalPageResponse
 import com.gvart.parleyroom.goal.transfer.GoalResponse
 import com.gvart.parleyroom.goal.transfer.UpdateGoalProgressRequest
 import com.gvart.parleyroom.goal.transfer.UpdateGoalRequest
-import com.gvart.parleyroom.user.security.UserPrincipal
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.response.respond
 import io.ktor.server.routing.delete
@@ -33,7 +34,7 @@ fun Application.configureGoalRouting() {
         authenticate {
             route("/api/v1/goals") {
                 get {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val studentId = call.request.queryParameters["studentId"]?.let(UUID::fromString)
                     val status = call.request.queryParameters["status"]?.let { GoalStatus.valueOf(it) }
 
@@ -57,7 +58,7 @@ fun Application.configureGoalRouting() {
                 }
 
                 post<CreateGoalRequest> {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
 
                     val result = goalService.createGoal(it, principal)
                     call.respond(HttpStatusCode.Created, result)
@@ -75,8 +76,8 @@ fun Application.configureGoalRouting() {
 
                 route("/{id}") {
                     get {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = goalService.getGoal(id, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -97,8 +98,8 @@ fun Application.configureGoalRouting() {
                     }
 
                     put<UpdateGoalRequest> {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = goalService.updateGoal(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -116,8 +117,8 @@ fun Application.configureGoalRouting() {
                     }
 
                     delete {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         goalService.deleteGoal(id, principal)
                         call.respond(HttpStatusCode.NoContent)
@@ -131,8 +132,8 @@ fun Application.configureGoalRouting() {
                     }
 
                     put<UpdateGoalProgressRequest>("/progress") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = goalService.updateProgress(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -150,8 +151,8 @@ fun Application.configureGoalRouting() {
                     }
 
                     post("/complete") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = goalService.completeGoal(id, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -172,8 +173,8 @@ fun Application.configureGoalRouting() {
                     }
 
                     post("/abandon") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = goalService.abandonGoal(id, principal)
                         call.respond(HttpStatusCode.OK, result)

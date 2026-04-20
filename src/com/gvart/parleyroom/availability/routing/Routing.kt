@@ -1,5 +1,8 @@
 package com.gvart.parleyroom.availability.routing
 
+
+import com.gvart.parleyroom.common.routing.getPathUUID
+import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.availability.service.AvailabilityService
 import com.gvart.parleyroom.availability.service.SlotComputationService
 import com.gvart.parleyroom.availability.transfer.AvailabilityExceptionResponse
@@ -8,12 +11,10 @@ import com.gvart.parleyroom.availability.transfer.CreateAvailabilityExceptionReq
 import com.gvart.parleyroom.availability.transfer.ReplaceWeeklyAvailabilityRequest
 import com.gvart.parleyroom.availability.transfer.WeeklyAvailabilityEntry
 import com.gvart.parleyroom.common.transfer.ProblemDetail
-import com.gvart.parleyroom.user.security.UserPrincipal
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.response.respond
 import io.ktor.server.routing.delete
@@ -36,8 +37,8 @@ fun Application.configureAvailabilityRouting() {
 
                 route("/weekly-availability") {
                     get {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val teacherId = UUID.fromString(call.parameters["teacherId"])
+                        val principal = call.requirePrincipal()
+                        val teacherId = call.getPathUUID("teacherId")
                         val entries = availabilityService.getWeekly(teacherId, principal)
                         call.respond(HttpStatusCode.OK, entries)
                     }.describe {
@@ -50,8 +51,8 @@ fun Application.configureAvailabilityRouting() {
                     }
 
                     put<ReplaceWeeklyAvailabilityRequest> { request ->
-                        val principal = call.principal<UserPrincipal>()!!
-                        val teacherId = UUID.fromString(call.parameters["teacherId"])
+                        val principal = call.requirePrincipal()
+                        val teacherId = call.getPathUUID("teacherId")
                         val entries = availabilityService.replaceWeekly(teacherId, request, principal)
                         call.respond(HttpStatusCode.OK, entries)
                     }.describe {
@@ -68,8 +69,8 @@ fun Application.configureAvailabilityRouting() {
 
                 route("/availability-exceptions") {
                     get {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val teacherId = UUID.fromString(call.parameters["teacherId"])
+                        val principal = call.requirePrincipal()
+                        val teacherId = call.getPathUUID("teacherId")
                         val from = call.request.queryParameters["from"]?.let(OffsetDateTime::parse)
                         val to = call.request.queryParameters["to"]?.let(OffsetDateTime::parse)
                         val exceptions = availabilityService.getExceptions(teacherId, from, to, principal)
@@ -88,8 +89,8 @@ fun Application.configureAvailabilityRouting() {
                     }
 
                     post<CreateAvailabilityExceptionRequest> { request ->
-                        val principal = call.principal<UserPrincipal>()!!
-                        val teacherId = UUID.fromString(call.parameters["teacherId"])
+                        val principal = call.requirePrincipal()
+                        val teacherId = call.getPathUUID("teacherId")
                         val created = availabilityService.createException(teacherId, request, principal)
                         call.respond(HttpStatusCode.Created, created)
                     }.describe {
@@ -104,9 +105,9 @@ fun Application.configureAvailabilityRouting() {
                     }
 
                     delete("/{exceptionId}") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val teacherId = UUID.fromString(call.parameters["teacherId"])
-                        val exceptionId = UUID.fromString(call.parameters["exceptionId"])
+                        val principal = call.requirePrincipal()
+                        val teacherId = call.getPathUUID("teacherId")
+                        val exceptionId = call.getPathUUID("exceptionId")
                         availabilityService.deleteException(teacherId, exceptionId, principal)
                         call.respond(HttpStatusCode.NoContent)
                     }.describe {
@@ -121,8 +122,8 @@ fun Application.configureAvailabilityRouting() {
                 }
 
                 get("/available-slots") {
-                    val principal = call.principal<UserPrincipal>()!!
-                    val teacherId = UUID.fromString(call.parameters["teacherId"])
+                    val principal = call.requirePrincipal()
+                    val teacherId = call.getPathUUID("teacherId")
                     val from = OffsetDateTime.parse(call.request.queryParameters["from"]!!)
                     val to = OffsetDateTime.parse(call.request.queryParameters["to"]!!)
                     val duration = (call.request.queryParameters["durationMinutes"] ?: "60").toInt()

@@ -1,10 +1,10 @@
 package com.gvart.parleyroom.homework.service
 
+import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
-import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.homework.data.HomeworkStatus
 import com.gvart.parleyroom.homework.data.HomeworkTable
 import com.gvart.parleyroom.homework.transfer.CreateHomeworkRequest
@@ -182,9 +182,7 @@ class HomeworkService {
     }
 
     private fun findHomework(homeworkId: UUID): ResultRow =
-        HomeworkTable.selectAll()
-            .where { HomeworkTable.id eq homeworkId }
-            .singleOrNull() ?: throw NotFoundException("Homework not found")
+        HomeworkTable.findByIdOrThrow(homeworkId, "Homework")
 
     private fun requireHomeworkAccess(hw: ResultRow, principal: UserPrincipal) {
         if (principal.role == UserRole.ADMIN) return

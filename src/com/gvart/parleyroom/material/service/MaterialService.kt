@@ -1,5 +1,7 @@
 package com.gvart.parleyroom.material.service
 
+import com.gvart.parleyroom.common.service.findByIdOrThrow
+import com.gvart.parleyroom.common.service.singleOrNotFound
 import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.storage.StorageService
 import com.gvart.parleyroom.common.transfer.PageRequest
@@ -141,7 +143,7 @@ class MaterialService(
             transaction {
                 val folder = MaterialFolderTable.selectAll()
                     .where { MaterialFolderTable.id eq folderUuid }
-                    .singleOrNull() ?: throw NotFoundException("Folder not found")
+                    .singleOrNotFound("Folder")
                 val folderOwner = folder[MaterialFolderTable.teacherId].value
                 if (principal.role == UserRole.TEACHER && folderOwner != principal.id)
                     throw ForbiddenException("Cannot place material in another teacher's folder")
@@ -224,7 +226,7 @@ class MaterialService(
                 val newFolder = UUID.fromString(request.folderId)
                 val folderRow = MaterialFolderTable.selectAll()
                     .where { MaterialFolderTable.id eq newFolder }
-                    .singleOrNull() ?: throw NotFoundException("Folder not found")
+                    .singleOrNotFound("Folder")
                 if (folderRow[MaterialFolderTable.teacherId].value != row[MaterialTable.teacherId].value)
                     throw ForbiddenException("Cannot move material to another teacher's folder")
             }
@@ -285,7 +287,7 @@ class MaterialService(
                     if (target != null) {
                         val folderRow = MaterialFolderTable.selectAll()
                             .where { MaterialFolderTable.id eq target }
-                            .singleOrNull() ?: throw NotFoundException("Target folder not found")
+                            .singleOrNotFound("Target folder")
                         if (principal.role == UserRole.TEACHER &&
                             folderRow[MaterialFolderTable.teacherId].value != principal.id
                         ) throw ForbiddenException("Target folder is not yours")
@@ -361,9 +363,7 @@ class MaterialService(
     }
 
     private fun findMaterial(id: UUID): ResultRow =
-        MaterialTable.selectAll()
-            .where { MaterialTable.id eq id }
-            .singleOrNull() ?: throw NotFoundException("Material not found")
+        MaterialTable.findByIdOrThrow(id, "Material")
 
     private fun requireViewAccess(row: ResultRow, principal: UserPrincipal) {
         if (principal.role == UserRole.ADMIN) return

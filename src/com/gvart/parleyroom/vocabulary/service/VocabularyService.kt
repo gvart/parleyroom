@@ -1,9 +1,9 @@
 package com.gvart.parleyroom.vocabulary.service
 
+import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
-import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.security.UserPrincipal
@@ -157,9 +157,7 @@ class VocabularyService {
     }
 
     private fun findWord(wordId: UUID): ResultRow =
-        VocabularyWordTable.selectAll()
-            .where { VocabularyWordTable.id eq wordId }
-            .singleOrNull() ?: throw NotFoundException("Vocabulary word not found")
+        VocabularyWordTable.findByIdOrThrow(wordId, "Vocabulary word")
 
     private fun toResponse(row: ResultRow) = VocabularyWordResponse(
         id = row[VocabularyWordTable.id].value.toString(),

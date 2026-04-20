@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.availability.service
 
+import com.gvart.parleyroom.common.service.singleOrNotFound
 import com.gvart.parleyroom.availability.data.AvailabilityExceptionType
 import com.gvart.parleyroom.availability.data.TeacherAvailabilityExceptionTable
 import com.gvart.parleyroom.availability.data.TeacherWeeklyAvailabilityTable
@@ -64,7 +65,7 @@ class SlotComputationService {
 
         val teacherRow = UserTable.selectAll()
             .where { (UserTable.id eq teacherId) and (UserTable.role eq UserRole.TEACHER) }
-            .singleOrNull() ?: throw NotFoundException("Teacher not found")
+            .singleOrNotFound("Teacher")
 
         val tz = ZoneId.of(teacherRow[UserTable.timezone])
         val bufferMinutes = teacherRow[UserTable.bookingBufferMinutes] ?: 0

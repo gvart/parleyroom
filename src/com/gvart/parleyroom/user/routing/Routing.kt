@@ -1,11 +1,13 @@
 package com.gvart.parleyroom.user.routing
 
+
+import com.gvart.parleyroom.common.routing.getPathUUID
+import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.storage.StorageService
 import com.gvart.parleyroom.common.storage.readBoundedBytes
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
-import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.user.service.AuthenticationService
 import com.gvart.parleyroom.user.service.TelegramAuthService
 import com.gvart.parleyroom.user.service.UserService
@@ -25,7 +27,6 @@ import io.ktor.http.content.PartData
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.request.receive
 import io.ktor.server.request.receiveMultipart
@@ -130,7 +131,7 @@ fun Application.configureRouting() {
         authenticate {
             route("/api/v1/token") {
                 delete {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val request = call.receive<LogoutRequest>()
                     authenticationService.logout(request.refreshToken, principal.id)
                     call.respond(HttpStatusCode.NoContent)
@@ -155,7 +156,7 @@ fun Application.configureRouting() {
             route("/api/v1/users") {
                 get {
                     val result = userService.findAllUsers(
-                        call.principal<UserPrincipal>()!!,
+                        call.requirePrincipal(),
                         PageRequest.from(call),
                     )
                     call.respond(HttpStatusCode.OK, result)
@@ -185,7 +186,7 @@ fun Application.configureRouting() {
                 }
 
                 get("/me") {
-                    val result = userService.getProfile(call.principal<UserPrincipal>()!!)
+                    val result = userService.getProfile(call.requirePrincipal())
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Get current user profile"
@@ -203,7 +204,7 @@ fun Application.configureRouting() {
                 }
 
                 patch<UpdateProfileRequest>("/me") {
-                    val result = userService.updateProfile(call.principal<UserPrincipal>()!!, it)
+                    val result = userService.updateProfile(call.requirePrincipal(), it)
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Update current user profile"
@@ -228,7 +229,7 @@ fun Application.configureRouting() {
                 }
 
                 post<TelegramAuthRequest>("/me/telegram/link") {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val result = telegramAuthService.linkTelegram(principal.id, it.initData)
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
@@ -258,7 +259,7 @@ fun Application.configureRouting() {
                 }
 
                 post<TelegramLoginWidgetRequest>("/me/telegram/link-widget") {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val result = telegramAuthService.linkTelegramFromWidget(principal.id, it)
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
@@ -288,7 +289,7 @@ fun Application.configureRouting() {
                 }
 
                 delete("/me/telegram") {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     userService.unlinkTelegram(principal)
                     call.respond(HttpStatusCode.NoContent)
                 }.describe {
@@ -304,7 +305,7 @@ fun Application.configureRouting() {
                 }
 
                 post("/me/avatar") {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val multipart = call.receiveMultipart()
 
                     var fileItem: PartData.FileItem? = null
@@ -360,7 +361,7 @@ fun Application.configureRouting() {
                 }
 
                 delete("/me/avatar") {
-                    val result = userService.deleteAvatar(call.principal<UserPrincipal>()!!)
+                    val result = userService.deleteAvatar(call.requirePrincipal())
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Delete avatar"
@@ -378,7 +379,7 @@ fun Application.configureRouting() {
                 }
 
                 get("/{id}/avatar") {
-                    val id = UUID.fromString(call.parameters["id"])
+                    val id = call.getPathUUID()
                     val key = userService.getAvatarKey(id)
                     val ext = key.substringAfterLast('.', "").lowercase()
                     val contentType = when (ext) {

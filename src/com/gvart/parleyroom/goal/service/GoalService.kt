@@ -1,9 +1,9 @@
 package com.gvart.parleyroom.goal.service
 
+import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
-import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.goal.data.GoalSetBy
 import com.gvart.parleyroom.goal.data.GoalStatus
 import com.gvart.parleyroom.goal.data.LearningGoalTable
@@ -181,9 +181,7 @@ class GoalService {
     }
 
     private fun findGoal(goalId: UUID): ResultRow =
-        LearningGoalTable.selectAll()
-            .where { LearningGoalTable.id eq goalId }
-            .singleOrNull() ?: throw NotFoundException("Goal not found")
+        LearningGoalTable.findByIdOrThrow(goalId, "Goal")
 
     private fun toResponse(row: ResultRow) = GoalResponse(
         id = row[LearningGoalTable.id].value.toString(),

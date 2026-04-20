@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.material.service
 
+import com.gvart.parleyroom.common.service.singleOrNotFound
 import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
@@ -39,7 +40,7 @@ class MaterialShareService(
         transaction {
             val material = MaterialTable.selectAll()
                 .where { MaterialTable.id eq materialId }
-                .singleOrNull() ?: throw NotFoundException("Material not found")
+                .singleOrNotFound("Material")
             requireOwnerOrAdmin(material[MaterialTable.teacherId].value, principal)
 
             val now = OffsetDateTime.now()
@@ -71,7 +72,7 @@ class MaterialShareService(
         transaction {
             val material = MaterialTable.selectAll()
                 .where { MaterialTable.id eq materialId }
-                .singleOrNull() ?: throw NotFoundException("Material not found")
+                .singleOrNotFound("Material")
             requireOwnerOrAdmin(material[MaterialTable.teacherId].value, principal)
 
             MaterialShareTable.deleteWhere {
@@ -84,7 +85,7 @@ class MaterialShareService(
     fun listMaterialShares(materialId: UUID, principal: UserPrincipal): ShareListResponse = transaction {
         val material = MaterialTable.selectAll()
             .where { MaterialTable.id eq materialId }
-            .singleOrNull() ?: throw NotFoundException("Material not found")
+            .singleOrNotFound("Material")
         requireOwnerOrAdmin(material[MaterialTable.teacherId].value, principal)
 
         val grants = MaterialShareTable
@@ -112,7 +113,7 @@ class MaterialShareService(
         transaction {
             val folder = MaterialFolderTable.selectAll()
                 .where { MaterialFolderTable.id eq folderId }
-                .singleOrNull() ?: throw NotFoundException("Folder not found")
+                .singleOrNotFound("Folder")
             requireOwnerOrAdmin(folder[MaterialFolderTable.teacherId].value, principal)
 
             val now = OffsetDateTime.now()
@@ -144,7 +145,7 @@ class MaterialShareService(
         transaction {
             val folder = MaterialFolderTable.selectAll()
                 .where { MaterialFolderTable.id eq folderId }
-                .singleOrNull() ?: throw NotFoundException("Folder not found")
+                .singleOrNotFound("Folder")
             requireOwnerOrAdmin(folder[MaterialFolderTable.teacherId].value, principal)
 
             FolderShareTable.deleteWhere {
@@ -157,7 +158,7 @@ class MaterialShareService(
     fun listFolderShares(folderId: UUID, principal: UserPrincipal): ShareListResponse = transaction {
         val folder = MaterialFolderTable.selectAll()
             .where { MaterialFolderTable.id eq folderId }
-            .singleOrNull() ?: throw NotFoundException("Folder not found")
+            .singleOrNotFound("Folder")
         requireOwnerOrAdmin(folder[MaterialFolderTable.teacherId].value, principal)
 
         val grants = FolderShareTable

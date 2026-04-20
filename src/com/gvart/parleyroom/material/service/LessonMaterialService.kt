@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.material.service
 
+import com.gvart.parleyroom.common.service.singleOrNotFound
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
@@ -39,7 +40,7 @@ class LessonMaterialService(
         transaction {
             val lessonRow = LessonTable.selectAll()
                 .where { LessonTable.id eq lessonId }
-                .singleOrNull() ?: throw NotFoundException("Lesson not found")
+                .singleOrNotFound("Lesson")
             val teacherId = lessonRow[LessonTable.teacherId].value
             lessonTeacherId = teacherId
             requireLessonEditor(teacherId, principal)
@@ -105,7 +106,7 @@ class LessonMaterialService(
         transaction {
             val lessonRow = LessonTable.selectAll()
                 .where { LessonTable.id eq lessonId }
-                .singleOrNull() ?: throw NotFoundException("Lesson not found")
+                .singleOrNotFound("Lesson")
             requireLessonEditor(lessonRow[LessonTable.teacherId].value, principal)
 
             LessonMaterialTable.deleteWhere {
@@ -118,7 +119,7 @@ class LessonMaterialService(
     fun list(lessonId: UUID, principal: UserPrincipal): LessonMaterialListResponse = transaction {
         val lessonRow = LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
-            .singleOrNull() ?: throw NotFoundException("Lesson not found")
+            .singleOrNotFound("Lesson")
 
         requireLessonReader(lessonRow[LessonTable.teacherId].value, lessonId, principal)
 

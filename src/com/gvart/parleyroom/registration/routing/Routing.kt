@@ -1,5 +1,8 @@
 package com.gvart.parleyroom.registration.routing
 
+
+import com.gvart.parleyroom.common.routing.getPathUUID
+import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.registration.initializer.initializeAdminUser
 import com.gvart.parleyroom.registration.service.PasswordResetService
@@ -9,12 +12,10 @@ import com.gvart.parleyroom.registration.transfer.InviteUserResponse
 import com.gvart.parleyroom.registration.transfer.RegisterUserRequest
 import com.gvart.parleyroom.registration.transfer.ResetPasswordRequest
 import com.gvart.parleyroom.registration.transfer.ResetPasswordResponse
-import com.gvart.parleyroom.user.security.UserPrincipal
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -64,7 +65,7 @@ fun Application.configureRegistrationModule() {
 
             authenticate {
                 post<InviteUserRequest>("/invite") {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
 
                     val result = registrationService.inviteUser(it, principal)
                     call.respond(HttpStatusCode.Created, result)
@@ -99,7 +100,7 @@ fun Application.configureRegistrationModule() {
         route("/api/v1/password-reset") {
             authenticate {
                 post {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
 
                     val result = passwordResetService.requestResetForSelf(principal)
                     call.respond(HttpStatusCode.Created, result)
@@ -119,8 +120,8 @@ fun Application.configureRegistrationModule() {
                 }
 
                 post("/{userId}") {
-                    val principal = call.principal<UserPrincipal>()!!
-                    val userId = UUID.fromString(call.parameters["userId"])
+                    val principal = call.requirePrincipal()
+                    val userId = call.getPathUUID("userId")
 
                     val result = passwordResetService.requestResetForUser(userId, principal)
                     call.respond(HttpStatusCode.Created, result)

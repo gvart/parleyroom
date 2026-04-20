@@ -1,5 +1,8 @@
 package com.gvart.parleyroom.lesson.routing
 
+
+import com.gvart.parleyroom.common.routing.getPathUUID
+import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.lesson.service.LessonDocumentService
@@ -18,13 +21,11 @@ import com.gvart.parleyroom.lesson.transfer.ReflectLessonRequest
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.lesson.transfer.StartLessonResponse
 import com.gvart.parleyroom.lesson.transfer.SyncLessonDocumentRequest
-import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.video.transfer.VideoAccess
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
@@ -48,7 +49,7 @@ fun Application.configureLessonRouting() {
         // /teachers/{id}/schedule page. 1:1 slots are scrubbed to busy blocks.
         route("/api/v1/public/teachers/{teacherId}/calendar") {
             get {
-                val teacherId = UUID.fromString(call.parameters["teacherId"])
+                val teacherId = call.getPathUUID("teacherId")
                 val from = call.request.queryParameters["from"]?.let(OffsetDateTime::parse)
                 val to = call.request.queryParameters["to"]?.let(OffsetDateTime::parse)
                 val result = lessonService.getPublicCalendar(teacherId, from, to)
@@ -83,7 +84,7 @@ fun Application.configureLessonRouting() {
         authenticate {
             route("/api/v1/lessons") {
                 get {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val from = call.request.queryParameters["from"]?.let(OffsetDateTime::parse)
                     val to = call.request.queryParameters["to"]?.let(OffsetDateTime::parse)
 
@@ -123,7 +124,7 @@ fun Application.configureLessonRouting() {
                 }
 
                 post<CreateLessonRequest> {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
 
                     val result = lifecycleService.createLesson(it, principal)
                     call.respond(HttpStatusCode.Created, result)
@@ -155,8 +156,8 @@ fun Application.configureLessonRouting() {
 
                 route("/{id}") {
                     get {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = lessonService.getLesson(id, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -189,8 +190,8 @@ fun Application.configureLessonRouting() {
                     }
 
                     post("/accept") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = lifecycleService.acceptLesson(id, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -219,8 +220,8 @@ fun Application.configureLessonRouting() {
                     }
 
                     post<CancelLessonRequest>("/cancel") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = lifecycleService.cancelLesson(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -260,8 +261,8 @@ fun Application.configureLessonRouting() {
                     }
 
                     post("/join") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         participantService.joinLesson(id, principal)
                         call.respond(HttpStatusCode.Created)
@@ -293,8 +294,8 @@ fun Application.configureLessonRouting() {
                     }
 
                     post("/start") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = lifecycleService.startLesson(id, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -331,8 +332,8 @@ fun Application.configureLessonRouting() {
                     }
 
                     post("/video-token") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = lifecycleService.getVideoAccess(id, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -365,8 +366,8 @@ fun Application.configureLessonRouting() {
                     }
 
                     put<SyncLessonDocumentRequest>("/sync") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = documentService.syncDocument(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -402,8 +403,8 @@ fun Application.configureLessonRouting() {
                     }
 
                     post<CompleteLessonRequest>("/complete") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = lifecycleService.completeLesson(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -439,8 +440,8 @@ fun Application.configureLessonRouting() {
                     }
 
                     post<ReflectLessonRequest>("/reflect") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = documentService.reflectOnLesson(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -477,9 +478,9 @@ fun Application.configureLessonRouting() {
 
                     route("/participants/{studentId}") {
                         post("/accept") {
-                            val principal = call.principal<UserPrincipal>()!!
-                            val id = UUID.fromString(call.parameters["id"])
-                            val studentId = UUID.fromString(call.parameters["studentId"])
+                            val principal = call.requirePrincipal()
+                            val id = call.getPathUUID()
+                            val studentId = call.getPathUUID("studentId")
 
                             participantService.acceptJoinRequest(id, studentId, principal)
                             call.respond(HttpStatusCode.OK)
@@ -514,9 +515,9 @@ fun Application.configureLessonRouting() {
                         }
 
                         post("/reject") {
-                            val principal = call.principal<UserPrincipal>()!!
-                            val id = UUID.fromString(call.parameters["id"])
-                            val studentId = UUID.fromString(call.parameters["studentId"])
+                            val principal = call.requirePrincipal()
+                            val id = call.getPathUUID()
+                            val studentId = call.getPathUUID("studentId")
 
                             participantService.rejectJoinRequest(id, studentId, principal)
                             call.respond(HttpStatusCode.OK)
@@ -553,8 +554,8 @@ fun Application.configureLessonRouting() {
 
                     route("/reschedule") {
                         post<RescheduleLessonRequest> {
-                            val principal = call.principal<UserPrincipal>()!!
-                            val id = UUID.fromString(call.parameters["id"])
+                            val principal = call.requirePrincipal()
+                            val id = call.getPathUUID()
 
                             rescheduleService.rescheduleLesson(id, it, principal)
                             call.respond(HttpStatusCode.Created)
@@ -589,8 +590,8 @@ fun Application.configureLessonRouting() {
                         }
 
                         post("/accept") {
-                            val principal = call.principal<UserPrincipal>()!!
-                            val id = UUID.fromString(call.parameters["id"])
+                            val principal = call.requirePrincipal()
+                            val id = call.getPathUUID()
 
                             val result = rescheduleService.acceptReschedule(id, principal)
                             call.respond(HttpStatusCode.OK, result)
@@ -619,8 +620,8 @@ fun Application.configureLessonRouting() {
                         }
 
                         post("/reject") {
-                            val principal = call.principal<UserPrincipal>()!!
-                            val id = UUID.fromString(call.parameters["id"])
+                            val principal = call.requirePrincipal()
+                            val id = call.getPathUUID()
 
                             rescheduleService.rejectReschedule(id, principal)
                             call.respond(HttpStatusCode.OK)

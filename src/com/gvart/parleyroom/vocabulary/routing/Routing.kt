@@ -1,5 +1,8 @@
 package com.gvart.parleyroom.vocabulary.routing
 
+
+import com.gvart.parleyroom.common.routing.getPathUUID
+import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.vocabulary.data.VocabStatus
@@ -8,12 +11,10 @@ import com.gvart.parleyroom.vocabulary.transfer.CreateVocabularyWordRequest
 import com.gvart.parleyroom.vocabulary.transfer.UpdateVocabularyWordRequest
 import com.gvart.parleyroom.vocabulary.transfer.VocabularyPageResponse
 import com.gvart.parleyroom.vocabulary.transfer.VocabularyWordResponse
-import com.gvart.parleyroom.user.security.UserPrincipal
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.principal
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.response.respond
 import io.ktor.server.routing.delete
@@ -32,7 +33,7 @@ fun Application.configureVocabularyRouting() {
         authenticate {
             route("/api/v1/vocabulary") {
                 get {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
                     val studentId = call.request.queryParameters["studentId"]?.let(UUID::fromString)
                     val status = call.request.queryParameters["status"]?.let { VocabStatus.valueOf(it) }
 
@@ -56,7 +57,7 @@ fun Application.configureVocabularyRouting() {
                 }
 
                 post<CreateVocabularyWordRequest> {
-                    val principal = call.principal<UserPrincipal>()!!
+                    val principal = call.requirePrincipal()
 
                     val result = vocabularyService.createWord(it, principal)
                     call.respond(HttpStatusCode.Created, result)
@@ -78,8 +79,8 @@ fun Application.configureVocabularyRouting() {
 
                 route("/{id}") {
                     get {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = vocabularyService.getWord(id, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -100,8 +101,8 @@ fun Application.configureVocabularyRouting() {
                     }
 
                     put<UpdateVocabularyWordRequest> {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = vocabularyService.updateWord(id, it, principal)
                         call.respond(HttpStatusCode.OK, result)
@@ -119,8 +120,8 @@ fun Application.configureVocabularyRouting() {
                     }
 
                     delete {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         vocabularyService.deleteWord(id, principal)
                         call.respond(HttpStatusCode.NoContent)
@@ -138,8 +139,8 @@ fun Application.configureVocabularyRouting() {
                     }
 
                     post("/review") {
-                        val principal = call.principal<UserPrincipal>()!!
-                        val id = UUID.fromString(call.parameters["id"])
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
 
                         val result = vocabularyService.reviewWord(id, principal)
                         call.respond(HttpStatusCode.OK, result)
