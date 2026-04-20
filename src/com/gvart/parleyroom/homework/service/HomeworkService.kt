@@ -191,11 +191,11 @@ class HomeworkService {
         throw ForbiddenException("No access to this homework")
     }
 
-    private fun requireHomeworkTeacherOrAdmin(hw: ResultRow, principal: UserPrincipal) {
-        if (principal.role == UserRole.ADMIN) return
-        if (hw[HomeworkTable.teacherId].value != principal.id)
-            throw ForbiddenException("Only the assigning teacher can perform this action")
-    }
+    private fun requireHomeworkTeacherOrAdmin(hw: ResultRow, principal: UserPrincipal) =
+        AuthorizationHelper.requireOwnerOrAdmin(
+            hw[HomeworkTable.teacherId].value, principal,
+            "Only the assigning teacher can perform this action",
+        )
 
     private fun toResponse(row: ResultRow) = HomeworkResponse(
         id = row[HomeworkTable.id].value.toString(),

@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.material.service
 
+import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.service.singleOrNotFound
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
@@ -138,11 +139,11 @@ class LessonMaterialService(
         LessonMaterialListResponse(items)
     }
 
-    private fun requireLessonEditor(teacherId: UUID, principal: UserPrincipal) {
-        if (principal.role == UserRole.ADMIN) return
-        if (principal.role != UserRole.TEACHER || teacherId != principal.id)
-            throw ForbiddenException("Only the owning teacher can modify lesson attachments")
-    }
+    private fun requireLessonEditor(teacherId: UUID, principal: UserPrincipal) =
+        AuthorizationHelper.requireOwnerOrAdmin(
+            teacherId, principal,
+            "Only the owning teacher can modify lesson attachments",
+        )
 
     private fun requireLessonReader(teacherId: UUID, lessonId: UUID, principal: UserPrincipal) {
         when (principal.role) {
