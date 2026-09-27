@@ -173,7 +173,7 @@ class LessonLifecycleService(
             throw ForbiddenException("Only the assigned teacher can accept lesson requests")
 
         if (lesson[LessonTable.status] != LessonStatus.REQUEST)
-            throw BadRequestException("Only lessons with REQUEST status can be accepted")
+            throw BadRequestException("Only lessons with REQUEST status can be accepted", code = "LESSON_INVALID_STATE")
 
         LessonTable.update({ LessonTable.id eq lessonId }) {
             it[status] = LessonStatus.CONFIRMED
@@ -223,7 +223,7 @@ class LessonLifecycleService(
         val currentStatus = lesson[LessonTable.status]
 
         if (currentStatus == LessonStatus.COMPLETED || currentStatus == LessonStatus.CANCELLED)
-            throw BadRequestException("Cannot cancel a ${currentStatus.name.lowercase()} lesson")
+            throw BadRequestException("Cannot cancel a ${currentStatus.name.lowercase()} lesson", code = "LESSON_INVALID_STATE")
 
         support.requireLessonParticipant(lessonId, lesson, principal)
 
@@ -278,10 +278,10 @@ class LessonLifecycleService(
             throw ForbiddenException("Only the assigned teacher can start this lesson")
 
         if (lesson[LessonTable.status] != LessonStatus.CONFIRMED)
-            throw BadRequestException("Only confirmed lessons can be started")
+            throw BadRequestException("Only confirmed lessons can be started", code = "LESSON_INVALID_STATE")
 
         if (lesson[LessonTable.startedAt] != null)
-            throw ConflictException("Lesson has already been started")
+            throw ConflictException("Lesson has already been started", code = "LESSON_ALREADY_STARTED")
 
         val now = OffsetDateTime.now()
 
@@ -347,7 +347,7 @@ class LessonLifecycleService(
             throw ForbiddenException("Only the assigned teacher can complete this lesson")
 
         if (lesson[LessonTable.status] != LessonStatus.IN_PROGRESS)
-            throw BadRequestException("Only in-progress lessons can be completed")
+            throw BadRequestException("Only in-progress lessons can be completed", code = "LESSON_INVALID_STATE")
 
         val now = OffsetDateTime.now()
 
@@ -407,7 +407,7 @@ class LessonLifecycleService(
             else -> false
         }
         if (!allowed)
-            throw BadRequestException("Video room is not yet available for this lesson")
+            throw BadRequestException("Video room is not yet available for this lesson", code = "VIDEO_ROOM_NOT_READY")
 
         mintVideoAccess(lessonId, principal)
     }
@@ -417,7 +417,7 @@ class LessonLifecycleService(
             .where { UserTable.id eq principal.id }
             .singleOrNull()
             ?.get(UserTable.firstName)
-            ?: throw NotFoundException("User not found")
+            ?: throw NotFoundException("User not found", code = "USER_NOT_FOUND")
 
         val role = when (principal.role) {
             UserRole.TEACHER, UserRole.ADMIN -> VideoParticipantRole.TEACHER

@@ -2,6 +2,7 @@ package com.gvart.parleyroom.user
 
 import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.common.data.LanguageLevel
+import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import com.gvart.parleyroom.user.transfer.UserListResponse
 import com.gvart.parleyroom.user.transfer.UserResponse
@@ -132,12 +133,39 @@ class UserIntegrationTest : IntegrationTest() {
         val response = client.patch("/api/v1/users/me") {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
-            setBody(UpdateProfileRequest(locale = "es"))
+            setBody(UpdateProfileRequest(locale = "de"))
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
         val body = response.body<UserResponse>()
-        assertEquals("es", body.locale)
+        assertEquals("de", body.locale)
+    }
+
+    @Test
+    fun `new users default to en locale`() = testApp {
+        val client = createJsonClient(this)
+        val token = getStudentToken(client)
+
+        val body = client.get("/api/v1/users/me") { bearerAuth(token) }.body<UserResponse>()
+
+        assertEquals("en", body.locale)
+    }
+
+    @Test
+    fun `PATCH me rejects unsupported locale with UNSUPPORTED_LOCALE`() = testApp {
+        val client = createJsonClient(this)
+        val token = getStudentToken(client)
+
+        val response = client.patch("/api/v1/users/me") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(UpdateProfileRequest(locale = "es"))
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertEquals("UNSUPPORTED_LOCALE", response.body<ProblemDetail>().code)
+        val me = client.get("/api/v1/users/me") { bearerAuth(token) }.body<UserResponse>()
+        assertEquals("en", me.locale)
     }
 
     @Test

@@ -50,7 +50,7 @@ class LessonDocumentService(
 
         val status = lesson[LessonTable.status]
         if (status != LessonStatus.CONFIRMED && status != LessonStatus.IN_PROGRESS)
-            throw BadRequestException("Can only sync document for a confirmed or in-progress lesson")
+            throw BadRequestException("Can only sync document for a confirmed or in-progress lesson", code = "LESSON_INVALID_STATE")
 
         ensureDocument(lessonId)
 
@@ -79,7 +79,7 @@ class LessonDocumentService(
             throw ForbiddenException("Only students can submit reflections")
 
         if (lesson[LessonTable.startedAt] == null)
-            throw BadRequestException("Lesson has not been started yet")
+            throw BadRequestException("Lesson has not been started yet", code = "LESSON_NOT_STARTED")
 
         ensureDocument(lessonId)
 

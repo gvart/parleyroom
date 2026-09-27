@@ -1,3 +1,3 @@
 package com.gvart.parleyroom.common.transfer.exception
 
-class UnauthorizedException(message: String): Exception(message)
+class UnauthorizedException(message: String, val code: String? = null) : Exception(message)

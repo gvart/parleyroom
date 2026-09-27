@@ -23,6 +23,7 @@ import com.gvart.parleyroom.user.data.RefreshTokenTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
 import com.gvart.parleyroom.user.data.UserTable
+import com.gvart.parleyroom.user.data.requireSupportedLocale
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.vocabulary.data.VocabularyWordTable
 import org.jetbrains.exposed.v1.core.Op
@@ -95,6 +96,7 @@ class AdminService {
     }
 
     fun createUser(request: AdminCreateUserRequest): AdminUserResponse = transaction {
+        request.locale?.let(::requireSupportedLocale)
         val email = request.email.trim()
         val firstName = request.firstName.trim()
         val lastName = request.lastName.trim()
@@ -102,7 +104,7 @@ class AdminService {
         val exists = UserTable.selectAll()
             .where { UserTable.email eq email }
             .empty().not()
-        if (exists) throw ConflictException("User with this email already exists")
+        if (exists) throw ConflictException("User with this email already exists", code = "EMAIL_ALREADY_EXISTS")
 
         val newId = UserTable.insert {
             it[UserTable.email] = email
@@ -124,15 +126,16 @@ class AdminService {
         principal: UserPrincipal,
         request: AdminUpdateUserRequest,
     ): AdminUserResponse = transaction {
+        request.locale?.let(::requireSupportedLocale)
         val current = loadById(id)
         val currentRole = current[UserTable.role]
         val currentStatus = current[UserTable.status]
 
         if (id == principal.id) {
             if (request.role != null && request.role != currentRole)
-                throw BadRequestException("Admins cannot change their own role")
+                throw BadRequestException("Admins cannot change their own role", code = "ADMIN_SELF_ACTION")
             if (request.status != null && request.status != UserStatus.ACTIVE)
-                throw BadRequestException("Admins cannot deactivate themselves")
+                throw BadRequestException("Admins cannot deactivate themselves", code = "ADMIN_SELF_ACTION")
         }
 
         val newEmail = request.email?.trim()
@@ -140,7 +143,7 @@ class AdminService {
             val emailTaken = UserTable.selectAll()
                 .where { (UserTable.email eq newEmail) and (UserTable.id neq id) }
                 .empty().not()
-            if (emailTaken) throw ConflictException("User with this email already exists")
+            if (emailTaken) throw ConflictException("User with this email already exists", code = "EMAIL_ALREADY_EXISTS")
         }
 
         val newFirstName = request.firstName?.trim() ?: current[UserTable.firstName]
@@ -167,7 +170,7 @@ class AdminService {
     }
 
     fun softDeleteUser(id: UUID, principal: UserPrincipal): Unit = transaction {
-        if (id == principal.id) throw BadRequestException("Admins cannot delete themselves")
+        if (id == principal.id) throw BadRequestException("Admins cannot delete themselves", code = "ADMIN_SELF_ACTION")
         val current = loadById(id)
         UserTable.update({ UserTable.id eq id }) {
             it[status] = UserStatus.INACTIVE
@@ -179,7 +182,7 @@ class AdminService {
     }
 
     fun hardDeleteUser(id: UUID, principal: UserPrincipal): Unit = transaction {
-        if (id == principal.id) throw BadRequestException("Admins cannot delete themselves")
+        if (id == principal.id) throw BadRequestException("Admins cannot delete themselves", code = "ADMIN_SELF_ACTION")
         loadById(id)
         try {
             UserTable.deleteWhere { UserTable.id eq id }
@@ -214,7 +217,7 @@ class AdminService {
 
     fun setStatus(id: UUID, principal: UserPrincipal, newStatus: UserStatus): AdminUserResponse = transaction {
         if (id == principal.id && newStatus != UserStatus.ACTIVE)
-            throw BadRequestException("Admins cannot deactivate themselves")
+            throw BadRequestException("Admins cannot deactivate themselves", code = "ADMIN_SELF_ACTION")
 
         val current = loadById(id)
         UserTable.update({ UserTable.id eq id }) {

@@ -33,7 +33,7 @@ class LessonRescheduleService(
         val lesson = support.findLesson(lessonId)
 
         if (lesson[LessonTable.status] != LessonStatus.CONFIRMED)
-            throw BadRequestException("Only confirmed lessons can be rescheduled")
+            throw BadRequestException("Only confirmed lessons can be rescheduled", code = "LESSON_INVALID_STATE")
 
         support.requireLessonParticipant(lessonId, lesson, principal)
 
@@ -58,7 +58,7 @@ class LessonRescheduleService(
             .empty().not()
 
         if (hasPending)
-            throw ConflictException("A reschedule is already pending for this lesson")
+            throw ConflictException("A reschedule is already pending for this lesson", code = "RESCHEDULE_ALREADY_PENDING")
 
         LessonEventTable.insert {
             it[LessonEventTable.lessonId] = lessonId

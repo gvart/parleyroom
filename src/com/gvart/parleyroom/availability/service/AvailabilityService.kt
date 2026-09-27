@@ -137,7 +137,7 @@ class AvailabilityService {
             (TeacherAvailabilityExceptionTable.id eq exceptionId) and
                     (TeacherAvailabilityExceptionTable.teacherId eq teacherId)
         }
-        if (deleted == 0) throw NotFoundException("Exception not found")
+        if (deleted == 0) throw NotFoundException("Exception not found", code = "AVAILABILITY_EXCEPTION_NOT_FOUND")
     }
 
     /** Public (unauthenticated) read. No access guard, used by public calendar. */
@@ -185,7 +185,7 @@ class AvailabilityService {
         val role = UserTable.selectAll()
             .where { UserTable.id eq teacherId }
             .singleOrNull()?.get(UserTable.role)
-            ?: throw NotFoundException("Teacher not found")
+            ?: throw NotFoundException("Teacher not found", code = "TEACHER_NOT_FOUND")
         if (role != UserRole.TEACHER) throw BadRequestException("User is not a teacher")
     }
 

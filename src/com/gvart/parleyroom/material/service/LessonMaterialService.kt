@@ -55,7 +55,7 @@ class LessonMaterialService(
                 .associate { it[MaterialTable.id].value to it[MaterialTable.teacherId].value }
 
             if (ownershipOk.size != materialIds.size) {
-                throw NotFoundException("One or more materials not found")
+                throw NotFoundException("One or more materials not found", code = "MATERIAL_NOT_FOUND")
             }
             if (principal.role != UserRole.ADMIN) {
                 ownershipOk.values.forEach {

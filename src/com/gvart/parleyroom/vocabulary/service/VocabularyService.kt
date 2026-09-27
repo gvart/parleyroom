@@ -90,7 +90,7 @@ class VocabularyService {
             }.singleOrNull()
 
         if (existing != null)
-            throw ConflictException("Word '${request.german}' already exists for this student")
+            throw ConflictException("Word '${request.german}' already exists for this student", code = "VOCABULARY_DUPLICATE")
 
         val now = OffsetDateTime.now()
         val id = VocabularyWordTable.insertAndGetId {

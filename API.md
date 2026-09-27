@@ -189,6 +189,10 @@ Sets status -> ABANDONED. Only on ACTIVE goals.
 
 ## Lesson Changes
 
+### New: Teacher in lesson responses
+Every `LessonResponse` (list, detail, and the lesson returned by mutations) now includes
+`teacher: { id, firstName, lastName }` next to the existing `teacherId`.
+
 ### New: Cancel endpoint
 ```
 POST /api/v1/lessons/{id}/cancel
@@ -279,3 +283,37 @@ PUT/DELETE: owning teacher or admin only. DELETE also removes the stored object.
   "createdAt": "ISO8601"
 }
 ```
+
+---
+
+## Error responses
+
+Every error body is a ProblemDetail with a stable machine-readable `code`
+(UPPER_SNAKE). Clients translate by `code`; `detail` is English debug text.
+
+```json
+{ "type": "about:blank", "title": "Not Found", "status": 404, "detail": "Lesson not found", "code": "LESSON_NOT_FOUND" }
+```
+
+Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATION_FAILED`,
+`MALFORMED_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_ERROR`.
+
+| Area | Codes |
+|---|---|
+| Auth | `INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `INVALID_REFRESH_TOKEN`, `REFRESH_TOKEN_EXPIRED` |
+| Telegram | `TELEGRAM_NOT_LINKED`, `TELEGRAM_ALREADY_LINKED`, `TELEGRAM_NOT_CONFIGURED`, `TELEGRAM_AUTH_INVALID`, `TELEGRAM_AUTH_EXPIRED` |
+| Users | `USER_NOT_FOUND`, `TEACHER_NOT_FOUND`, `EMAIL_ALREADY_EXISTS`, `UNSUPPORTED_LOCALE`, `AVATAR_INVALID`, `AVATAR_NOT_FOUND`, `ADMIN_SELF_ACTION` |
+| Registration / reset | `INVITATION_ALREADY_PENDING`, `REGISTRATION_LINK_INVALID`, `REGISTRATION_LINK_EXPIRED`, `REGISTRATION_LINK_USED`, `RESET_TOKEN_INVALID`, `RESET_TOKEN_EXPIRED`, `RESET_TOKEN_USED` |
+| Lessons | `LESSON_NOT_FOUND`, `LESSON_INVALID_STATE`, `LESSON_FULL`, `LESSON_NOT_JOINABLE`, `LESSON_ALREADY_STARTED`, `LESSON_NOT_STARTED`, `ALREADY_PARTICIPANT`, `STUDENT_NOT_IN_LESSON`, `JOIN_REQUEST_ALREADY_PENDING`, `JOIN_REQUEST_NOT_FOUND`, `RESCHEDULE_ALREADY_PENDING`, `RESCHEDULE_NOT_FOUND`, `VIDEO_ROOM_NOT_READY` |
+| Availability | `AVAILABILITY_SLOT_BLOCKED`, `AVAILABILITY_MIN_NOTICE`, `AVAILABILITY_OVERLAP`, `AVAILABILITY_BUFFER_CONFLICT`, `AVAILABILITY_EXCEPTION_NOT_FOUND` |
+| Materials | `MATERIAL_NOT_FOUND`, `MATERIAL_FILE_NOT_FOUND`, `FOLDER_NOT_FOUND`, `TARGET_FOLDER_NOT_FOUND`, `FOLDER_NOT_EMPTY`, `FOLDER_NAME_TAKEN`, `FOLDER_CYCLE`, `FILE_TOO_LARGE` |
+| Homework / goals / vocabulary | `HOMEWORK_NOT_FOUND`, `HOMEWORK_INVALID_STATE`, `GOAL_NOT_FOUND`, `GOAL_NOT_ACTIVE`, `VOCABULARY_WORD_NOT_FOUND`, `VOCABULARY_DUPLICATE` |
+
+---
+
+## User locale
+
+`UserResponse.locale` is the user's interface language (`en` | `de`, default `en`).
+Set it with `PATCH /api/v1/users/me { "locale": "de" }` (admins: `PATCH /api/v1/admin/users/{id}`).
+Unsupported values return 400 `UNSUPPORTED_LOCALE`. The supported list lives in
+`user/data/SupportedLocale.kt`; adding a language is a one-line change there.

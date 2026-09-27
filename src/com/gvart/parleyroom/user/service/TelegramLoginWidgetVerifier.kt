@@ -28,7 +28,7 @@ class TelegramLoginWidgetVerifier(private val config: TelegramConfig) {
 
     fun verify(req: TelegramLoginWidgetRequest): VerifiedWidgetUser {
         if (config.botToken.isBlank()) {
-            throw UnauthorizedException("Telegram bot is not configured on this server")
+            throw UnauthorizedException("Telegram bot is not configured on this server", code = "TELEGRAM_NOT_CONFIGURED")
         }
         if (req.hash.isBlank()) {
             throw BadRequestException("widget payload is missing 'hash'")
@@ -47,13 +47,13 @@ class TelegramLoginWidgetVerifier(private val config: TelegramConfig) {
         val secret = sha256(config.botToken.toByteArray())
         val expected = hmacSha256(secret, dataCheckString.toByteArray()).toHex()
         if (!constantTimeEquals(expected, req.hash.lowercase())) {
-            throw UnauthorizedException("widget signature is invalid")
+            throw UnauthorizedException("widget signature is invalid", code = "TELEGRAM_AUTH_INVALID")
         }
 
         val authDate = Instant.ofEpochSecond(req.authDate)
         val maxAge = config.initDataMaxAge.toJavaDuration()
         if (authDate.plus(maxAge).isBefore(Instant.now())) {
-            throw UnauthorizedException("widget payload has expired")
+            throw UnauthorizedException("widget payload has expired", code = "TELEGRAM_AUTH_EXPIRED")
         }
 
         return VerifiedWidgetUser(

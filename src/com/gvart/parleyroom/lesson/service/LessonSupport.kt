@@ -14,6 +14,7 @@ import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.lesson.transfer.LessonDocumentResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.LessonStudentResponse
+import com.gvart.parleyroom.lesson.transfer.LessonTeacherResponse
 import com.gvart.parleyroom.lesson.transfer.PendingRescheduleResponse
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
@@ -54,7 +55,7 @@ class LessonSupport {
                         (LessonEventTable.eventType eq LessonEventType.RESCHEDULE_REQUESTED) and
                         (LessonEventTable.resolved eq false)
             }
-            .singleOrNull() ?: throw NotFoundException("No pending reschedule found")
+            .singleOrNull() ?: throw NotFoundException("No pending reschedule found", code = "RESCHEDULE_NOT_FOUND")
 
     fun findStudentEntry(lessonId: UUID, studentId: UUID): ResultRow =
         LessonStudentTable.selectAll()
@@ -62,7 +63,7 @@ class LessonSupport {
                 (LessonStudentTable.lessonId eq lessonId) and
                         (LessonStudentTable.studentId eq studentId)
             }
-            .singleOrNull() ?: throw NotFoundException("Student not found in this lesson")
+            .singleOrNull() ?: throw NotFoundException("Student not found in this lesson", code = "STUDENT_NOT_IN_LESSON")
 
     fun requireLessonParticipant(lessonId: UUID, lesson: ResultRow, principal: UserPrincipal) {
         if (principal.role == UserRole.ADMIN) return
@@ -173,6 +174,16 @@ class LessonSupport {
                 )
             }
 
+        val teachersById: Map<UUID, LessonTeacherResponse> = UserTable.selectAll()
+            .where { UserTable.id inList rows.map { it[LessonTable.teacherId].value }.distinct() }
+            .associate { teacherRow ->
+                teacherRow[UserTable.id].value to LessonTeacherResponse(
+                    id = teacherRow[UserTable.id].value.toString(),
+                    firstName = teacherRow[UserTable.firstName],
+                    lastName = teacherRow[UserTable.lastName],
+                )
+            }
+
         val docByLesson: Map<UUID, ResultRow> = LessonDocumentTable.selectAll()
             .where { LessonDocumentTable.lessonId inList lessonIds }
             .associateBy { it[LessonDocumentTable.lessonId].value }
@@ -201,6 +212,7 @@ class LessonSupport {
                 scheduledAt = row[LessonTable.scheduledAt],
                 durationMinutes = row[LessonTable.durationMinutes],
                 teacherId = row[LessonTable.teacherId].value.toString(),
+                teacher = teachersById.getValue(row[LessonTable.teacherId].value),
                 status = row[LessonTable.status],
                 topic = row[LessonTable.topic],
                 level = row[LessonTable.level],

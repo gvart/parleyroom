@@ -41,11 +41,11 @@ class AuthenticationService(
                 .where { UserTable.email eq request.email }
                 .forUpdate()
                 .singleOrNull()
-                ?: return@transaction Result.failure(UnauthorizedException("Invalid credentials"))
+                ?: return@transaction Result.failure(UnauthorizedException("Invalid credentials", code = "INVALID_CREDENTIALS"))
 
             val currentLock = user[UserTable.lockedUntil]
             if (currentLock != null && currentLock.isAfter(now)) {
-                return@transaction Result.failure(UnauthorizedException("Account is locked. Try again later."))
+                return@transaction Result.failure(UnauthorizedException("Account is locked. Try again later.", code = "ACCOUNT_LOCKED"))
             }
 
             val userId = user[UserTable.id].value
@@ -61,7 +61,7 @@ class AuthenticationService(
                         it[failedLoginAttempts] = newCount
                     }
                 }
-                return@transaction Result.failure(UnauthorizedException("Invalid credentials"))
+                return@transaction Result.failure(UnauthorizedException("Invalid credentials", code = "INVALID_CREDENTIALS"))
             }
 
             if (user[UserTable.failedLoginAttempts] > 0 || currentLock != null) {
@@ -83,14 +83,14 @@ class AuthenticationService(
                 .where { RefreshTokenTable.tokenHash eq hash }
                 .forUpdate()
                 .singleOrNull()
-                ?: return@transaction Result.failure(UnauthorizedException("Invalid refresh token"))
+                ?: return@transaction Result.failure(UnauthorizedException("Invalid refresh token", code = "INVALID_REFRESH_TOKEN"))
 
             val userId = tokenRow[RefreshTokenTable.userId].value
             val expiresAt = tokenRow[RefreshTokenTable.expiresAt]
 
             if (expiresAt.toInstant().isBefore(Instant.now())) {
                 RefreshTokenTable.deleteWhere { RefreshTokenTable.userId eq userId }
-                return@transaction Result.failure(UnauthorizedException("Refresh token expired"))
+                return@transaction Result.failure(UnauthorizedException("Refresh token expired", code = "REFRESH_TOKEN_EXPIRED"))
             }
 
             RefreshTokenTable.deleteWhere { RefreshTokenTable.tokenHash eq hash }
@@ -98,7 +98,7 @@ class AuthenticationService(
             val user = UserTable.selectAll()
                 .where { UserTable.id eq userId }
                 .singleOrNull()
-                ?: return@transaction Result.failure(UnauthorizedException("Invalid refresh token"))
+                ?: return@transaction Result.failure(UnauthorizedException("Invalid refresh token", code = "INVALID_REFRESH_TOKEN"))
 
             Result.success(issueTokens(user))
         }
@@ -111,7 +111,7 @@ class AuthenticationService(
             (RefreshTokenTable.tokenHash eq hash) and (RefreshTokenTable.userId eq userId)
         }
         if (deleted == 0) {
-            throw UnauthorizedException("Invalid refresh token")
+            throw UnauthorizedException("Invalid refresh token", code = "INVALID_REFRESH_TOKEN")
         }
     }
 

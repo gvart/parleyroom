@@ -28,13 +28,13 @@ class LessonParticipantService(
         val lesson = support.findLessonForUpdate(lessonId)
 
         if (lesson[LessonTable.type] == LessonType.ONE_ON_ONE)
-            throw BadRequestException("Cannot request to join a one-on-one lesson")
+            throw BadRequestException("Cannot request to join a one-on-one lesson", code = "LESSON_NOT_JOINABLE")
 
         if (lesson[LessonTable.status] != LessonStatus.CONFIRMED)
-            throw BadRequestException("Can only join confirmed lessons")
+            throw BadRequestException("Can only join confirmed lessons", code = "LESSON_INVALID_STATE")
 
         if (lesson[LessonTable.teacherId].value == principal.id)
-            throw BadRequestException("Teacher is already a participant")
+            throw BadRequestException("Teacher is already a participant", code = "ALREADY_PARTICIPANT")
 
         val existing = LessonStudentTable.selectAll()
             .where {
@@ -45,9 +45,9 @@ class LessonParticipantService(
         if (existing != null) {
             val existingStatus = existing[LessonStudentTable.status]
             if (existingStatus == LessonStudentStatus.CONFIRMED)
-                throw ConflictException("Already a participant of this lesson")
+                throw ConflictException("Already a participant of this lesson", code = "ALREADY_PARTICIPANT")
             if (existingStatus == LessonStudentStatus.REQUESTED)
-                throw ConflictException("Join request already pending")
+                throw ConflictException("Join request already pending", code = "JOIN_REQUEST_ALREADY_PENDING")
             LessonStudentTable.update({
                 (LessonStudentTable.lessonId eq lessonId) and
                         (LessonStudentTable.studentId eq principal.id)
@@ -65,7 +65,7 @@ class LessonParticipantService(
                             (LessonStudentTable.status eq LessonStudentStatus.CONFIRMED)
                 }.count()
             if (currentCount >= maxParticipants)
-                throw BadRequestException("Lesson is full")
+                throw BadRequestException("Lesson is full", code = "LESSON_FULL")
         }
 
         LessonStudentTable.insert {
@@ -90,7 +90,7 @@ class LessonParticipantService(
 
         val entry = support.findStudentEntry(lessonId, studentId)
         if (entry[LessonStudentTable.status] != LessonStudentStatus.REQUESTED)
-            throw BadRequestException("No pending join request for this student")
+            throw BadRequestException("No pending join request for this student", code = "JOIN_REQUEST_NOT_FOUND")
 
         val maxParticipants = lesson[LessonTable.maxParticipants]
         if (maxParticipants != null) {
@@ -100,7 +100,7 @@ class LessonParticipantService(
                             (LessonStudentTable.status eq LessonStudentStatus.CONFIRMED)
                 }.count()
             if (currentCount >= maxParticipants)
-                throw BadRequestException("Lesson is full")
+                throw BadRequestException("Lesson is full", code = "LESSON_FULL")
         }
 
         LessonStudentTable.update({
@@ -126,7 +126,7 @@ class LessonParticipantService(
 
         val entry = support.findStudentEntry(lessonId, studentId)
         if (entry[LessonStudentTable.status] != LessonStudentStatus.REQUESTED)
-            throw BadRequestException("No pending join request for this student")
+            throw BadRequestException("No pending join request for this student", code = "JOIN_REQUEST_NOT_FOUND")
 
         LessonStudentTable.update({
             (LessonStudentTable.lessonId eq lessonId) and
