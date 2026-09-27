@@ -1,57 +1,143 @@
 # New Backend Endpoints
 
-## Vocabulary (`/api/v1/vocabulary`)
+## Teacher library: topics & grammar (`/api/v1/topics`, `/api/v1/grammar-topics`)
 
-Student SRS (spaced repetition) flashcard system for German-English word pairs.
-
-```
-GET /api/v1/vocabulary?studentId=UUID&status=NEW|REVIEW|LEARNED
-```
-- **Student** -> own words only
-- **Teacher** -> words for their students (use `studentId` filter)
-- **Admin** -> all
+Each teacher owns their library; it starts empty. Writes are **teacher only**; students
+can read their teachers' topics / grammar topics; admins read all.
 
 ```
-POST /api/v1/vocabulary
-Body: { studentId, german, english, category, lessonId?, exampleSentence?, exampleTranslation? }
+GET    /api/v1/topics                    -> [Topic]   flat list, build the tree from parentId
+POST   /api/v1/topics                    Body: { name, parentId?, levels?: [A1..C2] }
+PATCH  /api/v1/topics/{id}               Body: { name?, parentId?, moveToRoot?: bool, levels? }
+DELETE /api/v1/topics/{id}               409 TOPIC_HAS_CHILDREN if it has sub-topics
 ```
-- **Student** -> can only add for themselves
-- **Teacher** -> can add for students in their `teacher_students` relationship
-- `category`: NOUN, VERB, ADJECTIVE, ADVERB, GRAMMAR
-- Unique constraint on `(studentId, german)` -> 409 on duplicate
+Topic: `{ id, teacherId, parentId?, name, levels: [Level], createdAt }`. Sibling names are
+unique case-insensitively (409 `TOPIC_DUPLICATE`); moving under a descendant is 400 `TOPIC_CYCLE`.
+
+```
+GET    /api/v1/grammar-topics?level=B1   ordered by level, then name
+POST   /api/v1/grammar-topics            Body: { name, level?, category?, explanation?, examples: [string] }
+GET    /api/v1/grammar-topics/{id}
+PUT    /api/v1/grammar-topics/{id}       full replace, same body
+DELETE /api/v1/grammar-topics/{id}
+```
+
+## Groups / clubs (`/api/v1/groups`)
+
+Teacher only (admins see all; students 403). Members must be the teacher's students
+(400 `STUDENT_NOT_LINKED`).
+
+```
+GET    /api/v1/groups
+POST   /api/v1/groups                     Body: { name, level?, type: SPEECH|READING, studentIds?: [] }
+GET    /api/v1/groups/{id}
+PUT    /api/v1/groups/{id}                Body: { name, level?, type }   (members untouched)
+DELETE /api/v1/groups/{id}                lessons keep existing, groupId cleared
+PUT    /api/v1/groups/{id}/members        Body: { studentIds }  replace
+POST   /api/v1/groups/{id}/members        Body: { studentIds }  add (existing ignored)
+DELETE /api/v1/groups/{id}/members/{studentId}
+```
+Group: `{ id, teacherId, name, level?, type, members: [{ id, firstName, lastName, level? }], createdAt }`.
+`POST /api/v1/lessons` accepts an optional `groupId` for club lessons (open self-join is unchanged).
+
+## Vocabulary
+
+Words live in a **per-teacher library** of `VocabEntry`s. Entries are deduplicated within a
+teacher's library on `lower(lemma) + article + wordType` ("das Essen" NOUN and "essen" VERB are
+different entries). Students get words through `StudentVocab` rows (status + FSRS scheduling columns).
+
+### Library entries (`/api/v1/vocab-entries`, teacher only; admins can list, edit and delete)
+
+```
+GET    /api/v1/vocab-entries?q=&topicId=&level=&wordType=&page=&pageSize=  -> { entries, total, page, pageSize }
+GET    /api/v1/vocab-entries/lookup?lemma=&article=&wordType=              -> [VocabEntry]  (exact, case-insensitive)
+POST   /api/v1/vocab-entries            Body: VocabEntryInput   409 VOCAB_ENTRY_DUPLICATE
+GET    /api/v1/vocab-entries/{id}
+PUT    /api/v1/vocab-entries/{id}       Body: VocabEntryInput   full replace
+DELETE /api/v1/vocab-entries/{id}       also removes the word from every student
+POST   /api/v1/vocab-entries/{id}/assign  Body: { studentIds?: [], groupId?, lessonId? } -> { assigned, skipped }
+```
+
+VocabEntryInput:
+```json
+{
+  "lemma": "Wort", "article": "DER | DIE | DAS | null (nouns only)", "plural": "Wörter",
+  "wordType": "NOUN | VERB | ADJECTIVE | ADVERB | PREPOSITION | CONJUNCTION | PRONOUN | PHRASE | OTHER",
+  "forms": "ist geblieben", "government": "sich kümmern um + Akk.",
+  "translations": { "ru": "слово", "en": "word" },
+  "explanationDe": "…", "exampleSentence": "…", "level": "A2",
+  "topicIds": ["uuid"], "synonyms": ["Begriff"], "sourceLessonId": "uuid | null"
+}
+```
+`VocabEntry` = input + `id, teacherId, createdAt, updatedAt`. Lemma case is kept as written.
+`translations` is keyed by language code; supported codes are `ru`, `en`
+(`vocabulary/service/VocabDisplay.kt`; others -> 400 `VOCAB_LANGUAGE_UNSUPPORTED`).
+
+**Assign targets**: `studentIds` ∪ members of `groupId`; if both are empty and `lessonId` is set,
+the lesson's confirmed students. With `lessonId`, the entry is also linked to the lesson's words.
+Students who already have the word are counted in `skipped`.
+
+### Student vocabulary (`/api/v1/vocabulary`)
+
+```
+GET /api/v1/vocabulary?studentId=&status=&topicId=&level=&lessonId=&q=&page=&pageSize=
+    -> { words: [StudentVocab], total, page, pageSize }
+```
+- **Student** -> own words; **Teacher** -> their students' words; **Admin** -> all
+- `status`: NEW | LEARNING | REVIEW | LEARNED; `lessonId` = lesson in which the student got the word
+
+```
+POST /api/v1/vocabulary   (teacher quick-add)
+Body: { entry: VocabEntryInput, studentIds?: [], groupId?, lessonId? }
+-> 201 { entry: VocabEntry, reused: bool, assigned, skipped }
+```
+Finds the entry by dedupe key or creates it (`sourceLessonId` defaults to `lessonId`), links it
+to the lesson and assigns it (same target rules as `/assign`).
 
 ```
 GET    /api/v1/vocabulary/{id}
-PUT    /api/v1/vocabulary/{id}    Body: { german?, english?, exampleSentence?, exampleTranslation?, category? }
-DELETE /api/v1/vocabulary/{id}
+PUT    /api/v1/vocabulary/{id}          Body: { status }
+DELETE /api/v1/vocabulary/{id}          removes the word from the student (library entry stays)
+POST   /api/v1/vocabulary/{id}/review
 ```
-Owner student, their teacher, or admin.
+`{id}` is the student-vocab id. Review (until FSRS lands): `reps+1`, interval `2^reps` days (max 64)
+into `due`/`scheduledDays`, `lastReview = now`; status LEARNING (<3 reps) -> REVIEW (3–4) -> LEARNED (5+).
 
-```
-POST /api/v1/vocabulary/{id}/review
-```
-Marks word as reviewed:
-- Increments `reviewCount`
-- Status: NEW -> REVIEW (first review), REVIEW -> LEARNED (after 5 reviews)
-- Sets `nextReviewAt` = now + 2^reviewCount days (capped at 64 days)
-
-### Response shape
+StudentVocab:
 ```json
 {
-  "id": "uuid",
-  "studentId": "uuid",
-  "lessonId": "uuid | null",
-  "german": "Haus",
-  "english": "house",
-  "exampleSentence": "string | null",
-  "exampleTranslation": "string | null",
-  "category": "NOUN",
-  "status": "NEW | REVIEW | LEARNED",
-  "nextReviewAt": "ISO8601 | null",
-  "reviewCount": 0,
-  "addedAt": "ISO8601"
+  "id": "uuid", "studentId": "uuid", "entryId": "uuid",
+  "lemma": "Wort", "article": "DAS", "plural": "Wörter", "wordType": "NOUN",
+  "forms": null, "government": null, "exampleSentence": "…", "level": "A2",
+  "topicIds": [], "synonyms": [], "lessonId": "uuid | null",
+  "status": "NEW", "due": "ISO8601 | null", "reps": 0, "lapses": 0, "lastReview": null, "addedAt": "ISO8601",
+  "display": { "fields": ["de_explanation"], "allowTranslationToggle": true },
+  "translations": {},
+  "explanationDe": "…",
+  "revealTranslations": { "ru": "слово", "en": "word" }
 }
 ```
+
+### Display setting (translation / explanation)
+
+`fields` ⊆ `ru | en | de_explanation` (combinable) + `allowTranslationToggle`.
+Resolution per word: **lesson override** (the lesson the student got it in) > **teacher–student
+setting** > **level default** (no level / A1–A2: `["ru"]`, toggle off; B1+: `["de_explanation"]`,
+toggle on).
+
+For **students**, `translations` / `explanationDe` only contain allowed fields; when the toggle is
+allowed, the hidden translations are in `revealTranslations` (client shows them on tap), otherwise
+it is null. Teachers/admins always get every field.
+
+```
+GET    /api/v1/students/{studentId}/vocab-settings?teacherId=   (teacher, the student, admin)
+PUT    /api/v1/students/{studentId}/vocab-settings   Body: { fields, allowTranslationToggle }   teacher only
+DELETE /api/v1/students/{studentId}/vocab-settings   back to the level default                  teacher only
+PUT    /api/v1/students/{studentId}/level            Body: { level }                            teacher only
+-> { studentId, teacherId, level?, fields, allowTranslationToggle, isDefault }
+```
+Unknown fields -> 400 `VOCAB_DISPLAY_FIELD_UNSUPPORTED`. `teacherId` is only needed by a student/admin
+when the student has several teachers (defaults to the earliest).
 
 ---
 
@@ -219,6 +305,35 @@ Null when no pending reschedule.
 ### New: Student can see teachers
 `GET /api/v1/users` now works for students -- returns their teachers (via `teacher_students` relationship).
 
+### New: Lesson content (v2)
+`LessonResponse` also includes:
+```json
+{
+  "groupId": "uuid | null",
+  "rawNotes": "string | null (teacher/admin only; null for students)",
+  "promptUsed": "string | null (teacher/admin only; null for students)",
+  "topics": [{ "id": "uuid", "name": "Haushalt" }],
+  "grammarTopics": [{ "id": "uuid", "name": "Perfekt", "level": "A2" }],
+  "vocab": [{ "id": "entry uuid", "lemma": "Wäsche", "article": "DIE", "plural": null, "wordType": "NOUN" }],
+  "correctedSentences": [{ "id": "uuid", "incorrect": "Ich habe geblieben", "correct": "Ich bin geblieben" }],
+  "vocabDisplayOverride": { "fields": ["en"], "allowTranslationToggle": false } | null
+}
+```
+
+```
+PATCH /api/v1/lessons/{id}/content
+Body: { rawNotes?, promptUsed?, groupId?, clearGroup?: bool, topicIds?, grammarTopicIds?,
+        vocabEntryIds?, correctedSentences?: [{ incorrect, correct }] }
+```
+Lesson teacher or admin. `null` = unchanged; lists replace (`[]` clears). Ids must belong to the
+lesson teacher's library (404 `TOPIC_NOT_FOUND` / `GRAMMAR_TOPIC_NOT_FOUND` / `VOCAB_ENTRY_NOT_FOUND`).
+
+```
+PUT    /api/v1/lessons/{id}/vocab-display   Body: { fields, allowTranslationToggle }
+DELETE /api/v1/lessons/{id}/vocab-display
+```
+Per-lesson override of the vocab display setting for words students received in this lesson.
+
 ---
 
 ## Materials (`/api/v1/materials`)
@@ -263,10 +378,11 @@ curl -X POST http://localhost:8080/api/v1/materials \
 ```
 GET    /api/v1/materials/{id}
 GET    /api/v1/materials/{id}/file
-PUT    /api/v1/materials/{id}    Body: { name? }
+PUT    /api/v1/materials/{id}    Body: { name?, folderId?, level?, skill?, topicIds?, grammarTopicIds? }
 DELETE /api/v1/materials/{id}
 ```
-PUT/DELETE: owning teacher or admin only. DELETE also removes the stored object. GET `/file` streams the stored object for non-LINK materials (same access rules as GET by id).
+`topicIds` / `grammarTopicIds` replace the material's tags (`[]` clears); `GET /api/v1/materials`
+filters by `topicId` and `grammarTopicId`. PUT/DELETE: owning teacher or admin only. DELETE also removes the stored object. GET `/file` streams the stored object for non-LINK materials (same access rules as GET by id).
 
 ### Material response
 ```json
@@ -280,6 +396,8 @@ PUT/DELETE: owning teacher or admin only. DELETE also removes the stored object.
   "contentType": "application/pdf | null",
   "fileSize": 12345,
   "downloadUrl": "/api/v1/materials/{id}/file for PDF/AUDIO/VIDEO, external URL for LINK, null if no file",
+  "topicIds": ["uuid"],
+  "grammarTopicIds": ["uuid"],
   "createdAt": "ISO8601"
 }
 ```
@@ -307,7 +425,9 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 | Lessons | `LESSON_NOT_FOUND`, `LESSON_INVALID_STATE`, `LESSON_FULL`, `LESSON_NOT_JOINABLE`, `LESSON_ALREADY_STARTED`, `LESSON_NOT_STARTED`, `ALREADY_PARTICIPANT`, `STUDENT_NOT_IN_LESSON`, `JOIN_REQUEST_ALREADY_PENDING`, `JOIN_REQUEST_NOT_FOUND`, `RESCHEDULE_ALREADY_PENDING`, `RESCHEDULE_NOT_FOUND`, `VIDEO_ROOM_NOT_READY` |
 | Availability | `AVAILABILITY_SLOT_BLOCKED`, `AVAILABILITY_MIN_NOTICE`, `AVAILABILITY_OVERLAP`, `AVAILABILITY_BUFFER_CONFLICT`, `AVAILABILITY_EXCEPTION_NOT_FOUND` |
 | Materials | `MATERIAL_NOT_FOUND`, `MATERIAL_FILE_NOT_FOUND`, `FOLDER_NOT_FOUND`, `TARGET_FOLDER_NOT_FOUND`, `FOLDER_NOT_EMPTY`, `FOLDER_NAME_TAKEN`, `FOLDER_CYCLE`, `FILE_TOO_LARGE` |
-| Homework / goals / vocabulary | `HOMEWORK_NOT_FOUND`, `HOMEWORK_INVALID_STATE`, `GOAL_NOT_FOUND`, `GOAL_NOT_ACTIVE`, `VOCABULARY_WORD_NOT_FOUND`, `VOCABULARY_DUPLICATE` |
+| Homework / goals | `HOMEWORK_NOT_FOUND`, `HOMEWORK_INVALID_STATE`, `GOAL_NOT_FOUND`, `GOAL_NOT_ACTIVE` |
+| Vocabulary | `VOCABULARY_WORD_NOT_FOUND`, `VOCAB_ENTRY_NOT_FOUND`, `VOCAB_ENTRY_DUPLICATE`, `VOCAB_LANGUAGE_UNSUPPORTED`, `VOCAB_DISPLAY_FIELD_UNSUPPORTED`, `TEACHER_STUDENT_NOT_FOUND` |
+| Library / groups | `TOPIC_NOT_FOUND`, `TOPIC_DUPLICATE`, `TOPIC_HAS_CHILDREN`, `TOPIC_CYCLE`, `GRAMMAR_TOPIC_NOT_FOUND`, `GRAMMAR_TOPIC_DUPLICATE`, `GROUP_NOT_FOUND`, `STUDENT_NOT_LINKED` |
 
 ---
 
