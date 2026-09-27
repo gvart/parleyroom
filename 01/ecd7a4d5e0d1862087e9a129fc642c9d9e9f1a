@@ -1,0 +1,45 @@
+resources/db/migration/V3__groups.sql
+  s_2b5907717bc9a2::t_f11b6d630ed49a 1-37
+src/com/gvart/parleyroom/Application.kt
+  s_2b5907717bc9a2::t_29621b0abc6725 10,36
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_2b5907717bc9a2::t_eea8bbd74b0196 30,182
+src/com/gvart/parleyroom/group/config/GroupModuleConfig.kt
+  s_2b5907717bc9a2::t_3e6e7773d576ef 1-14
+src/com/gvart/parleyroom/group/data/GroupTable.kt
+  s_2b5907717bc9a2::t_6edfac1402fd33 1-27
+src/com/gvart/parleyroom/group/routing/Routing.kt
+  s_2b5907717bc9a2::t_adfc61250764a3 1-122
+src/com/gvart/parleyroom/group/service/GroupService.kt
+  s_2b5907717bc9a2::t_493b9c6828d9f3 1-167
+src/com/gvart/parleyroom/group/transfer/GroupDtos.kt
+  s_2b5907717bc9a2::t_c77bce1d59de30 1-45
+src/com/gvart/parleyroom/lesson/data/LessonTable.kt
+  s_2b5907717bc9a2::t_ee9413fb8176d1 6,23
+src/com/gvart/parleyroom/lesson/service/LessonLifecycleService.kt
+  s_2b5907717bc9a2::t_dc930697b834c9 7,12,119-124,135
+src/com/gvart/parleyroom/lesson/service/LessonSupport.kt
+  s_2b5907717bc9a2::t_6bf7513cfea173 220
+src/com/gvart/parleyroom/lesson/transfer/CreateLessonRequest.kt
+  s_2b5907717bc9a2::t_46a8e3fa48fdd3 22,34
+src/com/gvart/parleyroom/lesson/transfer/LessonResponse.kt
+  s_2b5907717bc9a2::t_5620286265de17 24
+test/com/gvart/parleyroom/group/GroupIntegrationTest.kt
+  s_2b5907717bc9a2::t_85a90473fdf571 1-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "01ecd7a4d5e0d1862087e9a129fc642c9d9e9f1a",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
