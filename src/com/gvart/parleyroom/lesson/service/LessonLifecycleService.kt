@@ -1,5 +1,7 @@
 package com.gvart.parleyroom.lesson.service
 
+import com.gvart.parleyroom.activity.data.ActivityKind
+import com.gvart.parleyroom.activity.service.LearningActivityRecorder
 import com.gvart.parleyroom.availability.service.AvailabilityValidator
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
@@ -371,6 +373,7 @@ class LessonLifecycleService(
         }
 
         for (studentId in support.getStudentIds(lessonId)) {
+            LearningActivityRecorder.record(studentId, ActivityKind.LESSON_COMPLETED, lessonId)
             notificationService.createNotification(
                 userId = studentId,
                 actorId = principal.id,
