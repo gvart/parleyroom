@@ -1,0 +1,74 @@
+test/com/gvart/parleyroom/common/ErrorCodeIntegrationTest.kt
+  s_2b5907717bc9a2::t_28af5f294e31f3 1-142
+  s_2b5907717bc9a2::t_e755581fe9c7f8 143
+API.md
+  s_2b5907717bc9a2::t_4f19d6c58af591 282-306
+src/com/gvart/parleyroom/admin/service/AdminService.kt
+  s_2b5907717bc9a2::t_a08abae1d68fe3 105,133,135,143,170,182,217
+src/com/gvart/parleyroom/availability/service/AvailabilityService.kt
+  s_2b5907717bc9a2::t_515d3c1e788ebf 140,188
+src/com/gvart/parleyroom/common/service/EntityLookup.kt
+  s_2b5907717bc9a2::t_27b1b21490cc82 12-15
+src/com/gvart/parleyroom/common/storage/MultipartBuffering.kt
+  s_2b5907717bc9a2::t_f28ff2598899f6 23
+src/com/gvart/parleyroom/common/transfer/exception/ForbiddenException.kt
+  s_2b5907717bc9a2::t_f63d888ca0565f 3
+src/com/gvart/parleyroom/common/transfer/exception/NotFoundException.kt
+  s_2b5907717bc9a2::t_1c953b4a04f32d 3
+src/com/gvart/parleyroom/common/transfer/exception/UnauthorizedException.kt
+  s_2b5907717bc9a2::t_4a46bbbbad082e 3
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_2b5907717bc9a2::t_913c8c1103da2d 182,186,189,193,197,201,205,209,213,220,247-253
+src/com/gvart/parleyroom/goal/service/GoalService.kt
+  s_2b5907717bc9a2::t_0802add2bf08bb 108,127,145,164
+src/com/gvart/parleyroom/homework/service/HomeworkService.kt
+  s_2b5907717bc9a2::t_e6562bec61740a 147,171
+src/com/gvart/parleyroom/lesson/service/LessonDocumentService.kt
+  s_2b5907717bc9a2::t_9956e3c6a5858c 53,82
+src/com/gvart/parleyroom/lesson/service/LessonLifecycleService.kt
+  s_2b5907717bc9a2::t_9e181e1b82efea 176,226,281,284,350,410,420
+src/com/gvart/parleyroom/lesson/service/LessonParticipantService.kt
+  s_2b5907717bc9a2::t_a89bd4808e042b 31,34,37,48,50,68,93,103,129
+src/com/gvart/parleyroom/lesson/service/LessonRescheduleService.kt
+  s_2b5907717bc9a2::t_208758c2a7156d 36,61
+src/com/gvart/parleyroom/lesson/service/LessonSupport.kt
+  s_2b5907717bc9a2::t_2104bc2e9ff702 57,65
+src/com/gvart/parleyroom/material/service/LessonMaterialService.kt
+  s_2b5907717bc9a2::t_9703b693ef4d89 58
+src/com/gvart/parleyroom/material/service/MaterialFolderService.kt
+  s_2b5907717bc9a2::t_19e4eb4507743b 94,127,243
+src/com/gvart/parleyroom/material/service/MaterialService.kt
+  s_2b5907717bc9a2::t_75c16cca3cbe6b 120,300,318,353
+src/com/gvart/parleyroom/registration/service/PasswordResetService.kt
+  s_2b5907717bc9a2::t_36c8cffa0e248d 36,62-64
+src/com/gvart/parleyroom/registration/service/RegistrationService.kt
+  s_2b5907717bc9a2::t_37354d72fe76a4 48,58,80-82,87
+src/com/gvart/parleyroom/user/service/AuthenticationService.kt
+  s_2b5907717bc9a2::t_4f1abde6283553 44,48,64,86,93,101,114
+src/com/gvart/parleyroom/user/service/TelegramAuthService.kt
+  s_2b5907717bc9a2::t_ccd84c5e6e7f72 28,51,59
+src/com/gvart/parleyroom/user/service/TelegramInitDataVerifier.kt
+  s_2b5907717bc9a2::t_880e494a525fb9 30,47,55
+src/com/gvart/parleyroom/user/service/TelegramLoginWidgetVerifier.kt
+  s_2b5907717bc9a2::t_db0b6163d38056 31,50,56
+src/com/gvart/parleyroom/user/service/UserService.kt
+  s_2b5907717bc9a2::t_6fd8d8961daf77 118,121,157,188
+src/com/gvart/parleyroom/vocabulary/service/VocabularyService.kt
+  s_2b5907717bc9a2::t_cb47a810a0f602 93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "3a77e82665c55f88e75a24eb09fc25294dea1208",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
