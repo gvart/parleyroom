@@ -1,5 +1,7 @@
 package com.gvart.parleyroom.vocabulary.service
 
+import com.gvart.parleyroom.activity.data.ActivityKind
+import com.gvart.parleyroom.activity.service.LearningActivityRecorder
 import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.transfer.PageRequest
@@ -149,6 +151,9 @@ class VocabularyService {
             it[status] = newStatus
             it[nextReviewAt] = nextReview
         }
+
+        if (principal.id == studentId)
+            LearningActivityRecorder.record(studentId, ActivityKind.VOCAB_REVIEW, wordId)
 
         VocabularyWordTable.selectAll()
             .where { VocabularyWordTable.id eq wordId }

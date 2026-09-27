@@ -1,5 +1,7 @@
 package com.gvart.parleyroom.homework.service
 
+import com.gvart.parleyroom.activity.data.ActivityKind
+import com.gvart.parleyroom.activity.service.LearningActivityRecorder
 import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.transfer.PageRequest
@@ -150,6 +152,8 @@ class HomeworkService {
             it[status] = HomeworkStatus.SUBMITTED
             it[updatedAt] = OffsetDateTime.now()
         }
+
+        LearningActivityRecorder.record(principal.id, ActivityKind.HOMEWORK_SUBMITTED, homeworkId)
 
         HomeworkTable.selectAll()
             .where { HomeworkTable.id eq homeworkId }
