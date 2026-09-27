@@ -11,9 +11,11 @@ import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.material.data.LessonMaterialTable
 import com.gvart.parleyroom.material.data.MaterialFolderTable
+import com.gvart.parleyroom.material.data.MaterialGrammarTopicTable
 import com.gvart.parleyroom.material.data.MaterialShareTable
 import com.gvart.parleyroom.material.data.MaterialSkill
 import com.gvart.parleyroom.material.data.MaterialTable
+import com.gvart.parleyroom.material.data.MaterialTopicTable
 import com.gvart.parleyroom.material.data.MaterialType
 import com.gvart.parleyroom.material.transfer.BulkMaterialAction
 import com.gvart.parleyroom.material.transfer.BulkMaterialRequest
@@ -25,6 +27,7 @@ import com.gvart.parleyroom.material.transfer.MaterialResponse
 import com.gvart.parleyroom.material.transfer.UpdateMaterialRequest
 import com.gvart.parleyroom.notification.data.NotificationType
 import com.gvart.parleyroom.notification.service.NotificationService
+import com.gvart.parleyroom.topic.service.LibraryAccess
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.security.UserPrincipal
 import org.jetbrains.exposed.v1.core.Op
@@ -32,9 +35,11 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.inSubQuery
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.Query
 import org.jetbrains.exposed.v1.jdbc.andWhere
+import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
@@ -60,6 +65,8 @@ class MaterialService(
         level: LanguageLevel?,
         skill: MaterialSkill?,
         page: PageRequest,
+        topicId: UUID? = null,
+        grammarTopicId: UUID? = null,
     ): MaterialPageResponse = transaction {
         val query: Query = when (principal.role) {
             UserRole.ADMIN -> MaterialTable.selectAll()
@@ -85,12 +92,22 @@ class MaterialService(
         if (type != null) query.andWhere { MaterialTable.type eq type }
         if (level != null) query.andWhere { MaterialTable.level eq level }
         if (skill != null) query.andWhere { MaterialTable.skill eq skill }
+        if (topicId != null) query.andWhere {
+            MaterialTable.id inSubQuery MaterialTopicTable.select(MaterialTopicTable.materialId)
+                .where { MaterialTopicTable.topicId eq topicId }
+        }
+        if (grammarTopicId != null) query.andWhere {
+            MaterialTable.id inSubQuery MaterialGrammarTopicTable.select(MaterialGrammarTopicTable.materialId)
+                .where { MaterialGrammarTopicTable.grammarTopicId eq grammarTopicId }
+        }
 
         val total = query.count()
-        val items = query
-            .limit(page.pageSize)
-            .offset(page.offset)
-            .map(::toResponse)
+        val items = toResponses(
+            query
+                .limit(page.pageSize)
+                .offset(page.offset)
+                .toList()
+        )
 
         MaterialPageResponse(
             materials = items,
@@ -221,8 +238,13 @@ class MaterialService(
             requireOwnerOrAdmin(row, principal)
 
             val hasAny = request.name != null || request.folderId != null ||
-                    request.level != null || request.skill != null
+                    request.level != null || request.skill != null ||
+                    request.topicIds != null || request.grammarTopicIds != null
             if (!hasAny) return@transaction toResponse(row)
+
+            val ownerId = row[MaterialTable.teacherId].value
+            val topicIds = request.topicIds?.let { LibraryAccess.requireTopics(ownerId, it) }
+            val grammarIds = request.grammarTopicIds?.let { LibraryAccess.requireGrammarTopics(ownerId, it) }
 
             if (request.folderId != null) {
                 val newFolder = UUID.fromString(request.folderId)
@@ -233,7 +255,9 @@ class MaterialService(
                     throw ForbiddenException("Cannot move material to another teacher's folder")
             }
 
-            MaterialTable.update({ MaterialTable.id eq materialId }) {
+            val hasColumns = request.name != null || request.folderId != null ||
+                    request.level != null || request.skill != null
+            if (hasColumns) MaterialTable.update({ MaterialTable.id eq materialId }) {
                 if (request.name != null) {
                     if (request.name.isBlank()) throw BadRequestException("Name can't be empty")
                     it[name] = request.name
@@ -243,6 +267,20 @@ class MaterialService(
                 }
                 if (request.level != null) it[level] = request.level
                 if (request.skill != null) it[skill] = request.skill
+            }
+            topicIds?.let { ids ->
+                MaterialTopicTable.deleteWhere { MaterialTopicTable.materialId eq materialId }
+                MaterialTopicTable.batchInsert(ids) {
+                    this[MaterialTopicTable.materialId] = materialId
+                    this[MaterialTopicTable.topicId] = it
+                }
+            }
+            grammarIds?.let { ids ->
+                MaterialGrammarTopicTable.deleteWhere { MaterialGrammarTopicTable.materialId eq materialId }
+                MaterialGrammarTopicTable.batchInsert(ids) {
+                    this[MaterialGrammarTopicTable.materialId] = materialId
+                    this[MaterialGrammarTopicTable.grammarTopicId] = it
+                }
             }
             toResponse(findMaterial(materialId))
         }
@@ -385,7 +423,23 @@ class MaterialService(
             "Only the owning teacher can perform this action",
         )
 
-    private fun toResponse(row: ResultRow): MaterialResponse {
+    private fun toResponse(row: ResultRow): MaterialResponse = toResponses(listOf(row)).single()
+
+    private fun toResponses(rows: List<ResultRow>): List<MaterialResponse> {
+        if (rows.isEmpty()) return emptyList()
+        val ids = rows.map { it[MaterialTable.id].value }
+        val topicsByMaterial = MaterialTopicTable.selectAll()
+            .where { MaterialTopicTable.materialId inList ids }
+            .groupBy({ it[MaterialTopicTable.materialId].value }) { it[MaterialTopicTable.topicId].value.toString() }
+        val grammarByMaterial = MaterialGrammarTopicTable.selectAll()
+            .where { MaterialGrammarTopicTable.materialId inList ids }
+            .groupBy({ it[MaterialGrammarTopicTable.materialId].value }) { it[MaterialGrammarTopicTable.grammarTopicId].value.toString() }
+        return rows.map { row ->
+            toResponse(row, topicsByMaterial[row[MaterialTable.id].value].orEmpty(), grammarByMaterial[row[MaterialTable.id].value].orEmpty())
+        }
+    }
+
+    private fun toResponse(row: ResultRow, topicIds: List<String>, grammarTopicIds: List<String>): MaterialResponse {
         val type = row[MaterialTable.type]
         val rawUrl = row[MaterialTable.url]
         val materialId = row[MaterialTable.id].value
@@ -405,6 +459,8 @@ class MaterialService(
             contentType = row[MaterialTable.contentType],
             fileSize = row[MaterialTable.fileSize],
             downloadUrl = downloadUrl,
+            topicIds = topicIds,
+            grammarTopicIds = grammarTopicIds,
             createdAt = row[MaterialTable.createdAt],
         )
     }

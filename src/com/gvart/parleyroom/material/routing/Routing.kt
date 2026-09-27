@@ -66,9 +66,12 @@ fun Application.configureMaterialRouting() {
                     val type = call.request.queryParameters["type"]?.let { MaterialType.valueOf(it) }
                     val level = call.request.queryParameters["level"]?.let { LanguageLevel.valueOf(it) }
                     val skill = call.request.queryParameters["skill"]?.let { MaterialSkill.valueOf(it) }
+                    val topicId = call.request.queryParameters["topicId"]?.let(UUID::fromString)
+                    val grammarTopicId = call.request.queryParameters["grammarTopicId"]?.let(UUID::fromString)
 
                     val result = materialService.listMaterials(
                         principal, folderId, unfiled, lessonId, type, level, skill, PageRequest.from(call),
+                        topicId = topicId, grammarTopicId = grammarTopicId,
                     )
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
@@ -81,6 +84,8 @@ fun Application.configureMaterialRouting() {
                         query("type") { description = "PDF, AUDIO, VIDEO, LINK"; required = false }
                         query("level") { description = "A1..C2"; required = false }
                         query("skill") { description = "SPEAKING, LISTENING, READING, WRITING, GRAMMAR, VOCAB"; required = false }
+                        query("topicId") { description = "Filter by topic tag UUID"; required = false }
+                        query("grammarTopicId") { description = "Filter by grammar topic tag UUID"; required = false }
                         query("page") { description = "Page number (1-based, default 1)"; required = false }
                         query("pageSize") { description = "Items per page (default 20, max 100)"; required = false }
                     }
