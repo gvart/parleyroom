@@ -42,9 +42,9 @@ dependencies:
   - $ktor.server.callLogging
   - $ktor.server.callId
   - io.ktor:ktor-server-di
-  - ch.qos.logback:logback-classic:1.5.18
-  - com.zaxxer:HikariCP:6.2.1
-  - org.postgresql:postgresql:42.7.10
+  - ch.qos.logback:logback-classic:1.6.4
+  - com.zaxxer:HikariCP:7.1.0
+  - org.postgresql:postgresql:42.7.13
   - $libs.exposed.core
   - $libs.exposed.dao
   - $libs.exposed.jdbc
@@ -53,7 +53,7 @@ dependencies:
   - $libs.flyway.postgresql
   - $libs.jbcrypt
   - $libs.aws.sdk.s3
-  - io.livekit:livekit-server:0.12.1
+  - io.livekit:livekit-server:0.16.0
   - $ktor.server.auth
   - $ktor.server.auth.jwt
   - $ktor.server.openapi
