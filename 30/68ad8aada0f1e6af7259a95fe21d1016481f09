@@ -1,0 +1,43 @@
+resources/db/migration/V10__learning_activity.sql
+  s_e0f73e2a183cbc::t_d13eb452d8321c 1-33
+src/com/gvart/parleyroom/Application.kt
+  s_e0f73e2a183cbc::t_2236408a1e0705 3,39
+src/com/gvart/parleyroom/activity/config/ActivityModuleConfig.kt
+  s_e0f73e2a183cbc::t_d29f3ac3f3dfc0 1-14
+src/com/gvart/parleyroom/activity/data/LearningActivityTable.kt
+  s_e0f73e2a183cbc::t_3043b9fabe64ee 1-15
+src/com/gvart/parleyroom/activity/routing/Routing.kt
+  s_e0f73e2a183cbc::t_7ab5de11bc937a 1-73
+src/com/gvart/parleyroom/activity/service/LearningActivityRecorder.kt
+  s_e0f73e2a183cbc::t_04f78e291fca34 1-20
+src/com/gvart/parleyroom/activity/service/StreakService.kt
+  s_e0f73e2a183cbc::t_a6181531508b41 1-62
+src/com/gvart/parleyroom/activity/transfer/StreakResponse.kt
+  s_e0f73e2a183cbc::t_89ce10d23a8e68 1-17
+src/com/gvart/parleyroom/homework/service/HomeworkService.kt
+  s_e0f73e2a183cbc::t_4369f6b6e6dddc 3-4,156-157
+src/com/gvart/parleyroom/lesson/service/LessonLifecycleService.kt
+  s_e0f73e2a183cbc::t_280537e00079cf 3-4,376
+src/com/gvart/parleyroom/vocabulary/service/VocabularyService.kt
+  s_e0f73e2a183cbc::t_cf278321c82b89 3-4,155-157
+test/com/gvart/parleyroom/IntegrationTest.kt
+  s_e0f73e2a183cbc::t_297fd8ee3e5bef 130
+test/com/gvart/parleyroom/activity/StreakIntegrationTest.kt
+  s_e0f73e2a183cbc::t_75722ab0a0d146 1-390
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "3068ad8aada0f1e6af7259a95fe21d1016481f09",
+  "prompts": {},
+  "sessions": {
+    "s_e0f73e2a183cbc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dd5f5e4e-fd3a-4bbc-b583-6f11e38f33f7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
