@@ -32,16 +32,15 @@ jobs:
           distribution: temurin
           java-version: '25'
 
-      - name: Cache Amper
+      - name: Cache Kotlin Toolchain
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/JetBrains/Amper
-            ~/.amper
+            ~/.cache/JetBrains/Kotlin
             ~/.gradle/caches
-          key: ${{ runner.os }}-amper-${{ hashFiles('parley-room/amper', 'parley-room/module.yaml', 'parley-room/libs.versions.toml', 'parley-room/plugins/**/module.yaml') }}
+          key: ${{ runner.os }}-kotlin-toolchain-${{ hashFiles('parley-room/kotlin', 'parley-room/module.yaml', 'parley-room/libs.versions.toml', 'parley-room/plugins/**/module.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-amper-
+            ${{ runner.os }}-kotlin-toolchain-
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -52,5 +51,5 @@ jobs:
 
       - name: Build and push multi-arch image with Jib
         env:
-          AMPER_JAVA_HOME: ${{ env.JAVA_HOME }}
-        run: ./amper task :parley-room:jib@jib-plugin
+          KOTLIN_CLI_JAVA_HOME: ${{ env.JAVA_HOME }}
+        run: ./kotlin do jib

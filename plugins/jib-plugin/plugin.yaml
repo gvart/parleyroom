@@ -21,3 +21,8 @@ tasks:
       baseImage: ${pluginSettings.baseImage}
       outputTar: ${taskOutputDir}/${module.name}-oci-image.tar
       targetImageName: ${pluginSettings.targetImage.name}
+
+commands:
+  - jib
+  - jibDockerBuild
+  - jibBuildTar
