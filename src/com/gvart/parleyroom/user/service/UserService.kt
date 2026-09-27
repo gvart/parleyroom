@@ -8,6 +8,7 @@ import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
+import com.gvart.parleyroom.user.data.requireSupportedLocale
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import com.gvart.parleyroom.user.transfer.UserListResponse
@@ -83,6 +84,7 @@ class UserService(
     }
 
     fun updateProfile(principal: UserPrincipal, request: UpdateProfileRequest): UserResponse = transaction {
+        request.locale?.let(::requireSupportedLocale)
         val current = UserTable.findByIdOrThrow(principal.id, "User")
 
         val newFirstName = request.firstName?.trim() ?: current[UserTable.firstName]

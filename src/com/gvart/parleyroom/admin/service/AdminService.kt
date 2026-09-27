@@ -23,6 +23,7 @@ import com.gvart.parleyroom.user.data.RefreshTokenTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
 import com.gvart.parleyroom.user.data.UserTable
+import com.gvart.parleyroom.user.data.requireSupportedLocale
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.vocabulary.data.VocabularyWordTable
 import org.jetbrains.exposed.v1.core.Op
@@ -95,6 +96,7 @@ class AdminService {
     }
 
     fun createUser(request: AdminCreateUserRequest): AdminUserResponse = transaction {
+        request.locale?.let(::requireSupportedLocale)
         val email = request.email.trim()
         val firstName = request.firstName.trim()
         val lastName = request.lastName.trim()
@@ -124,6 +126,7 @@ class AdminService {
         principal: UserPrincipal,
         request: AdminUpdateUserRequest,
     ): AdminUserResponse = transaction {
+        request.locale?.let(::requireSupportedLocale)
         val current = loadById(id)
         val currentRole = current[UserTable.role]
         val currentStatus = current[UserTable.status]

@@ -4,6 +4,7 @@ import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.admin.transfer.AdminStatsResponse
 import com.gvart.parleyroom.admin.transfer.AdminUserListResponse
 import com.gvart.parleyroom.admin.transfer.AdminUserResponse
+import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.homework.data.HomeworkCategory
 import com.gvart.parleyroom.homework.data.HomeworkTable
 import com.gvart.parleyroom.user.data.RefreshTokenTable
@@ -223,6 +224,28 @@ class AdminIntegrationTest : IntegrationTest() {
         val body = response.body<AdminUserResponse>()
         assertEquals("Renamed", body.firstName)
         assertEquals("RP", body.initials)
+    }
+
+    @Test
+    fun `admin sets a supported locale and rejects an unsupported one`() = testApp {
+        val client = createJsonClient(this)
+        val token = getAdminToken(client)
+
+        val ok = client.patch("/api/v1/admin/users/$STUDENT_ID") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(mapOf("locale" to "de"))
+        }
+        assertEquals(HttpStatusCode.OK, ok.status)
+        assertEquals("de", ok.body<AdminUserResponse>().locale)
+
+        val rejected = client.patch("/api/v1/admin/users/$STUDENT_ID") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(mapOf("locale" to "xx"))
+        }
+        assertEquals(HttpStatusCode.BadRequest, rejected.status)
+        assertEquals("UNSUPPORTED_LOCALE", rejected.body<ProblemDetail>().code)
     }
 
     @Test

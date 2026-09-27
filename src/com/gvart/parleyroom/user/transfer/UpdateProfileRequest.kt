@@ -22,9 +22,6 @@ data class UpdateProfileRequest(
             if (noField) add("At least one field must be provided")
             if (firstName != null && firstName.trim().isEmpty()) add("First name can't be blank")
             if (lastName != null && lastName.trim().isEmpty()) add("Last name can't be blank")
-            if (locale != null && (locale.length < 2 || locale.length > 5)) {
-                add("Locale must be between 2 and 5 characters")
-            }
             if (timezone != null) {
                 val valid = runCatching { ZoneId.of(timezone) }.isSuccess
                 if (!valid) add("Timezone '$timezone' is not a valid IANA zone")
