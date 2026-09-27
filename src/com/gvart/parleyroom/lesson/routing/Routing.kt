@@ -5,6 +5,7 @@ import com.gvart.parleyroom.common.routing.getPathUUID
 import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
+import com.gvart.parleyroom.lesson.service.LessonContentService
 import com.gvart.parleyroom.lesson.service.LessonDocumentService
 import com.gvart.parleyroom.lesson.service.LessonLifecycleService
 import com.gvart.parleyroom.lesson.service.LessonParticipantService
@@ -21,6 +22,8 @@ import com.gvart.parleyroom.lesson.transfer.ReflectLessonRequest
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.lesson.transfer.StartLessonResponse
 import com.gvart.parleyroom.lesson.transfer.SyncLessonDocumentRequest
+import com.gvart.parleyroom.lesson.transfer.UpdateLessonContentRequest
+import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
 import com.gvart.parleyroom.video.transfer.VideoAccess
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
@@ -28,8 +31,10 @@ import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.response.respond
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.openapi.describe
+import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
@@ -43,6 +48,7 @@ fun Application.configureLessonRouting() {
     val participantService: LessonParticipantService by dependencies
     val rescheduleService: LessonRescheduleService by dependencies
     val documentService: LessonDocumentService by dependencies
+    val contentService: LessonContentService by dependencies
 
     routing {
         // Public (no auth) teacher calendar — used by the portal's shareable
@@ -362,6 +368,45 @@ fun Application.configureLessonRouting() {
                                 description = "Lesson not found"
                                 schema = jsonSchema<ProblemDetail>()
                             }
+                        }
+                    }
+
+                    patch<UpdateLessonContentRequest>("/content") {
+                        val result = contentService.updateContent(call.getPathUUID(), it, call.requirePrincipal())
+                        call.respond(HttpStatusCode.OK, result)
+                    }.describe {
+                        summary = "Update lesson content"
+                        description = "Lesson teacher or admin. Sets rawNotes, promptUsed, group link, and replaces topic, grammar topic, vocab entry and corrected-sentence lists (null = unchanged). rawNotes/promptUsed are never returned to students."
+                        requestBody { schema = jsonSchema<UpdateLessonContentRequest>() }
+                        parameters { path("id") { description = "UUID of the lesson" } }
+                        responses {
+                            HttpStatusCode.OK { schema = jsonSchema<LessonResponse>() }
+                            HttpStatusCode.NotFound {
+                                description = "LESSON_NOT_FOUND, TOPIC_NOT_FOUND, GRAMMAR_TOPIC_NOT_FOUND, VOCAB_ENTRY_NOT_FOUND, GROUP_NOT_FOUND"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
+                        }
+                    }
+
+                    route("/vocab-display") {
+                        put<VocabDisplaySetting> {
+                            val result = contentService.setVocabDisplay(call.getPathUUID(), it, call.requirePrincipal())
+                            call.respond(HttpStatusCode.OK, result)
+                        }.describe {
+                            summary = "Override vocab display for a lesson"
+                            description = "Words students received in this lesson use this setting instead of the teacher–student one."
+                            requestBody { schema = jsonSchema<VocabDisplaySetting>() }
+                            parameters { path("id") { description = "UUID of the lesson" } }
+                            responses { HttpStatusCode.OK { schema = jsonSchema<LessonResponse>() } }
+                        }
+
+                        delete {
+                            val result = contentService.setVocabDisplay(call.getPathUUID(), null, call.requirePrincipal())
+                            call.respond(HttpStatusCode.OK, result)
+                        }.describe {
+                            summary = "Clear lesson vocab display override"
+                            parameters { path("id") { description = "UUID of the lesson" } }
+                            responses { HttpStatusCode.OK { schema = jsonSchema<LessonResponse>() } }
                         }
                     }
 

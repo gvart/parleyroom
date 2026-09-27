@@ -24,6 +24,8 @@ object LessonTable : UUIDTable("lessons") {
     val groupId = reference("group_id", GroupTable).nullable()
     val vocabDisplayFields = array<String>("vocab_display_fields", VarCharColumnType(32)).nullable()
     val allowTranslationToggle = bool("allow_translation_toggle").nullable()
+    val rawNotes = text("raw_notes").nullable()
+    val promptUsed = text("prompt_used").nullable()
     val hasAiSummary = bool("has_ai_summary").default(false)
     val startedAt = timestampWithTimeZone("started_at").nullable()
     val endedAt = timestampWithTimeZone("ended_at").nullable()

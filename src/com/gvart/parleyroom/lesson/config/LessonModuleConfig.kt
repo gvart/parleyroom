@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.lesson.config
 
 import com.gvart.parleyroom.lesson.routing.configureLessonRouting
+import com.gvart.parleyroom.lesson.service.LessonContentService
 import com.gvart.parleyroom.lesson.service.LessonDocumentService
 import com.gvart.parleyroom.lesson.service.LessonLifecycleService
 import com.gvart.parleyroom.lesson.service.LessonParticipantService
@@ -21,6 +22,7 @@ fun Application.configureLessonModule() {
         provide(LessonParticipantService::class)
         provide(LessonRescheduleService::class)
         provide(LessonDocumentService::class)
+        provide(LessonContentService::class)
     }
 
     configureLessonRouting()

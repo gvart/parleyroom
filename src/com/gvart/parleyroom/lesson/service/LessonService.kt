@@ -118,7 +118,7 @@ class LessonService(
     private fun scrubForStudent(response: LessonResponse, studentId: UUID): LessonResponse {
         val studentIdStr = studentId.toString()
         val isParticipant = response.students.any { it.id == studentIdStr }
-        if (isParticipant) return response
+        if (isParticipant) return hideTeacherOnly(response)
 
         val isOneOnOne = response.type == LessonType.ONE_ON_ONE
         return if (isOneOnOne) {
@@ -135,6 +135,12 @@ class LessonService(
                 teacherWorkingOn = null,
                 studentReflection = null,
                 studentHardToday = null,
+                rawNotes = null,
+                promptUsed = null,
+                topics = emptyList(),
+                grammarTopics = emptyList(),
+                vocab = emptyList(),
+                correctedSentences = emptyList(),
             )
         } else {
             // Group club — show title/topic/spots (joinable) but hide private docs.
@@ -146,14 +152,21 @@ class LessonService(
                 teacherWorkingOn = null,
                 studentReflection = null,
                 studentHardToday = null,
+                rawNotes = null,
+                promptUsed = null,
+                correctedSentences = emptyList(),
             )
         }
     }
 
+    /** Raw notes and the AI prompt are the teacher's working material, never shown to students. */
+    private fun hideTeacherOnly(response: LessonResponse): LessonResponse =
+        response.copy(rawNotes = null, promptUsed = null)
+
     fun getLesson(lessonId: UUID, principal: UserPrincipal): LessonResponse = transaction {
         val lesson = support.findLesson(lessonId)
         support.requireLessonParticipant(lessonId, lesson, principal)
-        support.toResponse(lesson)
+        support.toResponse(lesson).let { if (principal.role == UserRole.STUDENT) hideTeacherOnly(it) else it }
     }
 
     /**

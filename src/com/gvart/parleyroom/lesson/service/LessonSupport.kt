@@ -4,21 +4,30 @@ import com.gvart.parleyroom.common.service.singleOrNotFound
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
+import com.gvart.parleyroom.lesson.data.LessonCorrectionTable
 import com.gvart.parleyroom.lesson.data.LessonDocumentTable
+import com.gvart.parleyroom.lesson.data.LessonGrammarTopicTable
+import com.gvart.parleyroom.lesson.data.LessonTopicTable
 import com.gvart.parleyroom.lesson.data.LessonEventTable
 import com.gvart.parleyroom.lesson.data.LessonEventType
 import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
+import com.gvart.parleyroom.lesson.transfer.CorrectedSentenceResponse
 import com.gvart.parleyroom.lesson.transfer.LessonDocumentResponse
+import com.gvart.parleyroom.lesson.transfer.LessonVocabRef
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.LessonStudentResponse
 import com.gvart.parleyroom.lesson.transfer.LessonTeacherResponse
 import com.gvart.parleyroom.lesson.transfer.PendingRescheduleResponse
+import com.gvart.parleyroom.topic.service.LibraryAccess
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.security.UserPrincipal
+import com.gvart.parleyroom.vocabulary.data.LessonVocabTable
+import com.gvart.parleyroom.vocabulary.data.VocabEntryTable
+import com.gvart.parleyroom.vocabulary.service.VocabDisplay
 import org.jetbrains.exposed.v1.core.Expression
 import org.jetbrains.exposed.v1.core.GreaterOp
 import org.jetbrains.exposed.v1.core.JoinType
@@ -202,6 +211,43 @@ class LessonSupport {
                 )
             }
 
+        val topicIdsByLesson = LessonTopicTable.selectAll()
+            .where { LessonTopicTable.lessonId inList lessonIds }
+            .groupBy({ it[LessonTopicTable.lessonId].value }) { it[LessonTopicTable.topicId].value }
+        val topicRefs = LibraryAccess.topicRefs(topicIdsByLesson.values.flatten())
+
+        val grammarIdsByLesson = LessonGrammarTopicTable.selectAll()
+            .where { LessonGrammarTopicTable.lessonId inList lessonIds }
+            .groupBy({ it[LessonGrammarTopicTable.lessonId].value }) { it[LessonGrammarTopicTable.grammarTopicId].value }
+        val grammarRefs = LibraryAccess.grammarTopicRefs(grammarIdsByLesson.values.flatten())
+
+        val vocabByLesson = LessonVocabTable
+            .join(VocabEntryTable, JoinType.INNER, LessonVocabTable.vocabEntryId, VocabEntryTable.id)
+            .selectAll()
+            .where { LessonVocabTable.lessonId inList lessonIds }
+            .orderBy(LessonVocabTable.orderIndex)
+            .groupBy({ it[LessonVocabTable.lessonId].value }) {
+                LessonVocabRef(
+                    id = it[VocabEntryTable.id].value.toString(),
+                    lemma = it[VocabEntryTable.lemma],
+                    article = it[VocabEntryTable.article],
+                    plural = it[VocabEntryTable.plural],
+                    wordType = it[VocabEntryTable.wordType],
+                )
+            }
+
+        val lessonByDoc = docByLesson.values.associate { it[LessonDocumentTable.id].value to it[LessonDocumentTable.lessonId].value }
+        val correctionsByLesson = if (lessonByDoc.isEmpty()) emptyMap() else LessonCorrectionTable.selectAll()
+            .where { LessonCorrectionTable.lessonDocumentId inList lessonByDoc.keys }
+            .orderBy(LessonCorrectionTable.orderIndex)
+            .groupBy({ lessonByDoc.getValue(it[LessonCorrectionTable.lessonDocumentId].value) }) {
+                CorrectedSentenceResponse(
+                    id = it[LessonCorrectionTable.id].value.toString(),
+                    incorrect = it[LessonCorrectionTable.incorrect],
+                    correct = it[LessonCorrectionTable.correct],
+                )
+            }
+
         return rows.map { row ->
             val lessonId = row[LessonTable.id].value
             val doc = docByLesson[lessonId]
@@ -228,6 +274,13 @@ class LessonSupport {
                 teacherWorkingOn = doc?.get(LessonDocumentTable.teacherWorkingOn),
                 studentReflection = doc?.get(LessonDocumentTable.studentReflection),
                 studentHardToday = doc?.get(LessonDocumentTable.studentHardToday),
+                rawNotes = row[LessonTable.rawNotes],
+                promptUsed = row[LessonTable.promptUsed],
+                topics = topicIdsByLesson[lessonId].orEmpty().mapNotNull(topicRefs::get),
+                grammarTopics = grammarIdsByLesson[lessonId].orEmpty().mapNotNull(grammarRefs::get),
+                vocab = vocabByLesson[lessonId].orEmpty(),
+                correctedSentences = correctionsByLesson[lessonId].orEmpty(),
+                vocabDisplayOverride = VocabDisplay.of(row[LessonTable.vocabDisplayFields], row[LessonTable.allowTranslationToggle]),
                 createdBy = row[LessonTable.createdBy].value.toString(),
                 updatedBy = row[LessonTable.updatedBy]?.value?.toString(),
                 createdAt = row[LessonTable.createdAt],
