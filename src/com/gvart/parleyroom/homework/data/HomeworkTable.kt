@@ -3,9 +3,9 @@ package com.gvart.parleyroom.homework.data
 import com.gvart.parleyroom.common.data.pgEnum
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.user.data.UserTable
-import org.jetbrains.exposed.dao.id.UUIDTable
-import org.jetbrains.exposed.sql.kotlin.datetime.date
-import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
+import org.jetbrains.exposed.v1.datetime.date
+import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
 enum class HomeworkCategory { WRITING, READING, GRAMMAR, VOCABULARY, LISTENING }
 enum class HomeworkStatus { OPEN, SUBMITTED, IN_REVIEW, DONE, REJECTED }

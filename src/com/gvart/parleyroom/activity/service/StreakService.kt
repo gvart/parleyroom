@@ -7,7 +7,9 @@ import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.security.UserPrincipal
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId

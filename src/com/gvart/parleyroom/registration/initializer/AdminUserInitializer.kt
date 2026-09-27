@@ -4,9 +4,10 @@ import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStarted
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.mindrot.jbcrypt.BCrypt
 import java.time.OffsetDateTime
 

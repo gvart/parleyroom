@@ -314,9 +314,9 @@ fun Application.configureRouting() {
                             val part = multipart.readPart() ?: break
                             when (part) {
                                 is PartData.FileItem -> {
-                                    if (part.name == "file") fileItem = part else part.dispose()
+                                    if (part.name == "file") fileItem = part else part.release()
                                 }
-                                else -> part.dispose()
+                                else -> part.release()
                             }
                         }
 
@@ -339,7 +339,7 @@ fun Application.configureRouting() {
                         )
                         call.respond(HttpStatusCode.OK, result)
                     } finally {
-                        fileItem?.dispose()
+                        fileItem?.release()
                     }
                 }.describe {
                     summary = "Upload avatar"

@@ -2,8 +2,9 @@ package com.gvart.parleyroom.notification.data
 
 import com.gvart.parleyroom.common.data.pgEnum
 import com.gvart.parleyroom.user.data.UserTable
-import org.jetbrains.exposed.dao.id.UUIDTable
-import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
+import org.jetbrains.exposed.v1.core.java.javaUUID
+import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
 enum class NotificationType {
     LESSON_CREATED,
@@ -28,7 +29,7 @@ object NotificationTable : UUIDTable("notifications") {
     val userId = reference("user_id", UserTable)
     val actorId = reference("actor_id", UserTable)
     val type = pgEnum<NotificationType>("type", "NOTIFICATION_TYPE")
-    val referenceId = uuid("reference_id").nullable()
+    val referenceId = javaUUID("reference_id").nullable()
     val viewed = bool("viewed").default(false)
     val createdAt = timestampWithTimeZone("created_at")
 }

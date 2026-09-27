@@ -6,9 +6,10 @@ import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.transfer.AuthenticateResponse
 import com.gvart.parleyroom.user.transfer.TelegramLinkResult
 import com.gvart.parleyroom.user.transfer.TelegramLoginWidgetRequest
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import java.time.OffsetDateTime
 import java.util.UUID
 

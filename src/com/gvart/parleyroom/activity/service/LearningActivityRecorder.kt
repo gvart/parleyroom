@@ -2,7 +2,7 @@ package com.gvart.parleyroom.activity.service
 
 import com.gvart.parleyroom.activity.data.ActivityKind
 import com.gvart.parleyroom.activity.data.LearningActivityTable
-import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.v1.jdbc.insert
 import java.time.OffsetDateTime
 import java.util.UUID
 

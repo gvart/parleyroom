@@ -2,9 +2,9 @@ package com.gvart.parleyroom.user.data
 
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.data.pgEnum
-import org.jetbrains.exposed.dao.id.UUIDTable
-import org.jetbrains.exposed.sql.EnumerationColumnType
-import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+import org.jetbrains.exposed.v1.core.EnumerationColumnType
+import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
+import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
 object TeacherStudentTable : UUIDTable("teacher_students") {
     val teacherId = reference("teacher_id", UserTable)

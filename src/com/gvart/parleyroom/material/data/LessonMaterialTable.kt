@@ -2,8 +2,8 @@ package com.gvart.parleyroom.material.data
 
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.user.data.UserTable
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
 object LessonMaterialTable : Table("lesson_materials") {
     val lessonId = reference("lesson_id", LessonTable)

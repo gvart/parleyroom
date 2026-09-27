@@ -118,7 +118,7 @@ fun Application.configureMaterialRouting() {
                                 else -> Unit
                             }
                         } finally {
-                            part.dispose()
+                            part.release()
                         }
                     }
 

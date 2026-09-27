@@ -2,8 +2,8 @@ package com.gvart.parleyroom.lesson.data
 
 import com.gvart.parleyroom.common.data.pgEnum
 import com.gvart.parleyroom.user.data.UserTable
-import org.jetbrains.exposed.dao.id.UUIDTable
-import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
+import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
 enum class LessonEventType {
     STATUS_CHANGE,

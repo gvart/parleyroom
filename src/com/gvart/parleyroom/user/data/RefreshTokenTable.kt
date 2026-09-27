@@ -1,7 +1,7 @@
 package com.gvart.parleyroom.user.data
 
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
 object RefreshTokenTable : Table("refresh_tokens") {
     val userId = reference("user_id", UserTable)

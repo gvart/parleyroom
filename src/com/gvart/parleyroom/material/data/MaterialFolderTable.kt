@@ -1,8 +1,8 @@
 package com.gvart.parleyroom.material.data
 
 import com.gvart.parleyroom.user.data.UserTable
-import org.jetbrains.exposed.dao.id.UUIDTable
-import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
+import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
 object MaterialFolderTable : UUIDTable("material_folders") {
     val parentFolderId = reference("parent_folder_id", MaterialFolderTable).nullable()

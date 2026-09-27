@@ -1,9 +1,10 @@
 [versions]
-exposed = "0.58.0"
-flyway-migration = "11.4.0"
-testcontainers = "1.20.4"
-ktor = "3.4.2"
-aws-sdk = "2.31.0"
+exposed = "1.5.0"
+flyway-migration = "13.8.0"
+testcontainers = "2.0.5"
+ktor = "3.6.0"
+aws-sdk = "2.55.6"
+koog = "1.3.0"
 
 [libraries]
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
@@ -15,7 +16,10 @@ flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql", versio
 ktor-openapi-routing = { module = "io.ktor:ktor-server-routing-openapi", version.ref = "ktor" }
 
 jbcrypt = {module = "org.mindrot:jbcrypt", version = "0.4"}
+koog-agents-core = { module = "ai.koog:agents-core", version.ref = "koog" }
+koog-anthropic = { module = "ai.koog:prompt-executor-anthropic-client", version.ref = "koog" }
+koog-http-client-ktor = { module = "ai.koog:http-client-ktor", version.ref = "koog" }
 aws-sdk-s3 = { module = "software.amazon.awssdk:s3", version.ref = "aws-sdk" }
 testcontainers = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
-testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
-testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
+testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
+testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-junit-jupiter", version.ref = "testcontainers" }
