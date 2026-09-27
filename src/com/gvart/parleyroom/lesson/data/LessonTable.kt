@@ -3,6 +3,7 @@ package com.gvart.parleyroom.lesson.data
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.data.pgEnum
+import com.gvart.parleyroom.group.data.GroupTable
 import com.gvart.parleyroom.user.data.UserTable
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
@@ -19,6 +20,7 @@ object LessonTable : UUIDTable("lessons") {
     val topic = varchar("topic", 500)
     val level = pgEnum<LanguageLevel>("level", "LANGUAGE_LEVEL").nullable()
     val maxParticipants = integer("max_participants").nullable()
+    val groupId = reference("group_id", GroupTable).nullable()
     val hasAiSummary = bool("has_ai_summary").default(false)
     val startedAt = timestampWithTimeZone("started_at").nullable()
     val endedAt = timestampWithTimeZone("ended_at").nullable()

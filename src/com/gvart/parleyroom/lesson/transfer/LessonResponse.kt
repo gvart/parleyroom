@@ -21,6 +21,7 @@ data class LessonResponse(
     val topic: String,
     val level: LanguageLevel? = null,
     val maxParticipants: Int? = null,
+    val groupId: String? = null,
     val students: List<LessonStudentResponse> = emptyList(),
     @Serializable(with = OffsetDateTimeSerializer::class)
     val startedAt: OffsetDateTime? = null,

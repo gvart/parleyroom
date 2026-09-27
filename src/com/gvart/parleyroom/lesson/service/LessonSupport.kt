@@ -217,6 +217,7 @@ class LessonSupport {
                 topic = row[LessonTable.topic],
                 level = row[LessonTable.level],
                 maxParticipants = row[LessonTable.maxParticipants],
+                groupId = row[LessonTable.groupId]?.value?.toString(),
                 students = studentsByLesson[lessonId] ?: emptyList(),
                 startedAt = row[LessonTable.startedAt],
                 pendingReschedule = pendingByLesson[lessonId],

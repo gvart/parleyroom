@@ -27,6 +27,7 @@ import com.gvart.parleyroom.registration.transfer.RegisterUserRequest
 import com.gvart.parleyroom.registration.transfer.ResetPasswordRequest
 import com.gvart.parleyroom.vocabulary.transfer.CreateVocabularyWordRequest
 import com.gvart.parleyroom.topic.transfer.CreateTopicRequest
+import com.gvart.parleyroom.group.transfer.GroupRequest
 import com.gvart.parleyroom.topic.transfer.GrammarTopicRequest
 import com.gvart.parleyroom.topic.transfer.UpdateTopicRequest
 import com.gvart.parleyroom.user.data.UserRole
@@ -178,6 +179,7 @@ fun Application.generalConfig() {
         validate<CreateTopicRequest> { it.validate() }
         validate<UpdateTopicRequest> { it.validate() }
         validate<GrammarTopicRequest> { it.validate() }
+        validate<GroupRequest> { it.validate() }
     }
 
 
