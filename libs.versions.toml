@@ -1,5 +1,5 @@
 [versions]
-exposed = "0.58.0"
+exposed = "1.5.0"
 flyway-migration = "13.8.0"
 testcontainers = "1.20.4"
 ktor = "3.6.0"

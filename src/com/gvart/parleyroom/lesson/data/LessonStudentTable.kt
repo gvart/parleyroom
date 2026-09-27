@@ -2,7 +2,7 @@ package com.gvart.parleyroom.lesson.data
 
 import com.gvart.parleyroom.common.data.pgEnum
 import com.gvart.parleyroom.user.data.UserTable
-import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.v1.core.Table
 
 enum class LessonStudentStatus { CONFIRMED, REQUESTED, REJECTED }
 

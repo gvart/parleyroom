@@ -1,6 +1,6 @@
 package com.gvart.parleyroom.common.data
 
-import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.v1.core.Table
 import org.postgresql.util.PGobject
 
 inline fun <reified T : Enum<T>> Table.pgEnum(columnName: String, pgTypeName: String) =
