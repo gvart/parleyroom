@@ -1,4 +1,3 @@
--- initial schema  -- V1__create_schema.sql
 -- Sprachraum Database Schema
 
 -- Enums
@@ -14,31 +13,88 @@ CREATE TYPE VOCAB_STATUS AS ENUM ('NEW', 'REVIEW', 'LEARNED');
 CREATE TYPE GOAL_SET_BY AS ENUM ('TEACHER', 'STUDENT');
 CREATE TYPE GOAL_STATUS AS ENUM ('ACTIVE', 'COMPLETED', 'ABANDONED');
 CREATE TYPE MATERIAL_TYPE AS ENUM ('PDF', 'AUDIO', 'VIDEO', 'LINK');
+CREATE TYPE MATERIAL_SKILL AS ENUM ('SPEAKING', 'LISTENING', 'READING', 'WRITING', 'GRAMMAR', 'VOCAB');
 CREATE TYPE ATTACHMENT_TYPE AS ENUM ('FILE', 'LINK');
 CREATE TYPE LESSON_STUDENT_STATUS AS ENUM ('CONFIRMED', 'REQUESTED', 'REJECTED');
 CREATE TYPE LESSON_EVENT_TYPE AS ENUM ('STATUS_CHANGE', 'RESCHEDULE_REQUESTED', 'RESCHEDULE_ACCEPTED', 'RESCHEDULE_REJECTED', 'LESSON_STARTED', 'LESSON_COMPLETED', 'LESSON_CANCELLED');
+CREATE TYPE AVAILABILITY_EXCEPTION_TYPE AS ENUM ('BLOCKED', 'AVAILABLE');
+CREATE TYPE NOTIFICATION_TYPE AS ENUM (
+    'LESSON_CREATED',
+    'LESSON_REQUESTED',
+    'LESSON_ACCEPTED',
+    'LESSON_CANCELLED',
+    'RESCHEDULE_REQUESTED',
+    'RESCHEDULE_ACCEPTED',
+    'RESCHEDULE_REJECTED',
+    'JOIN_REQUESTED',
+    'JOIN_ACCEPTED',
+    'JOIN_REJECTED',
+    'LESSON_STARTED',
+    'LESSON_COMPLETED',
+    'VOCAB_REVIEW_DUE',
+    'MATERIAL_SHARED',
+    'FOLDER_SHARED',
+    'MATERIAL_ATTACHED_TO_LESSON'
+);
+
+-- Auto-update updated_at trigger function
+CREATE OR REPLACE FUNCTION update_updated_at()
+    RETURNS TRIGGER AS
+$$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
 -- Users
 CREATE TABLE users
 (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email         VARCHAR(255) NOT NULL UNIQUE,
-    first_name    VARCHAR(255) NOT NULL,
-    last_name     VARCHAR(255) NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    role          USER_ROLE    NOT NULL,
-    avatar_url    TEXT,
-    initials      VARCHAR(4)   NOT NULL,
-    level         LANGUAGE_LEVEL,
-    points        INT              DEFAULT 0,
-    status        USER_STATUS      DEFAULT 'ACTIVE',
-    locale        VARCHAR(5)       DEFAULT 'en',
-    created_at    TIMESTAMPTZ      DEFAULT now(),
-    updated_at    TIMESTAMPTZ      DEFAULT now()
+    id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email                    VARCHAR(255) NOT NULL UNIQUE,
+    first_name               VARCHAR(255) NOT NULL,
+    last_name                VARCHAR(255) NOT NULL,
+    password_hash            VARCHAR(255) NOT NULL,
+    role                     USER_ROLE    NOT NULL,
+    avatar_url               TEXT,
+    initials                 VARCHAR(4)   NOT NULL,
+    level                    LANGUAGE_LEVEL,
+    points                   INT              DEFAULT 0,
+    status                   USER_STATUS      DEFAULT 'ACTIVE',
+    locale                   VARCHAR(5)       DEFAULT 'en',
+    created_at               TIMESTAMPTZ      DEFAULT now(),
+    updated_at               TIMESTAMPTZ      DEFAULT now(),
+    failed_login_attempts    INT          NOT NULL DEFAULT 0,
+    locked_until             TIMESTAMPTZ,
+    telegram_id              BIGINT,
+    telegram_username        VARCHAR(64),
+    timezone                 VARCHAR(64)  NOT NULL DEFAULT 'Europe/Berlin',
+    -- Nullable: these only apply to TEACHER role. Service layer defaults to
+    -- (buffer=0, notice=0) when null so students/admins never read meaningful
+    -- values for themselves.
+    booking_buffer_minutes   INT,
+    booking_min_notice_hours INT
 );
 
 CREATE INDEX idx_users_role ON users (role);
 CREATE INDEX idx_users_status ON users (status);
+CREATE UNIQUE INDEX users_telegram_id_uidx ON users (telegram_id) WHERE telegram_id IS NOT NULL;
+
+CREATE TRIGGER trg_users_updated
+    BEFORE UPDATE
+    ON users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- Refresh tokens (one active per user)
+CREATE TABLE refresh_tokens
+(
+    user_id    UUID PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+    token_hash VARCHAR(64)  NOT NULL,
+    expires_at TIMESTAMPTZ  NOT NULL,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_refresh_tokens_hash ON refresh_tokens (token_hash);
 
 -- Teacher-Student relationships
 CREATE TABLE teacher_students
@@ -54,6 +110,36 @@ CREATE TABLE teacher_students
 
 CREATE INDEX idx_teacher_students_teacher ON teacher_students (teacher_id);
 CREATE INDEX idx_teacher_students_student ON teacher_students (student_id);
+
+-- Teacher availability: weekly recurring schedule + one-off exceptions
+CREATE TABLE teacher_weekly_availability
+(
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id  UUID        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    day_of_week SMALLINT    NOT NULL,
+    start_time  TIME        NOT NULL,
+    end_time    TIME        NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_tw_day CHECK (day_of_week BETWEEN 1 AND 7),
+    CONSTRAINT chk_tw_order CHECK (start_time < end_time)
+);
+
+CREATE INDEX idx_tw_teacher_day ON teacher_weekly_availability (teacher_id, day_of_week);
+
+CREATE TABLE teacher_availability_exception
+(
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id UUID                        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    type       AVAILABILITY_EXCEPTION_TYPE NOT NULL,
+    start_at   TIMESTAMPTZ                 NOT NULL,
+    end_at     TIMESTAMPTZ                 NOT NULL,
+    reason     TEXT,
+    created_at TIMESTAMPTZ                 NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ                 NOT NULL DEFAULT now(),
+    CONSTRAINT chk_tae_order CHECK (start_at < end_at)
+);
+
+CREATE INDEX idx_tae_teacher_window ON teacher_availability_exception (teacher_id, start_at, end_at);
 
 -- Lessons (also serves as calendar events)
 CREATE TABLE lessons
@@ -82,6 +168,11 @@ CREATE INDEX idx_lessons_scheduled ON lessons (scheduled_at);
 CREATE INDEX idx_lessons_status ON lessons (status);
 CREATE INDEX idx_lessons_type ON lessons (type);
 CREATE INDEX idx_lessons_created_by ON lessons (created_by);
+
+CREATE TRIGGER trg_lessons_updated
+    BEFORE UPDATE
+    ON lessons
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- Lesson-Student join
 CREATE TABLE lesson_students
@@ -116,7 +207,9 @@ CREATE INDEX idx_lesson_events_actor ON lesson_events (actor_id);
 CREATE INDEX idx_lesson_events_pending ON lesson_events (lesson_id, event_type, resolved)
     WHERE resolved = FALSE;
 
--- Lesson documents (1:1 with lesson)
+-- Lesson documents (1:1 with lesson). shared_document is the teacher-authored,
+-- student-visible artifact of the lesson, distinct from teacher_notes /
+-- student_notes which remain role-private scratchpads.
 CREATE TABLE lesson_documents
 (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -129,8 +222,14 @@ CREATE TABLE lesson_documents
     student_reflection TEXT,
     student_hard_today TEXT,
     created_at         TIMESTAMPTZ      DEFAULT now(),
-    updated_at         TIMESTAMPTZ      DEFAULT now()
+    updated_at         TIMESTAMPTZ      DEFAULT now(),
+    shared_document    TEXT
 );
+
+CREATE TRIGGER trg_lesson_docs_updated
+    BEFORE UPDATE
+    ON lesson_documents
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- Corrections within a lesson document
 CREATE TABLE lesson_corrections
@@ -183,6 +282,11 @@ CREATE INDEX idx_homework_lesson ON homework (lesson_id);
 CREATE INDEX idx_homework_status ON homework (status);
 CREATE INDEX idx_homework_due ON homework (due_date);
 
+CREATE TRIGGER trg_homework_updated
+    BEFORE UPDATE
+    ON homework
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
 -- Vocabulary words (student SRS)
 CREATE TABLE vocabulary_words
 (
@@ -223,69 +327,109 @@ CREATE TABLE learning_goals
 CREATE INDEX idx_goals_student ON learning_goals (student_id);
 CREATE INDEX idx_goals_status ON learning_goals (status);
 
--- Materials / resources
-CREATE TABLE materials
-(
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    lesson_id  UUID          REFERENCES lessons (id) ON DELETE SET NULL,
-    student_id UUID REFERENCES users (id),
-    teacher_id UUID          NOT NULL REFERENCES users (id),
-    name         VARCHAR(255)  NOT NULL,
-    type         MATERIAL_TYPE NOT NULL,
-    url          TEXT          NOT NULL,
-    content_type VARCHAR(100),
-    file_size    BIGINT,
-    created_at   TIMESTAMPTZ      DEFAULT now()
-);
-
-CREATE INDEX idx_materials_lesson ON materials (lesson_id);
-CREATE INDEX idx_materials_student ON materials (student_id);
-CREATE INDEX idx_materials_teacher ON materials (teacher_id);
-CREATE INDEX idx_materials_type ON materials (type);
-
--- Auto-update updated_at trigger
-CREATE
-OR REPLACE FUNCTION update_updated_at()
-   RETURNS TRIGGER AS $$
-BEGIN
-       NEW.updated_at
-= now();
-RETURN NEW;
-END;
-   $$
-LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_users_updated
-    BEFORE UPDATE
-    ON users
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-CREATE TRIGGER trg_lessons_updated
-    BEFORE UPDATE
-    ON lessons
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-CREATE TRIGGER trg_lesson_docs_updated
-    BEFORE UPDATE
-    ON lesson_documents
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-CREATE TRIGGER trg_homework_updated
-    BEFORE UPDATE
-    ON homework
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER trg_goals_updated
     BEFORE UPDATE
     ON learning_goals
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+-- Material folder tree
+CREATE TABLE material_folders
+(
+    id               UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
+    parent_folder_id UUID                 REFERENCES material_folders (id) ON DELETE RESTRICT,
+    teacher_id       UUID        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    name             VARCHAR(255) NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_material_folders_teacher ON material_folders (teacher_id);
+CREATE INDEX idx_material_folders_parent ON material_folders (parent_folder_id);
+
+-- Unique name per (teacher, parent). Two partial indexes because NULL parent
+-- needs a separate index (UNIQUE over NULLable columns treats NULLs as distinct).
+CREATE UNIQUE INDEX uq_material_folders_name_in_parent
+    ON material_folders (teacher_id, parent_folder_id, lower(name))
+    WHERE parent_folder_id IS NOT NULL;
+
+CREATE UNIQUE INDEX uq_material_folders_name_at_root
+    ON material_folders (teacher_id, lower(name))
+    WHERE parent_folder_id IS NULL;
+
+CREATE TRIGGER trg_material_folders_updated
+    BEFORE UPDATE
+    ON material_folders
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- Materials / resources
+CREATE TABLE materials
+(
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id   UUID          NOT NULL REFERENCES users (id),
+    name         VARCHAR(255)  NOT NULL,
+    type         MATERIAL_TYPE NOT NULL,
+    url          TEXT          NOT NULL,
+    content_type VARCHAR(100),
+    file_size    BIGINT,
+    created_at   TIMESTAMPTZ      DEFAULT now(),
+    folder_id    UUID          REFERENCES material_folders (id) ON DELETE SET NULL,
+    level        LANGUAGE_LEVEL,
+    skill        MATERIAL_SKILL
+);
+
+CREATE INDEX idx_materials_teacher ON materials (teacher_id);
+CREATE INDEX idx_materials_type ON materials (type);
+CREATE INDEX idx_materials_folder ON materials (folder_id);
+CREATE INDEX idx_materials_level ON materials (level);
+CREATE INDEX idx_materials_skill ON materials (skill);
+
+-- Direct per-material shares
+CREATE TABLE material_shares
+(
+    material_id UUID        NOT NULL REFERENCES materials (id) ON DELETE CASCADE,
+    student_id  UUID        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    shared_by   UUID        NOT NULL REFERENCES users (id),
+    shared_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (material_id, student_id)
+);
+
+CREATE INDEX idx_material_shares_student ON material_shares (student_id);
+
+-- Folder shares (cascade to all contents, recursively)
+CREATE TABLE folder_shares
+(
+    folder_id  UUID        NOT NULL REFERENCES material_folders (id) ON DELETE CASCADE,
+    student_id UUID        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    shared_by  UUID        NOT NULL REFERENCES users (id),
+    shared_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (folder_id, student_id)
+);
+
+CREATE INDEX idx_folder_shares_student ON folder_shares (student_id);
+
+-- Lesson N:M material attachments
+CREATE TABLE lesson_materials
+(
+    lesson_id   UUID        NOT NULL REFERENCES lessons (id) ON DELETE CASCADE,
+    material_id UUID        NOT NULL REFERENCES materials (id) ON DELETE CASCADE,
+    attached_by UUID        NOT NULL REFERENCES users (id),
+    attached_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (lesson_id, material_id)
+);
+
+CREATE INDEX idx_lesson_materials_material ON lesson_materials (material_id);
+
+-- Registrations (invites)
 CREATE TABLE registrations
 (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email      VARCHAR(255) NOT NULL,
     token      VARCHAR(255) NOT NULL,
-    invited_by    UUID         REFERENCES users (id) ON DELETE SET NULL,
+    invited_by UUID         REFERENCES users (id) ON DELETE SET NULL,
     used       BOOLEAN          DEFAULT FALSE,
     expires_at TIMESTAMPTZ  NOT NULL,
     created_at TIMESTAMPTZ      DEFAULT now(),
-    role          USER_ROLE    NOT NULL
+    role       USER_ROLE    NOT NULL
 );
 
 CREATE INDEX idx_registrations_email ON registrations (email);
@@ -303,22 +447,6 @@ CREATE TABLE password_resets
 CREATE INDEX idx_password_resets_token ON password_resets (token);
 CREATE INDEX idx_password_resets_user ON password_resets (user_id);
 
--- Notification types
-CREATE TYPE NOTIFICATION_TYPE AS ENUM (
-    'LESSON_CREATED',
-    'LESSON_REQUESTED',
-    'LESSON_ACCEPTED',
-    'LESSON_CANCELLED',
-    'RESCHEDULE_REQUESTED',
-    'RESCHEDULE_ACCEPTED',
-    'RESCHEDULE_REJECTED',
-    'JOIN_REQUESTED',
-    'JOIN_ACCEPTED',
-    'JOIN_REJECTED',
-    'LESSON_STARTED',
-    'LESSON_COMPLETED'
-);
-
 -- Notifications
 CREATE TABLE notifications
 (
@@ -333,3 +461,17 @@ CREATE TABLE notifications
 
 CREATE INDEX idx_notifications_user_created ON notifications (user_id, created_at DESC);
 CREATE INDEX idx_notifications_unread ON notifications (user_id) WHERE viewed = FALSE;
+
+-- Append-only log of student learning actions. Feeds the daily learning
+-- streak: a day (in the user's timezone) is active when it has >= 1 row.
+CREATE TABLE learning_activity
+(
+    id          UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
+    user_id     UUID        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    kind        VARCHAR(32) NOT NULL,
+    ref_id      UUID,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_la_kind CHECK (kind IN ('VOCAB_REVIEW', 'LESSON_COMPLETED', 'HOMEWORK_SUBMITTED'))
+);
+
+CREATE INDEX idx_la_user_occurred ON learning_activity (user_id, occurred_at);
