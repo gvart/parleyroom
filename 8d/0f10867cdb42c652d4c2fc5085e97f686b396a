@@ -1,0 +1,25 @@
+kotlin.bat
+  s_2b5907717bc9a2::t_9c58f56a7331d0 1-264
+plugins/jib-plugin/plugin.yaml
+  s_2b5907717bc9a2::t_4aba3761a36d42 24-28
+kotlin
+  s_2b5907717bc9a2::t_9c58f56a7331d0 1-286
+.github/workflows/docker-publish.yml
+  s_2b5907717bc9a2::t_74a45b6cd3dcd5 35,39,41,43,54-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "8d0f10867cdb42c652d4c2fc5085e97f686b396a",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}

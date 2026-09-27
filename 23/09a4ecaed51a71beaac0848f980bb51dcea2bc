@@ -1,0 +1,145 @@
+libs.versions.toml
+  s_2b5907717bc9a2::t_c70580019717a0 2
+src/com/gvart/parleyroom/activity/data/LearningActivityTable.kt
+  s_2b5907717bc9a2::t_d32c6d2898c1a8 4-7,14
+src/com/gvart/parleyroom/activity/service/LearningActivityRecorder.kt
+  s_2b5907717bc9a2::t_d5d3496adb349c 5
+src/com/gvart/parleyroom/activity/service/StreakService.kt
+  s_2b5907717bc9a2::t_e39495664fbb92 10-12
+src/com/gvart/parleyroom/admin/service/AdminService.kt
+  s_2b5907717bc9a2::t_2092412b12bec5 28-45,58-68
+src/com/gvart/parleyroom/availability/data/TeacherAvailabilityExceptionTable.kt
+  s_2b5907717bc9a2::t_15571ebd0415a9 5-6
+src/com/gvart/parleyroom/availability/data/TeacherWeeklyAvailabilityTable.kt
+  s_2b5907717bc9a2::t_d122346abe3a18 4-6
+src/com/gvart/parleyroom/availability/service/AvailabilityService.kt
+  s_2b5907717bc9a2::t_45d02846d5f732 23-33
+src/com/gvart/parleyroom/availability/service/AvailabilityValidator.kt
+  s_2b5907717bc9a2::t_4b2783b212f108 12-17
+src/com/gvart/parleyroom/availability/service/SlotComputationService.kt
+  s_2b5907717bc9a2::t_5caa90fd4c0702 20-26
+src/com/gvart/parleyroom/common/data/PgEnum.kt
+  s_2b5907717bc9a2::t_4388cef32a8cc5 3
+src/com/gvart/parleyroom/common/service/AuthorizationHelper.kt
+  s_2b5907717bc9a2::t_5a46f947bcdc1a 7-9
+src/com/gvart/parleyroom/common/service/EntityLookup.kt
+  s_2b5907717bc9a2::t_d7896d146dd1be 4-8
+src/com/gvart/parleyroom/config/DatabaseConfig.kt
+  s_2b5907717bc9a2::t_714a39b21a169f 9
+src/com/gvart/parleyroom/config/HealthRouting.kt
+  s_2b5907717bc9a2::t_dd3e51ee61e13d 10
+src/com/gvart/parleyroom/goal/data/LearningGoalTable.kt
+  s_2b5907717bc9a2::t_7225663af62959 5-7
+src/com/gvart/parleyroom/goal/service/GoalService.kt
+  s_2b5907717bc9a2::t_ca69eac2e99405 17-24
+src/com/gvart/parleyroom/homework/data/HomeworkTable.kt
+  s_2b5907717bc9a2::t_0fb3d62631ddd9 6-8
+src/com/gvart/parleyroom/homework/service/HomeworkService.kt
+  s_2b5907717bc9a2::t_2ffde6fd5d1fb5 20-27
+src/com/gvart/parleyroom/lesson/data/LessonDocumentTable.kt
+  s_2b5907717bc9a2::t_c784a199232d3a 3-4
+src/com/gvart/parleyroom/lesson/data/LessonEventTable.kt
+  s_2b5907717bc9a2::t_e6c74688a6ec2a 5-6
+src/com/gvart/parleyroom/lesson/data/LessonStudentTable.kt
+  s_2b5907717bc9a2::t_851076ce8c4e61 5
+src/com/gvart/parleyroom/lesson/data/LessonTable.kt
+  s_2b5907717bc9a2::t_e6ec065aa332a8 7-8
+src/com/gvart/parleyroom/lesson/service/LessonDocumentService.kt
+  s_2b5907717bc9a2::t_aed90d0a9a8594 14-19
+src/com/gvart/parleyroom/lesson/service/LessonLifecycleService.kt
+  s_2b5907717bc9a2::t_26029c5c6f49cc 33-40
+src/com/gvart/parleyroom/lesson/service/LessonParticipantService.kt
+  s_2b5907717bc9a2::t_bf69423d17c3e8 14-19
+src/com/gvart/parleyroom/lesson/service/LessonRescheduleService.kt
+  s_2b5907717bc9a2::t_b9575764db5547 17-22
+src/com/gvart/parleyroom/lesson/service/LessonService.kt
+  s_2b5907717bc9a2::t_27008ab20ea5fc 22-31
+src/com/gvart/parleyroom/lesson/service/LessonSupport.kt
+  s_2b5907717bc9a2::t_0c290ca1e3a8cf 21-33
+src/com/gvart/parleyroom/material/data/FolderShareTable.kt
+  s_2b5907717bc9a2::t_1ee157c68f3f65 4-5
+src/com/gvart/parleyroom/material/data/LessonMaterialTable.kt
+  s_2b5907717bc9a2::t_803bafc6c6841b 5-6
+src/com/gvart/parleyroom/material/data/MaterialFolderTable.kt
+  s_2b5907717bc9a2::t_3174e9abea1ede 4-5
+src/com/gvart/parleyroom/material/data/MaterialShareTable.kt
+  s_2b5907717bc9a2::t_72c54bbf941d5e 4-5
+src/com/gvart/parleyroom/material/data/MaterialTable.kt
+  s_2b5907717bc9a2::t_8ae47ac1823d1e 6-7
+src/com/gvart/parleyroom/material/service/LessonMaterialService.kt
+  s_2b5907717bc9a2::t_03b3eb6fd3186b 20-27
+src/com/gvart/parleyroom/material/service/MaterialAccessResolver.kt
+  s_2b5907717bc9a2::t_7782fdd16b0d0c 12-18
+src/com/gvart/parleyroom/material/service/MaterialFolderService.kt
+  s_2b5907717bc9a2::t_b0affa393468b9 19-33
+src/com/gvart/parleyroom/material/service/MaterialService.kt
+  s_2b5907717bc9a2::t_b668b3e2d07f41 30-44
+src/com/gvart/parleyroom/material/service/MaterialShareService.kt
+  s_2b5907717bc9a2::t_b682aab52d93c7 20-26
+src/com/gvart/parleyroom/notification/data/NotificationTable.kt
+  s_2b5907717bc9a2::t_20e3a871294a07 5-7,32
+src/com/gvart/parleyroom/notification/service/NotificationService.kt
+  s_2b5907717bc9a2::t_7c1651d31ed4ad 10-19
+src/com/gvart/parleyroom/registration/data/PasswordResetTable.kt
+  s_2b5907717bc9a2::t_3963907f29623e 4-6,10
+src/com/gvart/parleyroom/registration/data/RegistrationTable.kt
+  s_2b5907717bc9a2::t_abba4449e2af64 6-7
+src/com/gvart/parleyroom/registration/initializer/AdminUserInitializer.kt
+  s_2b5907717bc9a2::t_a3802bbb68b7d4 7-10
+src/com/gvart/parleyroom/registration/service/PasswordResetService.kt
+  s_2b5907717bc9a2::t_9e44188e18ad46 12-18
+src/com/gvart/parleyroom/registration/service/RegistrationService.kt
+  s_2b5907717bc9a2::t_d2e10349d71fed 9-16
+src/com/gvart/parleyroom/user/data/RefreshTokenTable.kt
+  s_2b5907717bc9a2::t_779107b0fd1f57 3-4
+src/com/gvart/parleyroom/user/data/TeacherStudentTable.kt
+  s_2b5907717bc9a2::t_c297ce35bc7aa6 5-7
+src/com/gvart/parleyroom/user/data/UserTable.kt
+  s_2b5907717bc9a2::t_0179f0c2b0aa0c 5-6
+src/com/gvart/parleyroom/user/service/AuthenticationService.kt
+  s_2b5907717bc9a2::t_38b344ec5ef08c 14-21
+src/com/gvart/parleyroom/user/service/TelegramAuthService.kt
+  s_2b5907717bc9a2::t_f2bf329f22a0f4 9-12
+src/com/gvart/parleyroom/user/service/UserService.kt
+  s_2b5907717bc9a2::t_54ed48f10aa055 15-21
+src/com/gvart/parleyroom/vocabulary/data/VocabularyWordTable.kt
+  s_2b5907717bc9a2::t_fc6f17693940a2 6-7
+src/com/gvart/parleyroom/vocabulary/service/VocabularyReviewReminderService.kt
+  s_2b5907717bc9a2::t_0f08a1c8480d9b 9-16
+src/com/gvart/parleyroom/vocabulary/service/VocabularyService.kt
+  s_2b5907717bc9a2::t_4ad2d3d4497e3c 18-27
+test/com/gvart/parleyroom/IntegrationTest.kt
+  s_2b5907717bc9a2::t_1b8c64754d76b5 19-20
+test/com/gvart/parleyroom/activity/StreakIntegrationTest.kt
+  s_2b5907717bc9a2::t_4be95413261339 29-34
+test/com/gvart/parleyroom/admin/AdminIntegrationTest.kt
+  s_2b5907717bc9a2::t_843a6287c09058 26-30
+test/com/gvart/parleyroom/registration/PasswordResetIntegrationTest.kt
+  s_2b5907717bc9a2::t_80a189280d8d5e 19-21
+test/com/gvart/parleyroom/registration/RegistrationIntegrationTest.kt
+  s_2b5907717bc9a2::t_901cdba3f6ded1 16-18
+test/com/gvart/parleyroom/user/AuthenticationIntegrationTest.kt
+  s_2b5907717bc9a2::t_981db7e843549f 22-25
+test/com/gvart/parleyroom/user/TelegramAuthIntegrationTest.kt
+  s_2b5907717bc9a2::t_778ca0bca352cd 18-21
+test/com/gvart/parleyroom/user/TelegramLinkWidgetIntegrationTest.kt
+  s_2b5907717bc9a2::t_8f0328a11940b3 15-17
+test/com/gvart/parleyroom/vocabulary/VocabularyReviewReminderTest.kt
+  s_2b5907717bc9a2::t_7417e745c68716 12-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "2309a4ecaed51a71beaac0848f980bb51dcea2bc",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+libs.versions.toml
+  s_2b5907717bc9a2::t_6d2366722b4d9c 7,19-21
+module.yaml
+  s_2b5907717bc9a2::t_aa03592be8acc1 65-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "39cb0f33ac0522b3525b9a93bd191553478b860c",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
