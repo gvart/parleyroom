@@ -1,0 +1,31 @@
+resources/db/migration/V6__material_tags.sql
+  s_2b5907717bc9a2::t_f8a7181b12bebb 1-19
+src/com/gvart/parleyroom/material/data/MaterialTagTables.kt
+  s_2b5907717bc9a2::t_4cc56ad76c2773 1-19
+src/com/gvart/parleyroom/material/routing/Routing.kt
+  s_2b5907717bc9a2::t_17648e55c905eb 69-70,74,87-88
+src/com/gvart/parleyroom/material/service/MaterialService.kt
+  s_2b5907717bc9a2::t_0a46567e477036 14,18,30,38,42,68-69,95-102,105-110,241-242,245-248,258-260,271-284,426-442,462-463
+src/com/gvart/parleyroom/material/transfer/MaterialResponse.kt
+  s_2b5907717bc9a2::t_b5e09c0462e278 22-23
+src/com/gvart/parleyroom/material/transfer/UpdateMaterialRequest.kt
+  s_2b5907717bc9a2::t_0459d47ea9783e 10,18-19
+test/com/gvart/parleyroom/material/MaterialTagIntegrationTest.kt
+  s_2b5907717bc9a2::t_ba137337737146 1-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "55686d7bfd54c1f0d3af6c557ab9bc2674ac952b",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
