@@ -40,6 +40,9 @@ import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 
+/** Higher than the global 100 so the client can load a student's whole vocabulary for topic folders. */
+private const val STUDENT_VOCAB_MAX_PAGE_SIZE = 500
+
 fun Application.configureVocabularyRouting() {
     val vocabularyService: VocabularyService by dependencies
     val vocabEntryService: VocabEntryService by dependencies
@@ -59,7 +62,8 @@ fun Application.configureVocabularyRouting() {
                         lessonId = call.getQueryUUID("lessonId"),
                         q = params["q"],
                     )
-                    call.respond(HttpStatusCode.OK, vocabularyService.getWords(principal, filters, PageRequest.from(call)))
+                    val page = PageRequest.from(call, maxPageSize = STUDENT_VOCAB_MAX_PAGE_SIZE)
+                    call.respond(HttpStatusCode.OK, vocabularyService.getWords(principal, filters, page))
                 }.describe {
                     summary = "List student vocabulary"
                     description = "Students see their own words, teachers their students', admins all. " +
@@ -74,7 +78,7 @@ fun Application.configureVocabularyRouting() {
                         query("lessonId") { description = "Words the student received in this lesson"; required = false }
                         query("q") { description = "Lemma substring search"; required = false }
                         query("page") { description = "Page number (1-based, default 1)"; required = false }
-                        query("pageSize") { description = "Items per page (default 20, max 100)"; required = false }
+                        query("pageSize") { description = "Items per page (default 20, max 500)"; required = false }
                     }
                     responses { HttpStatusCode.OK { schema = jsonSchema<StudentVocabPageResponse>() } }
                 }

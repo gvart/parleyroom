@@ -73,8 +73,8 @@ VocabEntryInput:
 `translations` is keyed by language code; supported codes are `ru`, `en`
 (`vocabulary/service/VocabDisplay.kt`; others -> 400 `VOCAB_LANGUAGE_UNSUPPORTED`).
 
-**Assign targets**: `studentIds` ∪ members of `groupId`; if both are empty and `lessonId` is set,
-the lesson's confirmed students. With `lessonId`, the entry is also linked to the lesson's words.
+**Assign targets**: `studentIds` ∪ current members of `groupId`; if both are empty and `lessonId` is set,
+the lesson's confirmed attendees (`lesson_students`, e.g. a club session's participants). With `lessonId`, the entry is also linked to the lesson's words.
 Students who already have the word are counted in `skipped`.
 
 ### Student vocabulary (`/api/v1/vocabulary`)
@@ -85,6 +85,8 @@ GET /api/v1/vocabulary?studentId=&status=&topicId=&level=&lessonId=&q=&page=&pag
 ```
 - **Student** -> own words; **Teacher** -> their students' words; **Admin** -> all
 - `status`: NEW | LEARNING | REVIEW | LEARNED; `lessonId` = lesson in which the student got the word
+- `level` matches the entry's single level exactly; `topicId` matches entries tagged with that exact topic (no subtree)
+- `pageSize` max is **500** here (100 elsewhere) so clients can load a whole vocabulary for topic folders
 
 ```
 POST /api/v1/vocabulary   (teacher quick-add)
@@ -121,7 +123,7 @@ StudentVocab:
 ### Display setting (translation / explanation)
 
 `fields` ⊆ `ru | en | de_explanation` (combinable) + `allowTranslationToggle`.
-Resolution per word: **lesson override** (the lesson the student got it in) > **teacher–student
+Resolution per word: **lesson override** (applies to the student's words whose `lessonId` is that lesson) > **teacher–student
 setting** > **level default** (no level / A1–A2: `["ru"]`, toggle off; B1+: `["de_explanation"]`,
 toggle on).
 
@@ -341,7 +343,7 @@ Per-lesson override of the vocab display setting for words students received in 
 Teacher-owned study resources stored in S3-compatible storage (MinIO locally, S3 on AWS). Clients upload bytes to the API; the server streams them to storage. Non-LINK materials expose a `downloadUrl` pointing at `GET /api/v1/materials/{id}/file`, which streams the stored bytes through the authenticated API.
 
 Upload flow for `PDF`, `AUDIO`, `VIDEO`: `POST /api/v1/materials` as `multipart/form-data` with two parts:
-- `metadata` (`application/json`): `{ name, type, studentId?, lessonId? }`
+- `metadata` (`application/json`): `{ name, type, folderId?, level?, skill?, topicIds?: [], grammarTopicIds?: [] }`
 - `file` (binary): the file bytes; `Content-Type` and `Content-Length` headers required
 
 For `LINK` materials, send only the `metadata` part with `{ name, type: "LINK", url, studentId?, lessonId? }` (no `file` part).

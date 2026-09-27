@@ -432,4 +432,16 @@ class VocabularyIntegrationTest : IntegrationTest() {
         }
         assertEquals(HttpStatusCode.Forbidden, unrelated.status)
     }
+
+    @Test
+    fun `student vocabulary accepts page sizes up to 500`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        quickAdd(client, token)
+
+        val big = client.get("/api/v1/vocabulary?pageSize=500") { bearerAuth(token) }.body<StudentVocabPageResponse>()
+        assertEquals(500, big.pageSize)
+        val capped = client.get("/api/v1/vocabulary?pageSize=5000") { bearerAuth(token) }.body<StudentVocabPageResponse>()
+        assertEquals(500, capped.pageSize)
+    }
 }

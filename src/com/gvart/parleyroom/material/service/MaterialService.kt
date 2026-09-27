@@ -174,6 +174,11 @@ class MaterialService(
             principal.id
         }
 
+        // Validate tags before any bytes hit storage.
+        val (topicIds, grammarIds) = transaction {
+            LibraryAccess.requireTopics(teacherId, request.topicIds) to
+                    LibraryAccess.requireGrammarTopics(teacherId, request.grammarTopicIds)
+        }
         val materialId = UUID.randomUUID()
 
         return when (input) {
@@ -185,6 +190,8 @@ class MaterialService(
                 storedUrl = request.url!!,
                 contentType = null,
                 fileSize = null,
+                topicIds = topicIds,
+                grammarIds = grammarIds,
             )
             is CreateMaterialInput.File -> {
                 val key = storage.buildKey(teacherId, materialId, input.fileName)
@@ -198,6 +205,8 @@ class MaterialService(
                         storedUrl = key,
                         contentType = input.contentType,
                         fileSize = input.size,
+                        topicIds = topicIds,
+                        grammarIds = grammarIds,
                     )
                 }.getOrElse { e ->
                     runCatching { storage.delete(key) }
@@ -215,6 +224,8 @@ class MaterialService(
         storedUrl: String,
         contentType: String?,
         fileSize: Long?,
+        topicIds: List<UUID>,
+        grammarIds: List<UUID>,
     ): MaterialResponse = transaction {
         MaterialTable.insert {
             it[id] = EntityID(materialId, MaterialTable)
@@ -229,6 +240,7 @@ class MaterialService(
             it[skill] = request.skill
             it[createdAt] = OffsetDateTime.now()
         }
+        replaceTags(materialId, topicIds, grammarIds)
         findMaterial(materialId).let(::toResponse)
     }
 
@@ -268,22 +280,27 @@ class MaterialService(
                 if (request.level != null) it[level] = request.level
                 if (request.skill != null) it[skill] = request.skill
             }
-            topicIds?.let { ids ->
-                MaterialTopicTable.deleteWhere { MaterialTopicTable.materialId eq materialId }
-                MaterialTopicTable.batchInsert(ids) {
-                    this[MaterialTopicTable.materialId] = materialId
-                    this[MaterialTopicTable.topicId] = it
-                }
-            }
-            grammarIds?.let { ids ->
-                MaterialGrammarTopicTable.deleteWhere { MaterialGrammarTopicTable.materialId eq materialId }
-                MaterialGrammarTopicTable.batchInsert(ids) {
-                    this[MaterialGrammarTopicTable.materialId] = materialId
-                    this[MaterialGrammarTopicTable.grammarTopicId] = it
-                }
-            }
+            replaceTags(materialId, topicIds, grammarIds)
             toResponse(findMaterial(materialId))
         }
+
+    /** Replaces the tag links that are non-null; null leaves that tag kind untouched. */
+    private fun replaceTags(materialId: UUID, topicIds: List<UUID>?, grammarIds: List<UUID>?) {
+        topicIds?.let { ids ->
+            MaterialTopicTable.deleteWhere { MaterialTopicTable.materialId eq materialId }
+            MaterialTopicTable.batchInsert(ids) {
+                this[MaterialTopicTable.materialId] = materialId
+                this[MaterialTopicTable.topicId] = it
+            }
+        }
+        grammarIds?.let { ids ->
+            MaterialGrammarTopicTable.deleteWhere { MaterialGrammarTopicTable.materialId eq materialId }
+            MaterialGrammarTopicTable.batchInsert(ids) {
+                this[MaterialGrammarTopicTable.materialId] = materialId
+                this[MaterialGrammarTopicTable.grammarTopicId] = it
+            }
+        }
+    }
 
     fun clearMaterialFolder(materialId: UUID, principal: UserPrincipal): MaterialResponse = transaction {
         val row = findMaterial(materialId)

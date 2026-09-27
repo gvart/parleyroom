@@ -100,4 +100,51 @@ class MaterialTagIntegrationTest : IntegrationTest() {
         assertEquals(HttpStatusCode.NotFound, response.status)
         assertEquals("TOPIC_NOT_FOUND", response.body<ProblemDetail>().code)
     }
+
+    @Test
+    fun `upload metadata can carry topic and grammar tags`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val topicId = client.post("/api/v1/topics") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(token)
+            setBody(CreateTopicRequest(name = "Reisen"))
+        }.body<TopicResponse>().id
+
+        val created = client.post("/api/v1/materials") {
+            bearerAuth(token)
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            "metadata",
+                            """{"name":"bahn","type":"LINK","url":"https://example.com/bahn","topicIds":["$topicId"]}""",
+                            Headers.build { append(HttpHeaders.ContentType, "application/json") },
+                        )
+                    }
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, created.status)
+        assertEquals(listOf(topicId), created.body<MaterialResponse>().topicIds)
+
+        val rejected = client.post("/api/v1/materials") {
+            bearerAuth(token)
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            "metadata",
+                            """{"name":"x","type":"LINK","url":"https://example.com/x","grammarTopicIds":["00000000-0000-0000-0000-00000000beef"]}""",
+                            Headers.build { append(HttpHeaders.ContentType, "application/json") },
+                        )
+                    }
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.NotFound, rejected.status)
+        assertEquals("GRAMMAR_TOPIC_NOT_FOUND", rejected.body<ProblemDetail>().code)
+        val all = client.get("/api/v1/materials") { bearerAuth(token) }.body<MaterialPageResponse>()
+        assertEquals(1, all.total)
+    }
 }
