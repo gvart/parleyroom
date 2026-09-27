@@ -1,0 +1,33 @@
+src/com/gvart/parleyroom/user/service/UserService.kt
+  s_2b5907717bc9a2::t_aa082626457d86 87
+  s_2b5907717bc9a2::t_b18c5bf1809018 11
+src/com/gvart/parleyroom/admin/service/AdminService.kt
+  s_2b5907717bc9a2::t_42ba0c766ff42c 99
+  s_2b5907717bc9a2::t_1fbe38f9aa8235 129
+  s_2b5907717bc9a2::t_cdf26e55434e7f 26
+test/com/gvart/parleyroom/admin/AdminIntegrationTest.kt
+  s_2b5907717bc9a2::t_4d10b5f41637f1 230-250
+  s_2b5907717bc9a2::t_1353c8fe635b20 7,229
+API.md
+  s_2b5907717bc9a2::t_56ee2fc8042a22 301,307-315
+src/com/gvart/parleyroom/user/data/SupportedLocale.kt
+  s_2b5907717bc9a2::t_8012dcc9ffa08e 1-15
+test/com/gvart/parleyroom/user/UserIntegrationTest.kt
+  s_2b5907717bc9a2::t_748ebcf7b19009 5,136,141-168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "36a0add9a53f3d94c82cbc1edb41d205265a831f",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
