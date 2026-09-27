@@ -117,7 +117,7 @@ class MaterialService(
         val type = row[MaterialTable.type]
         if (type == MaterialType.LINK) throw BadRequestException("LINK materials have no downloadable file")
         val key = row[MaterialTable.url]
-        if (key.isBlank()) throw NotFoundException("Material has no stored file")
+        if (key.isBlank()) throw NotFoundException("Material has no stored file", code = "MATERIAL_FILE_NOT_FOUND")
         MaterialDownloadTarget(
             storageKey = key,
             fileName = key.substringAfterLast('/'),
@@ -297,7 +297,7 @@ class MaterialService(
                     val rows = MaterialTable.selectAll()
                         .where { MaterialTable.id inList ids }
                         .toList()
-                    if (rows.size != ids.size) throw NotFoundException("One or more materials not found")
+                    if (rows.size != ids.size) throw NotFoundException("One or more materials not found", code = "MATERIAL_NOT_FOUND")
                     rows.forEach { requireOwnerOrAdmin(it, principal) }
 
                     affected = MaterialTable.update({ MaterialTable.id inList ids }) {
@@ -315,7 +315,7 @@ class MaterialService(
                     val rows = MaterialTable.selectAll()
                         .where { MaterialTable.id inList ids }
                         .toList()
-                    if (rows.size != ids.size) throw NotFoundException("One or more materials not found")
+                    if (rows.size != ids.size) throw NotFoundException("One or more materials not found", code = "MATERIAL_NOT_FOUND")
                     rows.forEach { requireOwnerOrAdmin(it, principal) }
 
                     val now = OffsetDateTime.now()
@@ -350,7 +350,7 @@ class MaterialService(
                     val rows = MaterialTable.selectAll()
                         .where { MaterialTable.id inList ids }
                         .toList()
-                    if (rows.size != ids.size) throw NotFoundException("One or more materials not found")
+                    if (rows.size != ids.size) throw NotFoundException("One or more materials not found", code = "MATERIAL_NOT_FOUND")
                     rows.forEach { requireOwnerOrAdmin(it, principal) }
                     val keys = rows
                         .filter { it[MaterialTable.type] != MaterialType.LINK }

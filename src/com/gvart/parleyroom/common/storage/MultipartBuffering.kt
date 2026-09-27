@@ -20,7 +20,7 @@ fun InputStream.readBoundedBytes(maxBytes: Long): ByteArray {
             if (read <= 0) break
             total += read
             if (total > maxBytes) {
-                throw BadRequestException("file exceeds max size of $maxBytes bytes")
+                throw BadRequestException("file exceeds max size of $maxBytes bytes", code = "FILE_TOO_LARGE")
             }
             buffer.write(chunk, 0, read)
         }

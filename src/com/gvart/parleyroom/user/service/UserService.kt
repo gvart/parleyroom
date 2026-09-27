@@ -115,10 +115,10 @@ class UserService(
         stream: InputStream,
     ): UserResponse {
         if (contentType !in ALLOWED_AVATAR_CONTENT_TYPES) {
-            throw BadRequestException("Avatar content type must be one of ${ALLOWED_AVATAR_CONTENT_TYPES.joinToString()}")
+            throw BadRequestException("Avatar content type must be one of ${ALLOWED_AVATAR_CONTENT_TYPES.joinToString()}", code = "AVATAR_INVALID")
         }
         if (size <= 0 || size > MAX_AVATAR_SIZE_BYTES) {
-            throw BadRequestException("Avatar must be between 1 byte and $MAX_AVATAR_SIZE_BYTES bytes")
+            throw BadRequestException("Avatar must be between 1 byte and $MAX_AVATAR_SIZE_BYTES bytes", code = "AVATAR_INVALID")
         }
 
         val newKey = storage.buildAvatarKey(principal.id, fileName)
@@ -154,7 +154,7 @@ class UserService(
             it[telegramUsername] = null
             it[updatedAt] = OffsetDateTime.now()
         }
-        if (updated == 0) throw NotFoundException("User not found")
+        if (updated == 0) throw NotFoundException("User not found", code = "USER_NOT_FOUND")
     }
 
     fun deleteAvatar(principal: UserPrincipal): UserResponse {
@@ -185,7 +185,7 @@ class UserService(
                 .singleOrNull()
                 ?.get(UserTable.avatarUrl)
         }
-        return key ?: throw NotFoundException("Avatar not found")
+        return key ?: throw NotFoundException("Avatar not found", code = "AVATAR_NOT_FOUND")
     }
 
     private fun avatarUrl(userId: UUID, key: String?): String? =

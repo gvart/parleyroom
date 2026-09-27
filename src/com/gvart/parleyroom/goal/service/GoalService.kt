@@ -105,7 +105,7 @@ class GoalService {
         AuthorizationHelper.requireAccessToStudent(goal[LearningGoalTable.studentId].value, principal)
 
         if (goal[LearningGoalTable.status] != GoalStatus.ACTIVE)
-            throw BadRequestException("Can only update active goals")
+            throw BadRequestException("Can only update active goals", code = "GOAL_NOT_ACTIVE")
 
         LearningGoalTable.update({ LearningGoalTable.id eq goalId }) {
             if (request.description != null) it[description] = request.description
@@ -124,7 +124,7 @@ class GoalService {
         AuthorizationHelper.requireAccessToStudent(goal[LearningGoalTable.studentId].value, principal)
 
         if (goal[LearningGoalTable.status] != GoalStatus.ACTIVE)
-            throw BadRequestException("Can only update progress on active goals")
+            throw BadRequestException("Can only update progress on active goals", code = "GOAL_NOT_ACTIVE")
 
         LearningGoalTable.update({ LearningGoalTable.id eq goalId }) {
             it[progress] = request.progress
@@ -142,7 +142,7 @@ class GoalService {
         AuthorizationHelper.requireAccessToStudent(goal[LearningGoalTable.studentId].value, principal)
 
         if (goal[LearningGoalTable.status] != GoalStatus.ACTIVE)
-            throw BadRequestException("Can only complete active goals")
+            throw BadRequestException("Can only complete active goals", code = "GOAL_NOT_ACTIVE")
 
         LearningGoalTable.update({ LearningGoalTable.id eq goalId }) {
             it[status] = GoalStatus.COMPLETED
@@ -161,7 +161,7 @@ class GoalService {
         AuthorizationHelper.requireAccessToStudent(goal[LearningGoalTable.studentId].value, principal)
 
         if (goal[LearningGoalTable.status] != GoalStatus.ACTIVE)
-            throw BadRequestException("Can only abandon active goals")
+            throw BadRequestException("Can only abandon active goals", code = "GOAL_NOT_ACTIVE")
 
         LearningGoalTable.update({ LearningGoalTable.id eq goalId }) {
             it[status] = GoalStatus.ABANDONED

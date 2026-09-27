@@ -144,7 +144,7 @@ class HomeworkService {
 
         val currentStatus = hw[HomeworkTable.status]
         if (currentStatus != HomeworkStatus.OPEN && currentStatus != HomeworkStatus.REJECTED)
-            throw BadRequestException("Can only submit homework with OPEN or REJECTED status")
+            throw BadRequestException("Can only submit homework with OPEN or REJECTED status", code = "HOMEWORK_INVALID_STATE")
 
         HomeworkTable.update({ HomeworkTable.id eq homeworkId }) {
             it[submissionText] = request.submissionText
@@ -168,7 +168,7 @@ class HomeworkService {
 
         val currentStatus = hw[HomeworkTable.status]
         if (currentStatus != HomeworkStatus.SUBMITTED && currentStatus != HomeworkStatus.IN_REVIEW)
-            throw BadRequestException("Can only review homework with SUBMITTED or IN_REVIEW status")
+            throw BadRequestException("Can only review homework with SUBMITTED or IN_REVIEW status", code = "HOMEWORK_INVALID_STATE")
 
         if (request.status != HomeworkStatus.DONE && request.status != HomeworkStatus.REJECTED)
             throw BadRequestException("Review status must be DONE or REJECTED")

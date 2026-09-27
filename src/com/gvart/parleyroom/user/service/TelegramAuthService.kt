@@ -25,7 +25,7 @@ class TelegramAuthService(
             val user = UserTable.selectAll()
                 .where { UserTable.telegramId eq verified.user.id }
                 .singleOrNull()
-                ?: throw NotFoundException("telegram_not_linked")
+                ?: throw NotFoundException("telegram_not_linked", code = "TELEGRAM_NOT_LINKED")
             authenticationService.issueTokens(user)
         }
     }
@@ -48,7 +48,7 @@ class TelegramAuthService(
                 .where { UserTable.telegramId eq telegramId }
                 .singleOrNull()
             if (existingOwner != null && existingOwner[UserTable.id].value != userId) {
-                throw ConflictException("telegram_already_linked_to_another_account")
+                throw ConflictException("telegram_already_linked_to_another_account", code = "TELEGRAM_ALREADY_LINKED")
             }
 
             val updated = UserTable.update({ UserTable.id eq userId }) {
@@ -56,7 +56,7 @@ class TelegramAuthService(
                 it[UserTable.telegramUsername] = telegramUsername
                 it[updatedAt] = OffsetDateTime.now()
             }
-            if (updated == 0) throw NotFoundException("User not found")
+            if (updated == 0) throw NotFoundException("User not found", code = "USER_NOT_FOUND")
 
             TelegramLinkResult(telegramId = telegramId, telegramUsername = telegramUsername)
         }

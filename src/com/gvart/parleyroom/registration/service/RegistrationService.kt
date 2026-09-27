@@ -45,7 +45,7 @@ class RegistrationService {
                 .where { UserTable.email eq request.email }
                 .empty().not()
 
-            if (alreadyExists) throw ConflictException("User with this email already exists")
+            if (alreadyExists) throw ConflictException("User with this email already exists", code = "EMAIL_ALREADY_EXISTS")
 
             val pendingInvitation = RegistrationTable.selectAll()
                 .where {
@@ -55,7 +55,7 @@ class RegistrationService {
                 }
                 .empty().not()
 
-            if (pendingInvitation) throw ConflictException("A pending invitation already exists for this email")
+            if (pendingInvitation) throw ConflictException("A pending invitation already exists for this email", code = "INVITATION_ALREADY_PENDING")
 
             val registrationToken = UUID.randomUUID().toString()
             val hashedToken = hashToken(registrationToken)
@@ -77,14 +77,14 @@ class RegistrationService {
             .where { (RegistrationTable.token eq hashedToken).and { RegistrationTable.email eq request.email } }
             .singleOrNull()
 
-        if (entry == null) throw NotFoundException("Registration entry is missing")
-        if (entry[RegistrationTable.used]) throw BadRequestException("Registration link already used")
-        if (entry[RegistrationTable.expiresAt].isBefore(OffsetDateTime.now())) throw BadRequestException("Registration link is expired")
+        if (entry == null) throw NotFoundException("Registration entry is missing", code = "REGISTRATION_LINK_INVALID")
+        if (entry[RegistrationTable.used]) throw BadRequestException("Registration link already used", code = "REGISTRATION_LINK_USED")
+        if (entry[RegistrationTable.expiresAt].isBefore(OffsetDateTime.now())) throw BadRequestException("Registration link is expired", code = "REGISTRATION_LINK_EXPIRED")
 
         val emailExists = UserTable.selectAll()
             .where { UserTable.email eq request.email }
             .empty().not()
-        if (emailExists) throw ConflictException("User with this email already exists")
+        if (emailExists) throw ConflictException("User with this email already exists", code = "EMAIL_ALREADY_EXISTS")
 
         val trimmedFirstName = request.firstName.trim()
         val trimmedLastName = request.lastName.trim()

@@ -33,7 +33,7 @@ class PasswordResetService {
             val exists = UserTable.selectAll()
                 .where { UserTable.id eq userId }
                 .empty().not()
-            if (!exists) throw NotFoundException("User not found")
+            if (!exists) throw NotFoundException("User not found", code = "USER_NOT_FOUND")
             createResetToken(userId)
         }
     }
@@ -59,9 +59,9 @@ class PasswordResetService {
             .where { PasswordResetTable.token eq UUID.fromString(token) }
             .singleOrNull()
 
-        if (resetEntry == null) throw NotFoundException("Invalid reset token")
-        if (resetEntry[PasswordResetTable.used]) throw BadRequestException("Reset token already used")
-        if (resetEntry[PasswordResetTable.expiresAt].isBefore(OffsetDateTime.now())) throw BadRequestException("Reset token expired")
+        if (resetEntry == null) throw NotFoundException("Invalid reset token", code = "RESET_TOKEN_INVALID")
+        if (resetEntry[PasswordResetTable.used]) throw BadRequestException("Reset token already used", code = "RESET_TOKEN_USED")
+        if (resetEntry[PasswordResetTable.expiresAt].isBefore(OffsetDateTime.now())) throw BadRequestException("Reset token expired", code = "RESET_TOKEN_EXPIRED")
 
         val userId = resetEntry[PasswordResetTable.userId]
 

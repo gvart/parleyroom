@@ -91,7 +91,7 @@ class MaterialFolderService(
                     throw ForbiddenException("Cannot move folder under another teacher's folder")
                 // Cycle check: newParent must not be a descendant of the folder being moved.
                 if (newParent == folderId || isDescendant(newParent, folderId))
-                    throw BadRequestException("Cannot move a folder under itself or one of its descendants")
+                    throw BadRequestException("Cannot move a folder under itself or one of its descendants", code = "FOLDER_CYCLE")
             }
 
             val newName = request.name?.trim()?.takeIf { it.isNotBlank() } ?: row[MaterialFolderTable.name]
@@ -124,7 +124,7 @@ class MaterialFolderService(
                 .empty().not()
 
             if ((hasChildren || hasMaterials) && !cascade) {
-                throw ConflictException("Folder is not empty. Pass cascade=true to delete contents.")
+                throw ConflictException("Folder is not empty. Pass cascade=true to delete contents.", code = "FOLDER_NOT_EMPTY")
             }
 
             if (cascade) deleteCascade(folderId)
@@ -240,7 +240,7 @@ class MaterialFolderService(
                 else base and MaterialFolderTable.parentFolderId.isNull()
             }
         if (excludeId != null) query.andWhere { MaterialFolderTable.id neq excludeId }
-        if (!query.empty()) throw ConflictException("A folder named \"$name\" already exists here")
+        if (!query.empty()) throw ConflictException("A folder named \"$name\" already exists here", code = "FOLDER_NAME_TAKEN")
     }
 
     private fun findFolderRow(id: UUID): ResultRow =

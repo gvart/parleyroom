@@ -27,7 +27,7 @@ class TelegramInitDataVerifier(private val config: TelegramConfig) {
 
     fun verify(initDataRaw: String): VerifiedInitData {
         if (config.botToken.isBlank()) {
-            throw UnauthorizedException("Telegram bot is not configured on this server")
+            throw UnauthorizedException("Telegram bot is not configured on this server", code = "TELEGRAM_NOT_CONFIGURED")
         }
         if (initDataRaw.isBlank()) {
             throw BadRequestException("initData is empty")
@@ -44,7 +44,7 @@ class TelegramInitDataVerifier(private val config: TelegramConfig) {
         val secret = hmacSha256("WebAppData".toByteArray(), config.botToken.toByteArray())
         val expected = hmacSha256(secret, dataCheckString.toByteArray()).toHex()
         if (!constantTimeEquals(expected, hash)) {
-            throw UnauthorizedException("initData signature is invalid")
+            throw UnauthorizedException("initData signature is invalid", code = "TELEGRAM_AUTH_INVALID")
         }
 
         val authDateSeconds = pairs["auth_date"]?.toLongOrNull()
@@ -52,7 +52,7 @@ class TelegramInitDataVerifier(private val config: TelegramConfig) {
         val authDate = Instant.ofEpochSecond(authDateSeconds)
         val maxAge = config.initDataMaxAge.toJavaDuration()
         if (authDate.plus(maxAge).isBefore(Instant.now())) {
-            throw UnauthorizedException("initData has expired")
+            throw UnauthorizedException("initData has expired", code = "TELEGRAM_AUTH_EXPIRED")
         }
 
         val userJson = pairs["user"]

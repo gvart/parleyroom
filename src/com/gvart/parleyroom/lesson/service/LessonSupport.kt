@@ -54,7 +54,7 @@ class LessonSupport {
                         (LessonEventTable.eventType eq LessonEventType.RESCHEDULE_REQUESTED) and
                         (LessonEventTable.resolved eq false)
             }
-            .singleOrNull() ?: throw NotFoundException("No pending reschedule found")
+            .singleOrNull() ?: throw NotFoundException("No pending reschedule found", code = "RESCHEDULE_NOT_FOUND")
 
     fun findStudentEntry(lessonId: UUID, studentId: UUID): ResultRow =
         LessonStudentTable.selectAll()
@@ -62,7 +62,7 @@ class LessonSupport {
                 (LessonStudentTable.lessonId eq lessonId) and
                         (LessonStudentTable.studentId eq studentId)
             }
-            .singleOrNull() ?: throw NotFoundException("Student not found in this lesson")
+            .singleOrNull() ?: throw NotFoundException("Student not found in this lesson", code = "STUDENT_NOT_IN_LESSON")
 
     fun requireLessonParticipant(lessonId: UUID, lesson: ResultRow, principal: UserPrincipal) {
         if (principal.role == UserRole.ADMIN) return
