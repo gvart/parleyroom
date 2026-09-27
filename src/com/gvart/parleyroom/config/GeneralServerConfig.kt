@@ -26,6 +26,9 @@ import com.gvart.parleyroom.registration.transfer.InviteUserRequest
 import com.gvart.parleyroom.registration.transfer.RegisterUserRequest
 import com.gvart.parleyroom.registration.transfer.ResetPasswordRequest
 import com.gvart.parleyroom.vocabulary.transfer.CreateVocabularyWordRequest
+import com.gvart.parleyroom.topic.transfer.CreateTopicRequest
+import com.gvart.parleyroom.topic.transfer.GrammarTopicRequest
+import com.gvart.parleyroom.topic.transfer.UpdateTopicRequest
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.transfer.LogoutRequest
 import com.gvart.parleyroom.user.security.AuthLockoutConfig
@@ -172,6 +175,9 @@ fun Application.generalConfig() {
         validate<AdminSetPasswordRequest> { it.validate() }
         validate<ReplaceWeeklyAvailabilityRequest> { it.validate() }
         validate<CreateAvailabilityExceptionRequest> { it.validate() }
+        validate<CreateTopicRequest> { it.validate() }
+        validate<UpdateTopicRequest> { it.validate() }
+        validate<GrammarTopicRequest> { it.validate() }
     }
 
 
