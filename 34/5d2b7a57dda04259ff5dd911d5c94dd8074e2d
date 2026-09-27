@@ -1,0 +1,19 @@
+resources/db/migration/V1__init.sql
+  s_2b5907717bc9a2::t_cc856bc6c362f7 16,20-48,53-76,81-97,114-143,172-176,210-212,225-226,229-233,285-289,330-363,367-368,374-377,382-384,386-394,396-406,408-422,428,432,464-477
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "345d2b7a57dda04259ff5dd911d5c94dd8074e2d",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
