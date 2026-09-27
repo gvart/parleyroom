@@ -16,6 +16,7 @@ data class LessonResponse(
     val scheduledAt: OffsetDateTime,
     val durationMinutes: Int,
     val teacherId: String,
+    val teacher: LessonTeacherResponse,
     val status: LessonStatus,
     val topic: String,
     val level: LanguageLevel? = null,
@@ -53,4 +54,11 @@ data class LessonStudentResponse(
     val firstName: String,
     val lastName: String,
     val status: String,
+)
+
+@Serializable
+data class LessonTeacherResponse(
+    val id: String,
+    val firstName: String,
+    val lastName: String,
 )

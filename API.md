@@ -189,6 +189,10 @@ Sets status -> ABANDONED. Only on ACTIVE goals.
 
 ## Lesson Changes
 
+### New: Teacher in lesson responses
+Every `LessonResponse` (list, detail, and the lesson returned by mutations) now includes
+`teacher: { id, firstName, lastName }` next to the existing `teacherId`.
+
 ### New: Cancel endpoint
 ```
 POST /api/v1/lessons/{id}/cancel

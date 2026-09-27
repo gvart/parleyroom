@@ -233,6 +233,9 @@ class LessonIntegrationTest : IntegrationTest() {
         assertEquals(created.id, lesson.id)
         assertEquals(1, lesson.students.size)
         assertEquals(STUDENT_ID, lesson.students[0].id)
+        assertEquals(TEACHER_ID, lesson.teacher.id)
+        assertEquals("Test", lesson.teacher.firstName)
+        assertEquals("Teacher", lesson.teacher.lastName)
     }
 
     @Test
@@ -414,6 +417,10 @@ class LessonIntegrationTest : IntegrationTest() {
         assertEquals(HttpStatusCode.OK, response.status)
         val lessons = response.body<LessonPageResponse>().lessons
         assertEquals(2, lessons.size)
+        lessons.forEach {
+            assertEquals(TEACHER_ID, it.teacher.id)
+            assertEquals("Test Teacher", "${it.teacher.firstName} ${it.teacher.lastName}")
+        }
 
         // Student2 has no lessons
         val student2Lessons = client.get("/api/v1/lessons") {
