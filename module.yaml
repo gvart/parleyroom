@@ -5,7 +5,10 @@ settings:
     enabled: true
     version: 3.6.0
   kotlin:
-    serialization: json
+    version: 2.4.20
+    serialization:
+      format: json
+      version: 1.11.0
     optIns: [ kotlin.uuid.ExperimentalUuidApi, io.ktor.utils.io.ExperimentalKtorApi ]
   jvm:
     mainClass: com.gvart.parleyroom.ApplicationKt
