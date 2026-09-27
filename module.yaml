@@ -1,7 +1,9 @@
 product: jvm/app
 
 settings:
-  ktor: enabled
+  ktor:
+    enabled: true
+    version: 3.6.0
   kotlin:
     serialization: json
     optIns: [ kotlin.uuid.ExperimentalUuidApi, io.ktor.utils.io.ExperimentalKtorApi ]
