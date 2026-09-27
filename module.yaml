@@ -62,6 +62,9 @@ dependencies:
   - $ktor.server.openapi
   - $ktor.server.swagger
   - $libs.ktor.openapi.routing
+  - $libs.koog.agents.core
+  - $libs.koog.anthropic
+  - $libs.koog.http.client.ktor
 
 test-dependencies:
   - $ktor.server.testHost
