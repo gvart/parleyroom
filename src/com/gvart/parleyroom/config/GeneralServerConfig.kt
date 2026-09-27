@@ -25,7 +25,9 @@ import com.gvart.parleyroom.notification.transfer.MarkViewedRequest
 import com.gvart.parleyroom.registration.transfer.InviteUserRequest
 import com.gvart.parleyroom.registration.transfer.RegisterUserRequest
 import com.gvart.parleyroom.registration.transfer.ResetPasswordRequest
-import com.gvart.parleyroom.vocabulary.transfer.CreateVocabularyWordRequest
+import com.gvart.parleyroom.vocabulary.transfer.QuickAddVocabRequest
+import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
+import com.gvart.parleyroom.vocabulary.transfer.VocabEntryInput
 import com.gvart.parleyroom.topic.transfer.CreateTopicRequest
 import com.gvart.parleyroom.group.transfer.GroupRequest
 import com.gvart.parleyroom.topic.transfer.GrammarTopicRequest
@@ -161,7 +163,9 @@ fun Application.generalConfig() {
         validate<CreateLessonRequest> { it.validate() }
         validate<RescheduleLessonRequest> { it.validate() }
         validate<InviteUserRequest> { it.validate() }
-        validate<CreateVocabularyWordRequest> { it.validate() }
+        validate<QuickAddVocabRequest> { it.validate() }
+        validate<VocabEntryInput> { it.validate() }
+        validate<VocabDisplaySetting> { it.validate() }
         validate<CreateHomeworkRequest> { it.validate() }
         validate<ReviewHomeworkRequest> { it.validate() }
         validate<SubmitHomeworkRequest> { it.validate() }

@@ -52,6 +52,7 @@ dependencies:
   - $libs.exposed.dao
   - $libs.exposed.jdbc
   - $libs.exposed.datetime
+  - $libs.exposed.json
   - $libs.flyway.core
   - $libs.flyway.postgresql
   - $libs.jbcrypt

@@ -25,7 +25,7 @@ import com.gvart.parleyroom.user.data.UserStatus
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.data.requireSupportedLocale
 import com.gvart.parleyroom.user.security.UserPrincipal
-import com.gvart.parleyroom.vocabulary.data.VocabularyWordTable
+import com.gvart.parleyroom.vocabulary.data.StudentVocabTable
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
@@ -269,7 +269,7 @@ class AdminService {
         val lessons = LessonTable.selectAll().count()
         val homework = HomeworkTable.selectAll().count()
         val materials = MaterialTable.selectAll().count()
-        val vocabularyWords = VocabularyWordTable.selectAll().count()
+        val vocabularyWords = StudentVocabTable.selectAll().count()
         val learningGoals = LearningGoalTable.selectAll().count()
 
         AdminStatsResponse(

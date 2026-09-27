@@ -4,8 +4,8 @@ import com.gvart.parleyroom.notification.data.NotificationTable
 import com.gvart.parleyroom.notification.data.NotificationType
 import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.user.data.TeacherStudentTable
-import com.gvart.parleyroom.vocabulary.data.VocabStatus
-import com.gvart.parleyroom.vocabulary.data.VocabularyWordTable
+import com.gvart.parleyroom.vocabulary.data.StudentVocabStatus
+import com.gvart.parleyroom.vocabulary.data.StudentVocabTable
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
@@ -28,12 +28,12 @@ class VocabularyReviewReminderService(
         val dedupCutoff = now.minusHours(DEDUP_WINDOW_HOURS)
 
         val candidates = transaction {
-            val dueStudents = VocabularyWordTable.selectAll()
+            val dueStudents = StudentVocabTable.selectAll()
                 .where {
-                    (VocabularyWordTable.status neq VocabStatus.LEARNED) and
-                            VocabularyWordTable.nextReviewAt.lessEq(now)
+                    (StudentVocabTable.status neq StudentVocabStatus.LEARNED) and
+                            StudentVocabTable.due.lessEq(now)
                 }
-                .map { it[VocabularyWordTable.studentId].value }
+                .map { it[StudentVocabTable.studentId].value }
                 .toSet()
 
             if (dueStudents.isEmpty()) return@transaction emptyList<Pair<UUID, UUID>>()

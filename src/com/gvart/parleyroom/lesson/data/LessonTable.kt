@@ -5,6 +5,7 @@ import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.data.pgEnum
 import com.gvart.parleyroom.group.data.GroupTable
 import com.gvart.parleyroom.user.data.UserTable
+import org.jetbrains.exposed.v1.core.VarCharColumnType
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
@@ -21,6 +22,8 @@ object LessonTable : UUIDTable("lessons") {
     val level = pgEnum<LanguageLevel>("level", "LANGUAGE_LEVEL").nullable()
     val maxParticipants = integer("max_participants").nullable()
     val groupId = reference("group_id", GroupTable).nullable()
+    val vocabDisplayFields = array<String>("vocab_display_fields", VarCharColumnType(32)).nullable()
+    val allowTranslationToggle = bool("allow_translation_toggle").nullable()
     val hasAiSummary = bool("has_ai_summary").default(false)
     val startedAt = timestampWithTimeZone("started_at").nullable()
     val endedAt = timestampWithTimeZone("ended_at").nullable()

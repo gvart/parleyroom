@@ -5,14 +5,11 @@ import com.gvart.parleyroom.notification.data.NotificationTable
 import com.gvart.parleyroom.notification.data.NotificationType
 import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.notification.service.NotificationSseManager
-import com.gvart.parleyroom.vocabulary.data.VocabCategory
-import com.gvart.parleyroom.vocabulary.data.VocabStatus
-import com.gvart.parleyroom.vocabulary.data.VocabularyWordTable
+import com.gvart.parleyroom.vocabulary.data.StudentVocabStatus
+import com.gvart.parleyroom.vocabulary.data.StudentVocabTable
 import com.gvart.parleyroom.vocabulary.service.VocabularyReviewReminderService
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
@@ -26,18 +23,8 @@ class VocabularyReviewReminderTest : IntegrationTest() {
     private fun reminderService(): VocabularyReviewReminderService =
         VocabularyReviewReminderService(NotificationService(NotificationSseManager()))
 
-    private fun seedDueWord(studentId: UUID, german: String = "Haus", nextReviewAt: OffsetDateTime = OffsetDateTime.now().minusHours(1)) {
-        transaction {
-            VocabularyWordTable.insertAndGetId {
-                it[VocabularyWordTable.studentId] = studentId
-                it[VocabularyWordTable.german] = german
-                it[english] = "house"
-                it[category] = VocabCategory.NOUN
-                it[status] = VocabStatus.REVIEW
-                it[VocabularyWordTable.nextReviewAt] = nextReviewAt
-                it[addedAt] = OffsetDateTime.now().minusDays(7)
-            }
-        }
+    private fun seedDueWord(studentId: UUID, nextReviewAt: OffsetDateTime = OffsetDateTime.now().minusHours(1)) {
+        seedStudentVocab(studentId, status = StudentVocabStatus.REVIEW, due = nextReviewAt)
     }
 
     private fun reminderNotificationCount(studentId: UUID): Long = transaction {
@@ -79,8 +66,8 @@ class VocabularyReviewReminderTest : IntegrationTest() {
         val studentUuid = UUID.fromString(STUDENT_ID)
         seedDueWord(studentUuid)
         transaction {
-            VocabularyWordTable.update({ VocabularyWordTable.studentId eq studentUuid }) {
-                it[status] = VocabStatus.LEARNED
+            StudentVocabTable.update({ StudentVocabTable.studentId eq studentUuid }) {
+                it[status] = StudentVocabStatus.LEARNED
             }
         }
 

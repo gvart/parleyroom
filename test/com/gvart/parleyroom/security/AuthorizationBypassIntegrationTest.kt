@@ -11,10 +11,12 @@ import com.gvart.parleyroom.homework.transfer.HomeworkResponse
 import com.gvart.parleyroom.homework.transfer.SubmitHomeworkRequest
 import com.gvart.parleyroom.registration.transfer.InviteUserRequest
 import com.gvart.parleyroom.user.data.UserRole
-import com.gvart.parleyroom.vocabulary.data.VocabCategory
-import com.gvart.parleyroom.vocabulary.transfer.CreateVocabularyWordRequest
-import com.gvart.parleyroom.vocabulary.transfer.UpdateVocabularyWordRequest
-import com.gvart.parleyroom.vocabulary.transfer.VocabularyWordResponse
+import com.gvart.parleyroom.vocabulary.data.StudentVocabStatus
+import com.gvart.parleyroom.vocabulary.data.WordType
+import com.gvart.parleyroom.vocabulary.transfer.QuickAddVocabRequest
+import com.gvart.parleyroom.vocabulary.transfer.StudentVocabPageResponse
+import com.gvart.parleyroom.vocabulary.transfer.UpdateStudentVocabRequest
+import com.gvart.parleyroom.vocabulary.transfer.VocabEntryInput
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
@@ -124,7 +126,7 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
         val response = client.put("/api/v1/vocabulary/$wordId") {
             bearerAuth(getStudent2Token(client))
             contentType(ContentType.Application.Json)
-            setBody(UpdateVocabularyWordRequest(english = "hijacked"))
+            setBody(UpdateStudentVocabRequest(status = StudentVocabStatus.LEARNED))
         }
         assertEquals(HttpStatusCode.Forbidden, response.status)
     }
@@ -221,16 +223,14 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
             setBody(
-                CreateVocabularyWordRequest(
-                    studentId = STUDENT_ID,
-                    german = "Haus",
-                    english = "house",
-                    category = VocabCategory.NOUN,
+                QuickAddVocabRequest(
+                    entry = VocabEntryInput(lemma = "Haus", wordType = WordType.NOUN, translations = mapOf("en" to "house")),
+                    studentIds = listOf(STUDENT_ID),
                 )
             )
         }
         assertEquals(HttpStatusCode.Created, resp.status)
-        return resp.body<VocabularyWordResponse>().id
+        return client.get("/api/v1/vocabulary") { bearerAuth(token) }.body<StudentVocabPageResponse>().words.single().id
     }
 
     private suspend fun createHomeworkAsTeacher(client: HttpClient): String {
