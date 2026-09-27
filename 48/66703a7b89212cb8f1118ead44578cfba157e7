@@ -1,0 +1,63 @@
+src/com/gvart/parleyroom/vocabulary/service/VocabularyService.kt
+  s_2b5907717bc9a2::t_3dbe27504011b5 5,7,9,12,14-20,23,26-29,32,36,40,43-57,60,63-65,67-77,81-82,85-86,89-92,95-100,102-106,108-115,118-122,124-134,137-138,140,143-145,147-194,196,198-209,211-237,240-243
+src/com/gvart/parleyroom/vocabulary/transfer/StudentVocabDtos.kt
+  s_2b5907717bc9a2::t_cd9e1b1d03661d 1-86
+libs.versions.toml
+  s_2b5907717bc9a2::t_765ad743830388 14
+test/com/gvart/parleyroom/security/AuthorizationBypassIntegrationTest.kt
+  s_2b5907717bc9a2::t_916fba8eaba3a6 14-19,129,226-228,233
+src/com/gvart/parleyroom/user/data/TeacherStudentTable.kt
+  s_2b5907717bc9a2::t_87a85643a41aec 6,16-17
+src/com/gvart/parleyroom/vocabulary/service/VocabEntryService.kt
+  s_2b5907717bc9a2::t_4f82c340daf12b 1-331
+test/com/gvart/parleyroom/activity/StreakIntegrationTest.kt
+  s_2b5907717bc9a2::t_5fe0e0c4632b87 18,101
+src/com/gvart/parleyroom/vocabulary/service/VocabDisplay.kt
+  s_2b5907717bc9a2::t_39572802728376 1-42
+src/com/gvart/parleyroom/lesson/data/LessonTable.kt
+  s_2b5907717bc9a2::t_43947e10916c69 8,25-26
+src/com/gvart/parleyroom/vocabulary/service/VocabSettingsService.kt
+  s_2b5907717bc9a2::t_82f98eb11055d2 1-91
+module.yaml
+  s_2b5907717bc9a2::t_0b75a9613a9b32 55
+src/com/gvart/parleyroom/vocabulary/service/VocabularyReviewReminderService.kt
+  s_2b5907717bc9a2::t_88e224a0f0a2c6 7-8,31,33-34,36
+src/com/gvart/parleyroom/admin/service/AdminService.kt
+  s_2b5907717bc9a2::t_9888cfc3b1e477 28,272
+test/com/gvart/parleyroom/vocabulary/VocabularyReviewReminderTest.kt
+  s_2b5907717bc9a2::t_df7e2fe6ee025b 8-9,26-27,69-70
+src/com/gvart/parleyroom/vocabulary/data/VocabEntryTable.kt
+  s_2b5907717bc9a2::t_38601754b60f63 1-50
+resources/db/migration/V4__vocab_entries.sql
+  s_2b5907717bc9a2::t_a65775ec016190 1-104
+test/com/gvart/parleyroom/vocabulary/VocabFixtures.kt
+  s_2b5907717bc9a2::t_0328b6d04b0d9d 1-38
+test/com/gvart/parleyroom/vocabulary/VocabularyIntegrationTest.kt
+  s_2b5907717bc9a2::t_d29e928bb443e5 4-29,42,45,47-48,52-62,65-68,72,75-101,104,108,110-120,124,128-129,131-134,138,140,142-143,147,149-150,152-154,156-157,161,163,165-179,183,185,187-188,192,194,196-197,201,203-210,212-223,227,229,231-233,237,240-245,247-248,250-251,253-254,258,261,263-266,269,272,275,277-280,282-283,287,289-292,294,296-306,308-324,327,330,333-345,347-351,353-354,356-367,369-373,375-376,378-394,398,400-403,406-407,411,415-416,418,420-423,425-426,428-433
+src/com/gvart/parleyroom/vocabulary/routing/Routing.kt
+  s_2b5907717bc9a2::t_82ef0e606c8d64 3,5,9-14,16-28,45-46,53-62,64-68,71-75,79-89,91-104,107-136,138,140-164,166-176,178-193,195-196,202,204-205,207-208,212-213,215-219,223,226-229,232-259,261-262,265-268,270-271,274-294
+src/com/gvart/parleyroom/vocabulary/data/StudentVocabTable.kt
+  s_2b5907717bc9a2::t_66c4a6097f8e1a 1-30
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_2b5907717bc9a2::t_bff63a63da6b4a 28-30,166-168
+src/com/gvart/parleyroom/vocabulary/config/VocabularyModuleConfig.kt
+  s_2b5907717bc9a2::t_eeacf3662e6ec8 4-5,24-25
+src/com/gvart/parleyroom/vocabulary/transfer/VocabEntryDtos.kt
+  s_2b5907717bc9a2::t_13df36728ffc3e 1-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "4866703a7b89212cb8f1118ead44578cfba157e7",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
