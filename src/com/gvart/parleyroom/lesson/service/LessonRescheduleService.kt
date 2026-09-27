@@ -130,7 +130,7 @@ class LessonRescheduleService(
         LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
             .single()
-            .let(support::toResponse)
+            .let { support.toResponse(it, principal) }
     }
 
     fun rejectReschedule(lessonId: UUID, principal: UserPrincipal) = transaction {

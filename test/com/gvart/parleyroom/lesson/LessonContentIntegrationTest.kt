@@ -4,10 +4,12 @@ import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.transfer.ProblemDetail
+import com.gvart.parleyroom.lesson.transfer.CancelLessonRequest
 import com.gvart.parleyroom.lesson.transfer.CorrectedSentenceInput
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
+import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.lesson.transfer.UpdateLessonContentRequest
 import com.gvart.parleyroom.topic.transfer.CreateTopicRequest
 import com.gvart.parleyroom.topic.transfer.GrammarTopicRequest
@@ -197,5 +199,45 @@ class LessonContentIntegrationTest : IntegrationTest() {
         assertNull(cleared.vocabDisplayOverride)
         val after = client.get("/api/v1/vocabulary") { bearerAuth(studentToken) }.body<StudentVocabPageResponse>().words.single()
         assertEquals(mapOf("ru" to "бельё"), after.translations)
+    }
+
+    @Test
+    fun `students never receive raw notes or prompt from any lesson endpoint`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+        val lessonId = createLesson(client, token)
+        patchContent(client, token, lessonId, UpdateLessonContentRequest(rawNotes = "private", promptUsed = "secret"))
+
+        fun assertHidden(lesson: LessonResponse) {
+            assertNull(lesson.rawNotes)
+            assertNull(lesson.promptUsed)
+        }
+
+        assertHidden(client.get("/api/v1/lessons/$lessonId") { bearerAuth(studentToken) }.body())
+        client.get("/api/v1/lessons") { bearerAuth(studentToken) }.body<LessonPageResponse>().lessons.forEach(::assertHidden)
+
+        // Teacher proposes a reschedule; the student's accept returns the lesson
+        client.post("/api/v1/lessons/$lessonId/reschedule") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(token)
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.now().plusDays(4)))
+        }
+        val accepted = client.post("/api/v1/lessons/$lessonId/reschedule/accept") { bearerAuth(studentToken) }
+        assertEquals(HttpStatusCode.OK, accepted.status)
+        assertHidden(accepted.body())
+
+        val cancelled = client.post("/api/v1/lessons/$lessonId/cancel") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(studentToken)
+            setBody(CancelLessonRequest())
+        }
+        assertEquals(HttpStatusCode.OK, cancelled.status)
+        assertHidden(cancelled.body())
+
+        // The teacher still sees them
+        val teacherView = client.get("/api/v1/lessons/$lessonId") { bearerAuth(token) }.body<LessonResponse>()
+        assertEquals("private", teacherView.rawNotes)
+        assertEquals("secret", teacherView.promptUsed)
     }
 }

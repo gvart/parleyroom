@@ -164,9 +164,13 @@ class LessonSupport {
         return (studentIds + teacherId).filter { it != excludeUserId }
     }
 
-    fun toResponse(row: ResultRow): LessonResponse = toResponses(listOf(row)).single()
+    fun toResponse(row: ResultRow, viewer: UserPrincipal): LessonResponse = toResponses(listOf(row), viewer).single()
 
-    fun toResponses(rows: List<ResultRow>): List<LessonResponse> {
+    /**
+     * Single place lesson responses are built. [viewer] decides teacher-only fields:
+     * raw notes and the AI prompt are never returned to students, on any endpoint.
+     */
+    fun toResponses(rows: List<ResultRow>, viewer: UserPrincipal): List<LessonResponse> {
         if (rows.isEmpty()) return emptyList()
         val lessonIds = rows.map { it[LessonTable.id].value }
 
@@ -248,6 +252,7 @@ class LessonSupport {
                 )
             }
 
+        val isStudent = viewer.role == UserRole.STUDENT
         return rows.map { row ->
             val lessonId = row[LessonTable.id].value
             val doc = docByLesson[lessonId]
@@ -274,8 +279,8 @@ class LessonSupport {
                 teacherWorkingOn = doc?.get(LessonDocumentTable.teacherWorkingOn),
                 studentReflection = doc?.get(LessonDocumentTable.studentReflection),
                 studentHardToday = doc?.get(LessonDocumentTable.studentHardToday),
-                rawNotes = row[LessonTable.rawNotes],
-                promptUsed = row[LessonTable.promptUsed],
+                rawNotes = if (isStudent) null else row[LessonTable.rawNotes],
+                promptUsed = if (isStudent) null else row[LessonTable.promptUsed],
                 topics = topicIdsByLesson[lessonId].orEmpty().mapNotNull(topicRefs::get),
                 grammarTopics = grammarIdsByLesson[lessonId].orEmpty().mapNotNull(grammarRefs::get),
                 vocab = vocabByLesson[lessonId].orEmpty(),

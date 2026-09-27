@@ -172,7 +172,7 @@ class LessonLifecycleService(
         LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
             .single()
-            .let(support::toResponse)
+            .let { support.toResponse(it, principal) }
     }
 
     fun acceptLesson(lessonId: UUID, principal: UserPrincipal): LessonResponse = transaction {
@@ -210,7 +210,7 @@ class LessonLifecycleService(
         LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
             .single()
-            .let(support::toResponse)
+            .let { support.toResponse(it, principal) }
     }
 
     fun cancelLesson(lessonId: UUID, request: CancelLessonRequest, principal: UserPrincipal): LessonResponse {
@@ -273,7 +273,7 @@ class LessonLifecycleService(
         val response = LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
             .single()
-            .let(support::toResponse)
+            .let { support.toResponse(it, principal) }
         response to currentStatus
     }
 

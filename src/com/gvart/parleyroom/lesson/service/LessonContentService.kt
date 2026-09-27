@@ -85,7 +85,7 @@ class LessonContentService(
             }
         }
 
-        support.toResponse(support.findLesson(lessonId))
+        support.toResponse(support.findLesson(lessonId), principal)
     }
 
     fun setVocabDisplay(lessonId: UUID, setting: VocabDisplaySetting?, principal: UserPrincipal): LessonResponse = transaction {
@@ -96,7 +96,7 @@ class LessonContentService(
             it[allowTranslationToggle] = setting?.allowTranslationToggle
             it[updatedBy] = principal.id
         }
-        support.toResponse(support.findLesson(lessonId))
+        support.toResponse(support.findLesson(lessonId), principal)
     }
 
     private fun requireLessonTeacher(lessonId: UUID, principal: UserPrincipal): ResultRow {

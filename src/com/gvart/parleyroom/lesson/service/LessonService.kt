@@ -95,7 +95,7 @@ class LessonService(
             .offset(page.offset)
             .toList()
 
-        val lessons = support.toResponses(rows).let { responses ->
+        val lessons = support.toResponses(rows, principal).let { responses ->
             if (principal.role != UserRole.STUDENT) responses
             else responses.map { r -> scrubForStudent(r, principal.id) }
         }
@@ -118,7 +118,7 @@ class LessonService(
     private fun scrubForStudent(response: LessonResponse, studentId: UUID): LessonResponse {
         val studentIdStr = studentId.toString()
         val isParticipant = response.students.any { it.id == studentIdStr }
-        if (isParticipant) return hideTeacherOnly(response)
+        if (isParticipant) return response
 
         val isOneOnOne = response.type == LessonType.ONE_ON_ONE
         return if (isOneOnOne) {
@@ -135,8 +135,6 @@ class LessonService(
                 teacherWorkingOn = null,
                 studentReflection = null,
                 studentHardToday = null,
-                rawNotes = null,
-                promptUsed = null,
                 topics = emptyList(),
                 grammarTopics = emptyList(),
                 vocab = emptyList(),
@@ -152,21 +150,15 @@ class LessonService(
                 teacherWorkingOn = null,
                 studentReflection = null,
                 studentHardToday = null,
-                rawNotes = null,
-                promptUsed = null,
                 correctedSentences = emptyList(),
             )
         }
     }
 
-    /** Raw notes and the AI prompt are the teacher's working material, never shown to students. */
-    private fun hideTeacherOnly(response: LessonResponse): LessonResponse =
-        response.copy(rawNotes = null, promptUsed = null)
-
     fun getLesson(lessonId: UUID, principal: UserPrincipal): LessonResponse = transaction {
         val lesson = support.findLesson(lessonId)
         support.requireLessonParticipant(lessonId, lesson, principal)
-        support.toResponse(lesson).let { if (principal.role == UserRole.STUDENT) hideTeacherOnly(it) else it }
+        support.toResponse(lesson, principal)
     }
 
     /**
