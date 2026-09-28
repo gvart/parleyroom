@@ -14,6 +14,7 @@ import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
+import com.gvart.parleyroom.goal.data.GoalStatus
 import com.gvart.parleyroom.goal.data.GoalTable
 import com.gvart.parleyroom.homework.data.HomeworkTable
 import com.gvart.parleyroom.lesson.data.LessonTable
@@ -270,7 +271,7 @@ class AdminService {
         val homework = HomeworkTable.selectAll().count()
         val materials = MaterialTable.selectAll().count()
         val vocabularyWords = StudentVocabTable.selectAll().count()
-        val learningGoals = GoalTable.selectAll().count()
+        val learningGoals = GoalTable.selectAll().where { GoalTable.status eq GoalStatus.ACTIVE }.count()
 
         AdminStatsResponse(
             users = UserStats(
