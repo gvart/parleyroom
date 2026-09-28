@@ -145,7 +145,9 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
         val wordId = createVocabularyAsTeacher(client)
 
         val response = client.post("/api/v1/vocabulary/$wordId/review") {
+            contentType(ContentType.Application.Json)
             bearerAuth(getStudent2Token(client))
+            setBody("""{"rating":"GOOD","mode":"DE_TO_MEANING"}""")
         }
         assertEquals(HttpStatusCode.Forbidden, response.status)
     }
