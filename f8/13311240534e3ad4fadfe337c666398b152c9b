@@ -1,0 +1,30 @@
+test/com/gvart/parleyroom/homework/HomeworkIntegrationTest.kt
+  s_2b5907717bc9a2::t_1832711171b078 494-508
+  s_2b5907717bc9a2::t_68cb0a008aa505 493
+src/com/gvart/parleyroom/homework/routing/Routing.kt
+  s_2b5907717bc9a2::t_009c72bb16d51a 134,150,273-274
+src/com/gvart/parleyroom/homework/service/HomeworkUploadService.kt
+  s_2b5907717bc9a2::t_009c72bb16d51a 78-79,86
+API.md
+  s_2b5907717bc9a2::t_1832711171b078 329-330,376,383,388-389,417-418
+src/com/gvart/parleyroom/homework/service/HomeworkService.kt
+  s_2b5907717bc9a2::t_009c72bb16d51a 11,37,62-63,83-88
+test/com/gvart/parleyroom/homework/HomeworkUploadIntegrationTest.kt
+  s_2b5907717bc9a2::t_1832711171b078 161-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "f813311240534e3ad4fadfe337c666398b152c9b",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
