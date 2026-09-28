@@ -744,7 +744,7 @@ StudentProgress {
   checklistEmpty: bool,              // no grammar topic on the checklist -> no fake 0 %
   thresholds: { needsWorkBelow: 0.6, minScoredItems: 3 },
   grammar: [GrammarProgressLevel],   // levels ascending; a level without grammar topics is still listed (empty items)
-  topics: [TopicProgressItem],       // path then name, case-insensitive
+  topics: [TopicProgressItem],       // tree order: full path (ancestors + name), case-insensitive
   summary: ProgressSummary
 }
 GrammarProgressLevel {
