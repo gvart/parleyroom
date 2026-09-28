@@ -54,8 +54,10 @@ class KoogAnthropicGateway(apiKey: String, override val modelId: String, request
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            log.warn("Anthropic request failed: {}", e.message)
-            val rateLimited = e.message.orEmpty().let { it.contains("429") || it.contains("rate_limit", ignoreCase = true) }
+            // Koog puts the HTTP status into the (nested) exception messages: "Status code: 429".
+            val messages = generateSequence<Throwable>(e) { it.cause }.mapNotNull { it.message }.joinToString(" | ")
+            log.warn("Anthropic request failed: {}", messages.take(1000))
+            val rateLimited = "Status code: 429" in messages || "rate_limit_error" in messages
             throw LlmException(if (rateLimited) "AI_RATE_LIMITED" else "AI_PROVIDER_ERROR", "The AI provider request failed", e)
         }
         return LlmReply(
