@@ -81,7 +81,8 @@ fun Application.configureAiRouting() {
                 }.describe {
                     summary = "Publish Nachbereitung"
                     description = "One transaction: words to the library and the learners, accepted topics/grammar, lesson content, " +
-                            "vocab tables filled, document linked and shared. Idempotent."
+                            "vocab tables filled, document linked and shared. share=false saves to the library only " +
+                            "(nothing assigned, linked or shared). Idempotent."
                     parameters { path("id") { description = "Lesson UUID" } }
                     requestBody { schema = jsonSchema<PublishRequest>() }
                     responses {

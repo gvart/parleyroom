@@ -136,7 +136,7 @@ fun Application.configurePracticeRouting() {
                         responses {
                             HttpStatusCode.Created { schema = jsonSchema<SentenceResponse>() }
                             HttpStatusCode.BadRequest { description = "SENTENCE_EMPTY, SENTENCE_TOO_LONG"; schema = jsonSchema<ProblemDetail>() }
-                            HttpStatusCode.TooManyRequests { description = "AI_RATE_LIMITED"; schema = jsonSchema<ProblemDetail>() }
+                            HttpStatusCode.TooManyRequests { description = "PRACTICE_SENTENCE_LIMIT (daily cap, with resetsAt) or AI_RATE_LIMITED (provider)"; schema = jsonSchema<ProblemDetail>() }
                             HttpStatusCode.ServiceUnavailable { description = "AI_NOT_CONFIGURED, AI_PROVIDER_ERROR, AI_OUTPUT_INVALID, AI_TIMEOUT"; schema = jsonSchema<ProblemDetail>() }
                         }
                     }

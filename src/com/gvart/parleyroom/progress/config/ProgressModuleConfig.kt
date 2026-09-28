@@ -14,6 +14,7 @@ fun Application.configureProgressModule() {
     val progressConfig = ProgressConfig(
         needsWorkBelow = value("progress.needs_work_below", "0.6").toDouble(),
         minScoredItems = value("progress.min_scored_items", "3").toInt(),
+        needsWorkWindow = value("progress.needs_work_window", "10").toInt(),
     )
 
     dependencies {

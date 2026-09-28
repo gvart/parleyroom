@@ -250,7 +250,8 @@ fun Application.generalConfig() {
         exception<TooManyRequestsException> { call, cause ->
             call.respond(
                 HttpStatusCode.TooManyRequests,
-                ProblemDetail.of(HttpStatusCode.TooManyRequests, cause.message, cause.code ?: "TOO_MANY_REQUESTS"),
+                ProblemDetail.of(HttpStatusCode.TooManyRequests, cause.message, cause.code ?: "TOO_MANY_REQUESTS")
+                    .copy(resetsAt = cause.resetsAt),
             )
         }
 

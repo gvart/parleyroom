@@ -28,6 +28,7 @@ import com.gvart.parleyroom.vocabulary.data.VocabEntryTopicTable
 import com.gvart.parleyroom.vocabulary.data.WordType
 import com.gvart.parleyroom.vocabulary.service.VocabularyService
 import com.gvart.parleyroom.vocabulary.transfer.StudentVocabResponse
+import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
@@ -63,9 +64,10 @@ class PracticeService(
     fun queue(principal: UserPrincipal, mode: PracticeMode, filters: Filters, limit: Int): PracticeQueueResponse = transaction {
         requireStudent(principal)
         val now = OffsetDateTime.now()
+        val endOfDay = PracticeTime.endOfDay(principal.id, now)
         val query = VocabularyService.joined().selectAll()
             .where { StudentVocabTable.studentId eq principal.id }
-            .andWhere { (StudentVocabTable.state eq FsrsState.NEW.code) or StudentVocabTable.due.lessEq(now) }
+            .andWhere { (StudentVocabTable.state eq FsrsState.NEW.code) or practicableNow(now, endOfDay) }
         filters.lessonId?.let { query.andWhere { StudentVocabTable.lessonId eq it } }
         filters.level?.let { query.andWhere { VocabEntryTable.level eq it } }
         filters.topicId?.let { topicId ->
@@ -132,15 +134,15 @@ class PracticeService(
             AuthorizationHelper.requireAccessToStudent(studentId, principal)
             val now = OffsetDateTime.now()
             val startOfDay = PracticeTime.startOfDay(studentId, now)
-            val endOfDay = startOfDay.plusDays(1)
-            fun words(extra: () -> org.jetbrains.exposed.v1.core.Op<Boolean>) =
+            val endOfDay = PracticeTime.endOfDay(studentId, now)
+            fun words(extra: () -> Op<Boolean>) =
                 StudentVocabTable.selectAll().where { (StudentVocabTable.studentId eq studentId) and extra() }.count().toInt()
 
             val reviewed = { StudentVocabTable.state greater FsrsState.NEW.code }
             val introduced = newIntroducedToday(studentId, now)
             val newTotal = words { StudentVocabTable.state eq FsrsState.NEW.code }
             Counts(
-                dueNow = words { reviewed() and StudentVocabTable.due.lessEq(now) },
+                dueNow = words { practicableNow(now, endOfDay) },
                 dueToday = words { reviewed() and (StudentVocabTable.due less endOfDay) },
                 newTotal = newTotal,
                 newIntroducedToday = introduced,
@@ -234,6 +236,16 @@ class PracticeService(
         due = row[StudentVocabTable.due]?.toInstant(),
         lastReview = row[StudentVocabTable.lastReview]?.toInstant(),
     )
+
+    /**
+     * Reviewed cards that can be practised now: review cards due any time today (the student's day), and
+     * learning / relearning cards only once their short intraday step is due. FSRS grades an early
+     * review from the actual elapsed time, so serving a review card a few hours early stays correct.
+     */
+    private fun practicableNow(now: OffsetDateTime, endOfDay: OffsetDateTime): Op<Boolean> =
+        ((StudentVocabTable.state eq FsrsState.REVIEW.code) and (StudentVocabTable.due less endOfDay)) or
+                ((StudentVocabTable.state inList listOf(FsrsState.LEARNING.code, FsrsState.RELEARNING.code)) and
+                        StudentVocabTable.due.lessEq(now))
 
     /** Cards whose first review happened today (student's timezone): the daily new-card budget. */
     private fun newIntroducedToday(studentId: UUID, now: OffsetDateTime): Int =

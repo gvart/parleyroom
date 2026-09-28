@@ -298,13 +298,17 @@ only in `revealTranslations` when the toggle is allowed.
 GET /api/v1/practice/queue?mode=DE_TO_MEANING&topicId=&lessonId=&level=&limit=20     student only
 -> { mode, cards: [PracticeCard], dueCount, newCount, newLimit, newIntroducedToday }
 ```
-- **Due first**: reviewed cards (`state > 0`) with `due <= now`, oldest `due` first.
+- **Due first**, oldest `due` first: review cards (`state = REVIEW`) due **any time today**
+  (`due <` the student's next local midnight — as in Anki, a card due at 23:00 can be practised at
+  09:00; FSRS grades it from the real elapsed time), and learning / relearning cards
+  (`state = LEARNING | RELEARNING`) only once their short intraday step is due (`due <= now`).
 - **Then new** (`state = 0`), oldest `addedAt` first, at most `newLimit − newIntroducedToday`
   (`practice.new_cards_per_day`, default **15**; "today" = the student's timezone; a card counts
   as introduced by its first review in any mode). Filters don't change the daily budget.
 - Filters: `topicId` (that topic **and its subtopics**, so a folder practises its whole subtree),
   `lessonId`, `level` (entry level). `limit` 1..100, default 20.
-- `dueCount` / `newCount` = totals for these filters (before `limit`), so the client can show
+- `dueCount` / `newCount` = totals for these filters (before `limit`; without filters `dueCount`
+  equals `stats.dueNow`), so the client can show
   "12 due · 5 new". Cards failed with AGAIN come back after 1–10 min: the client re-appends them
   to the end of the session and/or refetches the queue when it runs out.
 - Unknown mode → 400 `PRACTICE_MODE_INVALID`.
@@ -356,7 +360,8 @@ responseMs) and a `VOCAB_REVIEW` learning activity (streak).
 ```
 GET /api/v1/practice/stats?studentId=      student (own; param ignored), teacher of the student, admin
 -> {
-  "dueNow": 7,            // reviewed cards with due <= now
+  "dueNow": 7,            // practicable now, same rule as the queue: REVIEW due before the end of
+                          // today, LEARNING / RELEARNING due <= now (show this on the dashboard tile)
   "dueToday": 9,          // … due before the end of today (student's timezone)
   "newAvailable": 5,      // min(unseen words, newLimit − newIntroducedToday)
   "newTotal": 40,         // unseen words
@@ -403,8 +408,9 @@ Sentence:
 - `usesWord`: the sentence uses the target word (any inflected form). `isCorrect` concerns grammar
   and spelling; `corrected` equals the input when correct.
 - Validation: trimmed, 1..300 chars → 400 `SENTENCE_EMPTY` / `SENTENCE_TOO_LONG`.
-- Errors: 503 `AI_NOT_CONFIGURED`; 429 `AI_RATE_LIMITED` after `practice.sentences_per_day` (30)
-  stored sentences today (student's timezone) or when the provider rate-limits; 503
+- Errors: 503 `AI_NOT_CONFIGURED`; 429 `PRACTICE_SENTENCE_LIMIT` after `practice.sentences_per_day`
+  (30) stored sentences today (student's timezone), with `resetsAt` = the student's next local
+  midnight; 429 `AI_RATE_LIMITED` only when the provider rate-limits; 503
   `AI_PROVIDER_ERROR` / `AI_OUTPUT_INVALID` / `AI_TIMEOUT`. Failed calls are not stored and do not
   count toward the limit.
 - Every successful sentence + feedback is stored (`student_vocab_sentences`) and counts as a
@@ -704,7 +710,7 @@ For each grammar topic G on the checklist (teacher T, student S):
 
 | status | rule (first that matches wins, top to bottom) |
 |---|---|
-| `NEEDS_WORK` | `scored.total ≥ minScoredItems` (3) **and** `scored.correct / scored.total < needsWorkBelow` (0.60) |
+| `NEEDS_WORK` | over the latest `window` (10) scored units: `scored.total ≥ minScoredItems` (3) **and** `scored.correct / scored.total < needsWorkBelow` (0.60) |
 | `PRACTICED` | S has **submitted** (`attempt ≥ 1`, any status) homework of T with an item whose source is tagged with G |
 | `COVERED` | a lesson of T tagged with G **took place** for S (the shared rule in Library views → Covered by: CONFIRMED participant, not `CANCELLED` / `REQUEST`, and `COMPLETED` / `IN_PROGRESS` or `scheduledAt ≤ now`) |
 | `NOT_COVERED` | none of the above |
@@ -720,10 +726,12 @@ For each grammar topic G on the checklist (teacher T, student S):
   `correct = teacher_correct ?? auto_result` (`CORRECT` → 1, `INCORRECT` → 0; `PENDING_REVIEW` /
   `UNANSWERED` without teacher verdict are not scored). A unit of a document tagged with several
   grammar topics counts for each of them. Only the latest attempt counts (answers are overwritten on
-  resubmit).
-- `needsWorkBelow` / `minScoredItems` come from config (`progress.needs_work_below = 0.6`
-  `PROGRESS_NEEDS_WORK_BELOW`, `progress.min_scored_items = 3` `PROGRESS_MIN_SCORED_ITEMS`) and are
-  echoed in the response.
+  resubmit). Only the **latest `window` units per topic** count (newest homework first by
+  `reviewed_at ?? submitted_at`, then `answered_at`), so early mistakes stop counting once the
+  student improves: 3 wrong followed by 10 right is `PRACTICED`. `evidence.homeworkScored` is this window.
+- `needsWorkBelow` / `minScoredItems` / `window` come from config (`progress.needs_work_below = 0.6`
+  `PROGRESS_NEEDS_WORK_BELOW`, `progress.min_scored_items = 3` `PROGRESS_MIN_SCORED_ITEMS`,
+  `progress.needs_work_window = 10` `PROGRESS_NEEDS_WORK_WINDOW`) and are echoed in the response.
 
 **Override**: stored per (student, grammar topic) with the setting teacher; the **effective** `status`
 = `override.status ?? derivedStatus`. Both are returned, so the UI can show "derived: practiced,
@@ -746,7 +754,7 @@ StudentProgress {
   level: A1..C2 | null,              // the level used (query > student level)
   levels: [Level],                   // checklist levels, ascending (one unless includeLower)
   checklistEmpty: bool,              // no grammar topic on the checklist -> no fake 0 %
-  thresholds: { needsWorkBelow: 0.6, minScoredItems: 3 },
+  thresholds: { needsWorkBelow: 0.6, minScoredItems: 3, window: 10 },
   grammar: [GrammarProgressLevel],   // levels ascending; a level without grammar topics is still listed (empty items)
   topics: [TopicProgressItem],       // tree order: full path (ancestors + name), case-insensitive
   summary: ProgressSummary
@@ -763,7 +771,7 @@ GrammarProgressItem {
   effective: …same enum,                          // override.status ?? derived
   evidence: {
     lessonCount, lastLessonAt?,                  // attended lessons tagged with it
-    homeworkScored: { correct, total },          // scored units (see above)
+    homeworkScored: { correct, total },          // scored units in the window (see above)
     lastPracticedAt?                             // latest submittedAt of a qualifying homework
   }
 }
@@ -827,6 +835,8 @@ GoalProgress {
   checklistEmpty: bool,
   grammar: { total, practiced, covered, needsWork, notCovered },   // target level only, effective statuses
   topics: { total, covered },        // teacher topics whose levels contain the target level
+  grammarDone, grammarTotal,         // breakdown under the bar: PRACTICED grammar topics / all (= grammar.practiced / grammar.total)
+  topicsDone, topicsTotal,           // covered topics / all (= topics.covered / topics.total)
   daysLeft: int | null,              // targetDate − today (student's timezone); negative when past; null without targetDate
   expectedPercent: 0..100 | null,
   onTrack: bool | null               // null without targetDate, when not ACTIVE, or percent is null
@@ -835,13 +845,14 @@ GoalProgress {
 **Progress formula** (computed on every read, against the goal teacher's library, target level only —
 lower levels are not included):
 ```
-credit(PRACTICED) = 1,  credit(COVERED) = credit(NEEDS_WORK) = 0.5,  credit(NOT_COVERED) = 0
+credit(PRACTICED) = 1,  credit(COVERED) = 0.5,  credit(NEEDS_WORK) = credit(NOT_COVERED) = 0
 grammarScore = Σ credit(effective status of G) / |G|        G = teacher's grammar topics with level = targetLevel
 topicsScore  = covered topics / |T|                         T = teacher's topics whose levels contain targetLevel
 percent      = round(100 × (0.8 × grammarScore + 0.2 × topicsScore))     (|T| = 0 → round(100 × grammarScore))
 |G| = 0      → percent = null, checklistEmpty = true (no fake 0 %)
 ```
-NEEDS_WORK earns half credit: it was practiced, but the results are weak. Overrides count (effective status).
+NEEDS_WORK earns no credit until the recent results improve (see the window above). Overrides count
+(effective status). The percent is progress through the checklist, not exam readiness.
 
 **On track** (only `ACTIVE` goals with `targetDate` and a `percent`), dates in the student's timezone.
 The **baseline** is the goal's `percent` at creation (stored once; `null` → 0), so a student who
@@ -1239,7 +1250,7 @@ NachbereitungState {
   latestJob: GenerationJob | null,     // newest GENERATE/REFINE of this lesson in any status (QUEUED/RUNNING
                                        // too, so the panel resumes polling after a reload), with result
   draftDocumentId: uuid | null,        // draft of the latest successful job
-  publishedAt: ISO8601 | null          // last publish of this lesson
+  publishedAt: ISO8601 | null          // last shared publish of this lesson (library-only saves don't count)
 }
 ContextSummary {
   level: A1..C2 | null,
@@ -1348,6 +1359,7 @@ NachbereitungResult {
   grammarTopics: [{ key: "g1", name, level?, existingId: uuid | null }],
   correctedSentences: [{ incorrect, correct }],
   publishedEntries: { "v1": "entry uuid" }                     // filled by publish
+  savedToLibraryAt: ISO8601 | null                             // last library-only publish (share = false)
 }
 ReviewVocabItem {
   key: "v1",
@@ -1385,6 +1397,13 @@ vocab_table rows (published, or added by hand) keep their rows; the refined resu
 `publishedEntries` (key → entry id) carries them over. The new job's
 `result` is the full new result (same `documentId`).
 
+**Exercise numbers**: the app numbers exercise blocks "Übung 1, 2, …" when rendering (never stored):
+only the types `gap_fill, multiple_choice, error_correction, free_sentences, writing_task, reading,
+media, exam_part, free_form` count, in document order (`heading, rich_text, vocab_table,
+grammar_box` do not). Generate and refine prompts tell the model this (`Prompts.EXERCISE_BLOCK_TYPES`,
+kept identical to the portal's `isExercise`), so it writes no numbers into titles and maps "Mach
+Übung 2 leichter" to the right block.
+
 ### Publish
 
 ```
@@ -1396,7 +1415,7 @@ Body: {
   grammarTopics: [{ key, name, level? }],                          // accepted NEW grammar proposals
   topicIds?: [uuid], grammarTopicIds?: [uuid],                      // existing ones to tag lesson + document with
   correctedSentences?: [{ incorrect, correct }],                    // replaces the lesson's list when present
-  share: true                                                       // false = only save to the library
+  share: true                                                       // false = library-only save (see below)
 }
 ```
 One transaction:
@@ -1405,16 +1424,27 @@ One transaction:
 2. **Vocab**: `matchedEntryId` → use that library entry as is (must be the teacher's, 404
    `VOCAB_ENTRY_NOT_FOUND`); else `entry` (required, validated like `POST /vocab-entries`) →
    find-or-create by the dedupe key, `sourceLessonId` = lesson, topics = `entry.topicIds` + resolved
-   `topicKeys`. Each entry is assigned to the student (1:1) or to every CONFIRMED attendee (club)
-   with `lessonId` = lesson, and linked to the lesson's words. Existing assignments are skipped.
+   `topicKeys`. With `share: true` each entry is assigned to the student (1:1) or to every CONFIRMED
+   attendee (club) with `lessonId` = lesson, and linked to the lesson's words. Existing assignments are
+   skipped. With `share: false` entries are only found or created in the library: not assigned and not
+   linked to the lesson.
 3. **Lesson content**: `raw_notes` / `prompt_used` = the job's notes/prompt; topics / grammar =
-   current ∪ `topicIds` ∪ created; words = current ∪ published; corrected sentences replaced if sent.
+   current ∪ `topicIds` ∪ created; words = current ∪ published (`share: true` only); corrected
+   sentences replaced if sent.
 4. **Document**: each `vocabTables[].blockId` still present in the draft gets `rows` for its
    published keys (unpublished keys dropped, existing rows kept, no duplicates); tags = the lesson's
    topics/grammar; saved via the update path (revision +1). With `share: true` it is linked to the lesson
    and shared with the student (1:1) or the group (club with a group) or the confirmed attendees
    (club without group); `share: false` leaves it unlinked, in the library only.
-5. `publishedAt` is set on the job.
+5. `share: true` sets `publishedAt` on the job (and so `NachbereitungState.publishedAt`); `share: false`
+   leaves it untouched and sets `result.savedToLibraryAt` instead, so the panel still offers
+   "Veröffentlichen" (not "Erneut veröffentlichen") after a library-only save.
+
+**Library-only** (`share: false`, "Nur in Bibliothek speichern"): words, topics and the filled, tagged
+document land in the teacher's library and the lesson content (notes, prompt, tags) is updated, but no
+student gets words (no student-vocab rows, nothing in their practice queue) and the document is not
+linked to the lesson or shared. Publishing the same job later with `share: true` assigns and shares
+everything; find-or-create reuses what the library-only save created.
 
 **Idempotent**: publishing the same (or a newer) job again creates nothing twice — find-or-create
 everywhere, existing assignments/links/shares/rows are skipped; it simply re-applies edits.
@@ -1424,11 +1454,12 @@ PublishResult {
   documentId, revision,
   wordsCreated, wordsReused,            // library entries created / found (matchedEntryId or dedupe key)
   wordsAssigned,                        // new student-vocab rows (already assigned ones are not counted)
-  recipients: int, recipientIds: [uuid],   // who received words / the document
+  recipients: int, recipientIds: [uuid],   // who received words / the document (0 / [] when share = false)
   topicsCreated, grammarTopicsCreated,
   vocab: [{ key, entryId, reused: bool }],
   topics: [{ key, id, reused: bool }], grammarTopics: [{ key, id, reused: bool }],
-  publishedAt
+  publishedAt,                          // time of this publish
+  shared: bool                          // = request.share; false: nothing assigned, linked or shared
 }
 ```
 Errors: 404 `AI_JOB_NOT_FOUND`, 409 `AI_JOB_NOT_READY`, 400 `AI_JOB_LESSON_MISMATCH` (job of
@@ -1656,8 +1687,9 @@ Every error body is a ProblemDetail with a stable machine-readable `code`
 
 Optional extension members, only present when they apply: `pointer` (JSON pointer of the bad
 value in the request body, e.g. `/blocks/3/items/0/solution/answers`), `currentRevision`
-(on `DOCUMENT_CONFLICT`) and `usage: { words, documents, materials, lessons }` (on
-`TOPIC_HAS_CONTENT` / `GRAMMAR_TOPIC_HAS_CONTENT`).
+(on `DOCUMENT_CONFLICT`), `usage: { words, documents, materials, lessons }` (on
+`TOPIC_HAS_CONTENT` / `GRAMMAR_TOPIC_HAS_CONTENT`) and `resetsAt` (ISO8601, when a daily limit lifts,
+on `PRACTICE_SENTENCE_LIMIT`).
 
 Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATION_FAILED`,
 `MALFORMED_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_ERROR`.
@@ -1673,7 +1705,7 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 | Materials | `MATERIAL_NOT_FOUND`, `MATERIAL_FILE_NOT_FOUND`, `FOLDER_NOT_FOUND`, `TARGET_FOLDER_NOT_FOUND`, `FOLDER_NOT_EMPTY`, `FOLDER_NAME_TAKEN`, `FOLDER_CYCLE`, `FILE_TOO_LARGE` |
 | Homework | `ASSIGNMENT_NOT_FOUND`, `ASSIGNMENT_NO_STUDENTS`, `HOMEWORK_NOT_FOUND`, `HOMEWORK_ITEM_INVALID` (+ `pointer`), `HOMEWORK_ANSWER_INVALID` (+ `pointer`), `HOMEWORK_INVALID_STATE` (409), `SUBMISSION_LOCKED` (409), `UPLOAD_TYPE_NOT_ALLOWED`, `UPLOAD_LIMIT_REACHED` (409), `HOMEWORK_UPLOAD_NOT_FOUND` |
 | Progress / goals | `GOAL_NOT_FOUND`, `GOAL_INVALID` (+ `pointer`), `GRAMMAR_OVERRIDE_INVALID` (+ `pointer`) |
-| Vocabulary | `VOCABULARY_WORD_NOT_FOUND`, `VOCAB_ENTRY_NOT_FOUND`, `VOCAB_ENTRY_DUPLICATE`, `VOCAB_LANGUAGE_UNSUPPORTED`, `VOCAB_DISPLAY_FIELD_UNSUPPORTED`, `TEACHER_STUDENT_NOT_FOUND`; practice: `PRACTICE_STUDENT_ONLY` (403), `PRACTICE_MODE_INVALID`, `NOT_A_NOUN`, `SENTENCE_EMPTY`, `SENTENCE_TOO_LONG` |
+| Vocabulary | `VOCABULARY_WORD_NOT_FOUND`, `VOCAB_ENTRY_NOT_FOUND`, `VOCAB_ENTRY_DUPLICATE`, `VOCAB_LANGUAGE_UNSUPPORTED`, `VOCAB_DISPLAY_FIELD_UNSUPPORTED`, `TEACHER_STUDENT_NOT_FOUND`; practice: `PRACTICE_STUDENT_ONLY` (403), `PRACTICE_MODE_INVALID`, `NOT_A_NOUN`, `SENTENCE_EMPTY`, `SENTENCE_TOO_LONG`, `PRACTICE_SENTENCE_LIMIT` (429, + `resetsAt`) |
 | Documents | `DOCUMENT_NOT_FOUND`, `DOCUMENT_INVALID_BLOCK` (+ `pointer`), `DOCUMENT_DUPLICATE_ID` (+ `pointer`), `DOCUMENT_TOO_LARGE`, `DOCUMENT_CONFLICT` (409, + `currentRevision`), `DOCUMENT_VERSION_NOT_FOUND` |
 | AI / Nachbereitung | `AI_NOT_CONFIGURED` (503), `AI_RATE_LIMITED` (429), `AI_JOB_NOT_FOUND`, `AI_JOB_NOT_READY`, `AI_JOB_LESSON_MISMATCH`, `NACHBEREITUNG_NO_ATTENDEES`, `PROMPT_TEMPLATE_NOT_FOUND`, `PROMPT_TEMPLATE_DUPLICATE`; job-only: `AI_OUTPUT_INVALID`, `AI_PROVIDER_ERROR`, `AI_TIMEOUT`, `AI_INTERRUPTED` |
 | Library / groups | `TOPIC_NOT_FOUND`, `TOPIC_DUPLICATE`, `TOPIC_HAS_CHILDREN`, `TOPIC_HAS_CONTENT` (409, + `usage`), `TOPIC_CYCLE`, `TOPIC_MERGE_INVALID`, `GRAMMAR_TOPIC_NOT_FOUND`, `GRAMMAR_TOPIC_DUPLICATE`, `GRAMMAR_TOPIC_HAS_CONTENT` (409, + `usage`), `GRAMMAR_TOPIC_MERGE_INVALID`, `GRAMMAR_ORDER_INVALID`, `GROUP_NOT_FOUND`, `STUDENT_NOT_LINKED` |

@@ -203,6 +203,27 @@ class ProgressIntegrationTest : IntegrationTest() {
         val thresholds = body.obj("thresholds")
         assertEquals(0.6, thresholds["needsWorkBelow"]!!.jsonPrimitive.double)
         assertEquals(3, thresholds["minScoredItems"]!!.jsonPrimitive.int)
+        assertEquals(10, thresholds["window"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun `needs work only looks at the latest scored units, so improving clears it`() = testApp {
+        val client = createJsonClient(this)
+        startApplication() // loads the test data before seeding
+        ProgressFixtures.setLevel(STUDENT, LanguageLevel.B1)
+        val g = LibraryFixtures.grammar("Perfekt", LanguageLevel.B1)
+        val document = LibraryFixtures.document("Doc Perfekt", grammar = listOf(g))
+        val token = getTeacherToken(client)
+
+        ProgressFixtures.homework(STUDENT, documentId = document, submittedAt = OffsetDateTime.now().minusDays(3), units = List(3) { WRONG })
+        assertEquals("NEEDS_WORK", client.progress(token).item("Perfekt").str("derived"))
+
+        ProgressFixtures.homework(STUDENT, documentId = document, submittedAt = OffsetDateTime.now().minusDays(1), units = List(10) { RIGHT })
+        val item = client.progress(token).item("Perfekt")
+        assertEquals("PRACTICED", item.str("derived"))
+        val scored = item.obj("evidence").obj("homeworkScored")
+        assertEquals(10, scored["total"]!!.jsonPrimitive.int, "only the latest 10 units count")
+        assertEquals(10, scored["correct"]!!.jsonPrimitive.int)
     }
 
     @Test
@@ -444,7 +465,7 @@ class ProgressIntegrationTest : IntegrationTest() {
             LibraryFixtures.tagLesson(seedLesson(students = listOf(student)), grammar = topicsSmall)
         }
         (1..10).forEach { LibraryFixtures.topic("T$it", levels = listOf(LanguageLevel.B1)) }
-        val calculator = ProgressCalculator(ProgressConfig(0.6, 3))
+        val calculator = ProgressCalculator(ProgressConfig(0.6, 3, 10))
 
         fun count(students: List<UUID>, allTopics: Boolean): Int = transaction {
             var statements = 0

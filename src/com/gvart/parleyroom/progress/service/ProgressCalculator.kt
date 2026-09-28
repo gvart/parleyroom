@@ -27,8 +27,10 @@ import kotlin.math.roundToInt
 data class ProgressConfig(
     /** A grammar topic NEEDS_WORK when the scored correctness is below this share… */
     val needsWorkBelow: Double,
-    /** …with at least this many scored homework units. */
+    /** …with at least this many scored homework units… */
     val minScoredItems: Int,
+    /** …counting only the student's latest this-many scored units per topic. */
+    val needsWorkWindow: Int,
 )
 
 data class GrammarTopicRow(val id: UUID, val name: String, val level: LanguageLevel?, val category: String?, val position: Int)
@@ -90,13 +92,9 @@ class ProgressCalculator(val config: ProgressConfig) {
             teacherId, students, topicIds,
         ) { rs -> (rs.uuid(1) to rs.uuid(2)) to Lessons(rs.getInt(3), rs.time(4)!!) }.toMap()
 
-        data class Homework(val count: Int, val last: OffsetDateTime?, val scored: ScoredCount)
+        data class Homework(val count: Int, val last: OffsetDateTime?)
         // Item source tags: a DOCUMENT item's source document, a MATERIAL item's material (read live).
-        // Scored units: final verdict (teacher override ?? auto) of reviewed homework only.
-        val homework = Sql.rows(
-            """
-            SELECT x.g, h.student_id, count(DISTINCT h.id), max(h.submitted_at),
-                   count(v.verdict), count(*) FILTER (WHERE v.verdict)
+        val tagged = """
             FROM homework h
             JOIN assignments a ON a.id = h.assignment_id
             JOIN assignment_items ai ON ai.assignment_id = a.id
@@ -107,18 +105,37 @@ class ProgressCalculator(val config: ProgressConfig) {
                 SELECT mg.grammar_topic_id FROM material_grammar_topics mg
                 WHERE ai.kind = 'MATERIAL' AND mg.material_id = ai.material_id
             ) x ON x.g = ANY(?::uuid[])
-            LEFT JOIN LATERAL (
-                SELECT COALESCE(ha.teacher_correct,
-                                CASE ha.auto_result WHEN 'CORRECT' THEN true WHEN 'INCORRECT' THEN false END) AS verdict
-                FROM homework_answers ha
-                WHERE ha.homework_id = h.id AND ha.assignment_item_id = ai.id AND h.status IN ('REVIEWED', 'DONE')
-            ) v ON true
-            WHERE a.teacher_id = ? AND h.student_id = ANY(?::uuid[]) AND h.attempt >= 1
+        """.trimIndent()
+        val homework = Sql.rows(
+            "SELECT x.g, h.student_id, count(DISTINCT h.id), max(h.submitted_at) $tagged " +
+                    "WHERE a.teacher_id = ? AND h.student_id = ANY(?::uuid[]) AND h.attempt >= 1 GROUP BY 1, 2",
+            topicIds, teacherId, students,
+        ) { rs -> (rs.uuid(1) to rs.uuid(2)) to Homework(rs.getInt(3), rs.time(4)) }.toMap()
+
+        // Scored units: final verdict (teacher override ?? auto) of reviewed homework only, and only the
+        // latest `needsWorkWindow` per topic, so early mistakes stop counting once the student improves.
+        val scored = Sql.rows(
+            """
+            SELECT g, student_id, count(*), count(*) FILTER (WHERE verdict) FROM (
+                SELECT x.g, h.student_id, v.verdict,
+                       row_number() OVER (
+                           PARTITION BY x.g, h.student_id
+                           ORDER BY COALESCE(h.reviewed_at, h.submitted_at) DESC NULLS LAST, ha.answered_at DESC NULLS LAST, ha.id DESC
+                       ) AS rn
+                $tagged
+                JOIN homework_answers ha ON ha.homework_id = h.id AND ha.assignment_item_id = ai.id
+                CROSS JOIN LATERAL (
+                    SELECT COALESCE(ha.teacher_correct,
+                                    CASE ha.auto_result WHEN 'CORRECT' THEN true WHEN 'INCORRECT' THEN false END) AS verdict
+                ) v
+                WHERE a.teacher_id = ? AND h.student_id = ANY(?::uuid[]) AND h.attempt >= 1
+                  AND h.status IN ('REVIEWED', 'DONE') AND v.verdict IS NOT NULL
+            ) s
+            WHERE rn <= ${config.needsWorkWindow}
             GROUP BY 1, 2
             """.trimIndent(),
             topicIds, teacherId, students,
-        ) { rs -> (rs.uuid(1) to rs.uuid(2)) to Homework(rs.getInt(3), rs.time(4), ScoredCount(correct = rs.getInt(6), total = rs.getInt(5))) }
-            .toMap()
+        ) { rs -> (rs.uuid(1) to rs.uuid(2)) to ScoredCount(correct = rs.getInt(4), total = rs.getInt(3)) }.toMap()
 
         val overrides = GrammarProgressOverrideTable.selectAll()
             .where {
@@ -139,7 +156,7 @@ class ProgressCalculator(val config: ProgressConfig) {
                 val key = topic.id to student
                 val lesson = lessons[key]
                 val hw = homework[key]
-                val scored = hw?.scored ?: ScoredCount(0, 0)
+                val scored = scored[key] ?: ScoredCount(0, 0)
                 GrammarEvaluation(
                     topic = topic,
                     derived = derive(lesson?.count ?: 0, hw?.count ?: 0, scored),

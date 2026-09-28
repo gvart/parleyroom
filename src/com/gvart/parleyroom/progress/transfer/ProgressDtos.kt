@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
 import java.time.OffsetDateTime
 
 @Serializable
-data class ProgressThresholds(val needsWorkBelow: Double, val minScoredItems: Int)
+data class ProgressThresholds(val needsWorkBelow: Double, val minScoredItems: Int, val window: Int)
 
 @Serializable
 data class ScoredCount(val correct: Int, val total: Int)

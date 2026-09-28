@@ -95,16 +95,18 @@ class GoalIntegrationTest : IntegrationTest() {
         assertEquals("ACTIVE", goal.str("status"))
         assertEquals(TEACHER_ID, goal.str("teacherId"))
         val progress = goal.obj("progress")
-        // grammar (1 + 0.5 + 0.5 + 0) / 4 = 0.5; topics 1/2 = 0.5 -> 0.8·0.5 + 0.2·0.5 = 50 %
-        assertEquals(50, progress.int("percent"))
-        assertEquals(50, goal.int("baselinePercent"))
+        // grammar (1 + 0.5 + 0 + 0) / 4 = 0.375 (NEEDS_WORK counts 0); topics 1/2 = 0.5 -> 0.8·0.375 + 0.2·0.5 = 40 %
+        assertEquals(40, progress.int("percent"))
+        assertEquals(40, goal.int("baselinePercent"))
         assertFalse(progress["checklistEmpty"]!!.jsonPrimitive.boolean)
         val grammar = progress.obj("grammar")
         assertEquals(listOf(4, 1, 1, 1, 1), listOf("total", "practiced", "covered", "needsWork", "notCovered").map { grammar.int(it) })
         assertEquals(2, progress.obj("topics").int("total"), "unleveled topics do not count for a goal")
         assertEquals(1, progress.obj("topics").int("covered"))
+        // Breakdown under the bar: practised grammar and covered topics.
+        assertEquals(listOf(1, 4, 1, 2), listOf("grammarDone", "grammarTotal", "topicsDone", "topicsTotal").map { progress.int(it) })
         assertEquals(60, progress.int("daysLeft"))
-        assertEquals(50, progress.int("expectedPercent"), "day 0: expected = baseline")
+        assertEquals(40, progress.int("expectedPercent"), "day 0: expected = baseline")
         assertTrue(progress["onTrack"]!!.jsonPrimitive.boolean)
     }
 
@@ -147,11 +149,11 @@ class GoalIntegrationTest : IntegrationTest() {
         }
         suspend fun progress() = client.get("/api/v1/goals/$id") { bearerAuth(teacher) }.body<JsonObject>().obj("progress")
 
-        rewind(baseline = 0)     // half the time gone, expected 50, actual 50
+        rewind(baseline = 0)     // half the time gone, expected 50, actual 40 (within the tolerance of 10)
         assertEquals(50, progress().int("expectedPercent"))
         assertTrue(progress()["onTrack"]!!.jsonPrimitive.boolean)
 
-        rewind(baseline = 60)    // expected 60 + 0.5·40 = 80; 50 < 70
+        rewind(baseline = 60)    // expected 60 + 0.5·40 = 80; 40 < 70
         assertEquals(80, progress().int("expectedPercent"))
         assertFalse(progress()["onTrack"]!!.jsonPrimitive.boolean)
 
@@ -162,7 +164,7 @@ class GoalIntegrationTest : IntegrationTest() {
         assertEquals("ARCHIVED", archived.str("status"))
         assertNotNull(archived["statusChangedAt"]?.takeIf { it !is JsonNull })
         assertEquals(JsonNull, archived.obj("progress")["onTrack"])
-        assertEquals(50, archived.obj("progress").int("percent"), "still computed")
+        assertEquals(40, archived.obj("progress").int("percent"), "still computed")
     }
 
     @Test

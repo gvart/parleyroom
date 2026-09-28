@@ -31,6 +31,20 @@ class AiOutputParserTest {
     }
 
     @Test
+    fun `generate and refine prompts explain the automatic exercise numbering`() {
+        val generate = Prompts.generate(NachbereitungMode.ONE_ON_ONE, "Level: B1", ANNA_NOTES, "")
+        val refine = Prompts.refine(NachbereitungMode.ONE_ON_ONE, "Level: B1", ANNA_NOTES, "", "{}", "Mach Übung 2 leichter")
+        assertTrue(Prompts.exerciseNumbering in generate)
+        assertTrue(Prompts.exerciseNumbering in refine)
+        // Numbered types are real block types, and the structural blocks are not numbered.
+        assertTrue(DocumentBlockValidator.BLOCK_TYPES.containsAll(Prompts.EXERCISE_BLOCK_TYPES))
+        assertEquals(
+            setOf("heading", "rich_text", "vocab_table", "grammar_box"),
+            DocumentBlockValidator.BLOCK_TYPES - Prompts.EXERCISE_BLOCK_TYPES.toSet(),
+        )
+    }
+
+    @Test
     fun `fake output passes the strict profile in both modes`() {
         for (mode in NachbereitungMode.entries) {
             val parsed = AiOutputParser.parseGeneration(fakeAnswer(mode))

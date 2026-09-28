@@ -14,6 +14,7 @@ import com.gvart.parleyroom.practice.transfer.CreateSentenceRequest
 import com.gvart.parleyroom.practice.transfer.PracticeStatsResponse
 import com.gvart.parleyroom.practice.transfer.SentencePageResponse
 import com.gvart.parleyroom.practice.transfer.SentenceResponse
+import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.vocabulary.data.NounArticle
 import com.gvart.parleyroom.vocabulary.data.WordType
 import io.ktor.client.HttpClient
@@ -29,6 +30,9 @@ import io.ktor.http.contentType
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -180,11 +184,16 @@ class SentenceIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val token = getStudentToken(client)
         val id = PracticeFixtures.word("Haus")
+        val zone = ZoneId.of("Europe/Berlin")
+        transaction { UserTable.update({ UserTable.id eq STUDENT }) { it[timezone] = zone.id } }
 
         repeat(2) { assertEquals(HttpStatusCode.Created, client.write(token, id, "Das Haus $it.").status) }
         val third = client.write(token, id, "Das Haus 3.")
         assertEquals(HttpStatusCode.TooManyRequests, third.status)
-        assertEquals("AI_RATE_LIMITED", third.body<ProblemDetail>().code)
+        val problem = third.body<ProblemDetail>()
+        assertEquals("PRACTICE_SENTENCE_LIMIT", problem.code)
+        val nextMidnight = LocalDate.now(zone).plusDays(1).atStartOfDay(zone).toInstant()
+        assertEquals(nextMidnight, problem.resetsAt?.toInstant())
         assertEquals(2, storedCount())
     }
 
