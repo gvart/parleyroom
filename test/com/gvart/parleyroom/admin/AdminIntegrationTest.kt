@@ -5,7 +5,7 @@ import com.gvart.parleyroom.admin.transfer.AdminStatsResponse
 import com.gvart.parleyroom.admin.transfer.AdminUserListResponse
 import com.gvart.parleyroom.admin.transfer.AdminUserResponse
 import com.gvart.parleyroom.common.transfer.ProblemDetail
-import com.gvart.parleyroom.homework.data.HomeworkCategory
+import com.gvart.parleyroom.homework.data.AssignmentTable
 import com.gvart.parleyroom.homework.data.HomeworkTable
 import com.gvart.parleyroom.user.data.RefreshTokenTable
 import com.gvart.parleyroom.user.data.UserRole
@@ -26,6 +26,7 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.ApplicationTestBuilder
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
@@ -340,13 +341,15 @@ class AdminIntegrationTest : IntegrationTest() {
         val studentUuid = UUID.fromString(STUDENT_ID)
         val teacherUuid = UUID.fromString(TEACHER_ID)
         transaction {
-            HomeworkTable.insert {
-                it[studentId] = studentUuid
+            val assignmentId = AssignmentTable.insertAndGetId {
                 it[teacherId] = teacherUuid
                 it[title] = "blocker"
-                it[category] = HomeworkCategory.WRITING
-                it[createdAt] = OffsetDateTime.now()
-                it[updatedAt] = OffsetDateTime.now()
+                it[itemCount] = 0
+                it[totalUnits] = 0
+            }
+            HomeworkTable.insert {
+                it[this.assignmentId] = assignmentId
+                it[studentId] = studentUuid
             }
         }
         val response = client.delete("/api/v1/admin/users/$STUDENT_ID?hard=true") {

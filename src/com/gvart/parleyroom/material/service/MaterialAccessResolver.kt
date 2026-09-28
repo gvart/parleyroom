@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.material.service
 
 import com.gvart.parleyroom.document.service.DocumentAccess
+import com.gvart.parleyroom.homework.service.HomeworkAccess
 import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.material.data.FolderShareTable
@@ -30,7 +31,8 @@ import java.util.UUID
  *   (1) (M, student) in material_shares,
  *   (2) M.folder_id is in the shared-folder closure for this student,
  *   (3) M is attached (via lesson_materials) to a lesson the student is CONFIRMED on,
- *   (4) M is referenced by a media block of a document the student can read (view/download only, not listed).
+ *   (4) M is referenced by a media block of a document the student can read (view/download only, not listed),
+ *   (5) M is referenced by an item of the student's homework (MATERIAL item or media block of a document snapshot).
  * Admin: universal read.
  *
  * Folder access for students: a folder F is visible iff F is directly shared OR F
@@ -156,7 +158,9 @@ class MaterialAccessResolver {
             .empty().not()
         if (viaLesson) return true
 
-        return DocumentAccess.studentReadsDocumentWithMaterial(studentId, materialId)
+        if (DocumentAccess.studentReadsDocumentWithMaterial(studentId, materialId)) return true
+
+        return HomeworkAccess.studentHasMaterialInHomework(studentId, materialId)
     }
 
     /** Caller must already be inside an Exposed transaction. */

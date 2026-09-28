@@ -63,6 +63,9 @@ class StorageService(
         return "$teacherId/$materialId/$safe"
     }
 
+    fun buildHomeworkKey(homeworkId: UUID, uploadId: UUID, filename: String): String =
+        "homework/$homeworkId/$uploadId/${sanitize(filename)}"
+
     fun buildAvatarKey(userId: UUID, filename: String): String {
         val safe = sanitize(filename)
         // Prefix with upload timestamp so successive uploads with the same filename

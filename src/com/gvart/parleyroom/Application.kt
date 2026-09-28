@@ -40,10 +40,11 @@ fun Application.module(dataSource: javax.sql.DataSource? = null) {
     configureLessonModule()
     configureAvailabilityModule()
     configureVocabularyModule()
-    configureHomeworkModule()
     configureGoalModule()
     configureMaterialModule()
     configureDocumentModule()
+    // After materials (storage) and documents (DocumentSupport), which homework uses.
+    configureHomeworkModule()
     configureLibraryModule()
     configureAiModule()
     configureActivityModule()

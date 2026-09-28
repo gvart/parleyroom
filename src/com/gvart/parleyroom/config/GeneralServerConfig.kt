@@ -26,9 +26,11 @@ import com.gvart.parleyroom.common.transfer.exception.TooManyRequestsException
 import com.gvart.parleyroom.common.transfer.exception.UnauthorizedException
 import com.gvart.parleyroom.goal.transfer.CreateGoalRequest
 import com.gvart.parleyroom.goal.transfer.UpdateGoalProgressRequest
-import com.gvart.parleyroom.homework.transfer.CreateHomeworkRequest
-import com.gvart.parleyroom.homework.transfer.ReviewHomeworkRequest
-import com.gvart.parleyroom.homework.transfer.SubmitHomeworkRequest
+import com.gvart.parleyroom.homework.transfer.CreateAssignmentRequest
+import com.gvart.parleyroom.homework.transfer.ReviewDraftRequest
+import com.gvart.parleyroom.homework.transfer.ReviewRequest
+import com.gvart.parleyroom.homework.transfer.SaveAnswersRequest
+import com.gvart.parleyroom.homework.transfer.UpdateAssignmentRequest
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.UpdateLessonContentRequest
 import com.gvart.parleyroom.lesson.transfer.ReflectLessonRequest
@@ -178,9 +180,11 @@ fun Application.generalConfig() {
         validate<QuickAddVocabRequest> { it.validate() }
         validate<VocabEntryInput> { it.validate() }
         validate<VocabDisplaySetting> { it.validate() }
-        validate<CreateHomeworkRequest> { it.validate() }
-        validate<ReviewHomeworkRequest> { it.validate() }
-        validate<SubmitHomeworkRequest> { it.validate() }
+        validate<CreateAssignmentRequest> { it.validate() }
+        validate<UpdateAssignmentRequest> { it.validate() }
+        validate<SaveAnswersRequest> { it.validate() }
+        validate<ReviewDraftRequest> { it.validate() }
+        validate<ReviewRequest> { it.validate() }
         validate<CreateGoalRequest> { it.validate() }
         validate<UpdateGoalProgressRequest> { it.validate() }
         validate<LogoutRequest> { it.validate() }

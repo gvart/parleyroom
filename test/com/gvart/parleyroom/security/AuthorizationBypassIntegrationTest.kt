@@ -1,14 +1,11 @@
 package com.gvart.parleyroom.security
 
 import com.gvart.parleyroom.IntegrationTest
+import com.gvart.parleyroom.homework.HomeworkFixtures
 import com.gvart.parleyroom.goal.transfer.CreateGoalRequest
 import com.gvart.parleyroom.goal.transfer.GoalResponse
 import com.gvart.parleyroom.goal.transfer.UpdateGoalProgressRequest
 import com.gvart.parleyroom.goal.transfer.UpdateGoalRequest
-import com.gvart.parleyroom.homework.data.HomeworkCategory
-import com.gvart.parleyroom.homework.transfer.CreateHomeworkRequest
-import com.gvart.parleyroom.homework.transfer.HomeworkResponse
-import com.gvart.parleyroom.homework.transfer.SubmitHomeworkRequest
 import com.gvart.parleyroom.registration.transfer.InviteUserRequest
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.vocabulary.data.StudentVocabStatus
@@ -155,6 +152,8 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
 
     // ---------- Homework ----------
 
+    // Another student's homework is invisible (404), so ids cannot be probed.
+
     @Test
     fun `student2 cannot GET another student's homework`() = testApp {
         val client = createJsonClient(this)
@@ -163,7 +162,7 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
         val response = client.get("/api/v1/homework/$homeworkId") {
             bearerAuth(getStudent2Token(client))
         }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertEquals(HttpStatusCode.NotFound, response.status)
     }
 
     @Test
@@ -173,10 +172,8 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
 
         val response = client.post("/api/v1/homework/$homeworkId/submit") {
             bearerAuth(getStudent2Token(client))
-            contentType(ContentType.Application.Json)
-            setBody(SubmitHomeworkRequest(submissionText = "hijacked"))
         }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertEquals(HttpStatusCode.NotFound, response.status)
     }
 
     @Test
@@ -187,7 +184,7 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
         val response = client.delete("/api/v1/homework/$homeworkId") {
             bearerAuth(getStudent2Token(client))
         }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertEquals(HttpStatusCode.NotFound, response.status)
     }
 
     // ---------- Role enforcement ----------
@@ -234,19 +231,7 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
     }
 
     private suspend fun createHomeworkAsTeacher(client: HttpClient): String {
-        val token = getTeacherToken(client)
-        val resp = client.post("/api/v1/homework") {
-            bearerAuth(token)
-            contentType(ContentType.Application.Json)
-            setBody(
-                CreateHomeworkRequest(
-                    studentId = STUDENT_ID,
-                    title = "Read chapter 1",
-                    category = HomeworkCategory.READING,
-                )
-            )
-        }
-        assertEquals(HttpStatusCode.Created, resp.status)
-        return resp.body<HomeworkResponse>().id
+        val assignment = HomeworkFixtures.assignTextTask(client, getTeacherToken(client), STUDENT_ID)
+        return HomeworkFixtures.homeworkIdOf(assignment, STUDENT_ID)
     }
 }

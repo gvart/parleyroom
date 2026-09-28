@@ -145,8 +145,15 @@ class DocumentSupport {
         else -> element
     }
 
-    /** Vocab entries referenced by vocab_table rows, filtered by the viewer's display setting. */
-    private fun renderVocab(blocks: JsonArray, row: ResultRow, principal: UserPrincipal): List<DocumentVocabEntry> {
+    private fun renderVocab(blocks: JsonArray, row: ResultRow, principal: UserPrincipal): List<DocumentVocabEntry> =
+        renderVocab(blocks, row[DocumentTable.ownerId].value, row[DocumentTable.createdFromLessonId]?.value, principal)
+
+    /**
+     * Vocab entries referenced by vocab_table rows of [blocks] (owned by [ownerId]), filtered by the
+     * viewer's display setting; [sourceLessonId] supplies the per-lesson override. Also used for
+     * homework document snapshots.
+     */
+    fun renderVocab(blocks: JsonArray, ownerId: UUID, sourceLessonId: UUID?, principal: UserPrincipal): List<DocumentVocabEntry> {
         val entryIds = blocks.asSequence()
             .map { it.jsonObject }
             .filter { (it["type"] as? JsonPrimitive)?.content == "vocab_table" }
@@ -156,9 +163,8 @@ class DocumentSupport {
             .toList()
         if (entryIds.isEmpty()) return emptyList()
 
-        val ownerId = row[DocumentTable.ownerId].value
         val display = if (principal.role == UserRole.STUDENT)
-            studentDisplay(ownerId, principal.id, row[DocumentTable.createdFromLessonId]?.value)
+            studentDisplay(ownerId, principal.id, sourceLessonId)
         else null
 
         return VocabEntryTable.selectAll()
