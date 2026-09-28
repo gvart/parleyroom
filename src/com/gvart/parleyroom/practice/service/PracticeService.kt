@@ -95,21 +95,25 @@ class PracticeService(
         PracticeQueueResponse(mode, cards, due.size, newCards.size, config.newCardsPerDay, introduced)
     }
 
-    fun review(id: UUID, rating: Rating, mode: PracticeMode, responseMs: Int?, principal: UserPrincipal): StudentVocabResponse {
-        if (mode == PracticeMode.ARTICLE)
-            throw BadRequestException("Use /article for the article trainer", code = "PRACTICE_MODE_INVALID")
-        requireResponseMs(responseMs)
-        return transaction {
+    /** Access check before the body is read, so foreign words are 403 / 404 whatever the body. */
+    fun requireOwnWord(id: UUID, principal: UserPrincipal) = transaction {
+        PracticeAccess.requireOwnWord(VocabularyService.findWord(id), principal)
+    }
+
+    fun review(id: UUID, rating: Rating, mode: PracticeMode, responseMs: Int?, principal: UserPrincipal): StudentVocabResponse =
+        transaction {
             val row = lockOwnWord(id, principal)
+            if (mode == PracticeMode.ARTICLE)
+                throw BadRequestException("Use /article for the article trainer", code = "PRACTICE_MODE_INVALID")
+            requireResponseMs(responseMs)
             applyReview(row, rating, mode, responseMs)
             vocabularyService.toResponses(listOf(VocabularyService.findWord(id)), principal).single()
         }
-    }
 
-    fun checkArticle(id: UUID, article: NounArticle, responseMs: Int?, principal: UserPrincipal): ArticleCheckResponse {
-        requireResponseMs(responseMs)
-        return transaction {
+    fun checkArticle(id: UUID, article: NounArticle, responseMs: Int?, principal: UserPrincipal): ArticleCheckResponse =
+        transaction {
             val row = lockOwnWord(id, principal)
+            requireResponseMs(responseMs)
             val correctArticle = row[VocabEntryTable.article]
             if (row[VocabEntryTable.wordType] != WordType.NOUN || correctArticle == null)
                 throw BadRequestException("The word is not a noun with an article", code = "NOT_A_NOUN")
@@ -119,7 +123,6 @@ class PracticeService(
             val word = vocabularyService.toResponses(listOf(VocabularyService.findWord(id)), principal).single()
             ArticleCheckResponse(correct, correctArticle, rating, word)
         }
-    }
 
     fun stats(studentIdParam: UUID?, principal: UserPrincipal): PracticeStatsResponse {
         val studentId = if (principal.role == UserRole.STUDENT) principal.id

@@ -151,6 +151,30 @@ class PracticeIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    fun `foreign access is rejected before the body is read`() = testApp {
+        val client = createJsonClient(this)
+        val student2 = getStudent2Token(client)
+        val teacher = getTeacherToken(client)
+        val id = PracticeFixtures.word("Haus")
+
+        listOf("review", "article", "sentences").forEach { action ->
+            listOf(student2, teacher).forEach { token ->
+                listOf(null, "", "{}", """{"rating":"NOPE"}""").forEach { body ->
+                    val response = client.post("/api/v1/vocabulary/$id/$action") {
+                        bearerAuth(token)
+                        if (body != null) { contentType(ContentType.Application.Json); setBody(body) }
+                    }
+                    assertEquals(HttpStatusCode.Forbidden, response.status, "$action with body $body")
+                    assertEquals("PRACTICE_STUDENT_ONLY", response.body<ProblemDetail>().code)
+                }
+            }
+            val missing = client.post("/api/v1/vocabulary/${UUID.randomUUID()}/$action") { bearerAuth(student2) }
+            assertEquals(HttpStatusCode.NotFound, missing.status, action)
+        }
+        assertTrue(reviewsOf(id).isEmpty())
+    }
+
+    @Test
     fun `review body is validated`() = testApp {
         val client = createJsonClient(this)
         val token = getStudentToken(client)

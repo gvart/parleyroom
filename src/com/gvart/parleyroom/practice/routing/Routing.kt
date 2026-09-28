@@ -24,6 +24,7 @@ import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
 import io.ktor.server.plugins.di.dependencies
+import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.openapi.describe
@@ -83,8 +84,11 @@ fun Application.configurePracticeRouting() {
             }
 
             route("/api/v1/vocabulary/{id}") {
-                post<ReviewRequest>("/review") {
-                    val result = practiceService.review(call.getPathUUID(), it.rating, it.mode, it.responseMs, call.requirePrincipal())
+                post("/review") {
+                    val (id, principal) = call.getPathUUID() to call.requirePrincipal()
+                    practiceService.requireOwnWord(id, principal)
+                    val body = call.receive<ReviewRequest>()
+                    val result = practiceService.review(id, body.rating, body.mode, body.responseMs, principal)
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Review word (FSRS)"
@@ -99,8 +103,11 @@ fun Application.configurePracticeRouting() {
                     }
                 }
 
-                post<ArticleCheckRequest>("/article") {
-                    val result = practiceService.checkArticle(call.getPathUUID(), it.article, it.responseMs, call.requirePrincipal())
+                post("/article") {
+                    val (id, principal) = call.getPathUUID() to call.requirePrincipal()
+                    practiceService.requireOwnWord(id, principal)
+                    val body = call.receive<ArticleCheckRequest>()
+                    val result = practiceService.checkArticle(id, body.article, body.responseMs, principal)
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Check article (der/die/das)"
@@ -115,8 +122,11 @@ fun Application.configurePracticeRouting() {
                 }
 
                 route("/sentences") {
-                    post<CreateSentenceRequest> {
-                        call.respond(HttpStatusCode.Created, sentenceService.create(call.getPathUUID(), it.sentence, call.requirePrincipal()))
+                    post {
+                        val (id, principal) = call.getPathUUID() to call.requirePrincipal()
+                        practiceService.requireOwnWord(id, principal)
+                        val body = call.receive<CreateSentenceRequest>()
+                        call.respond(HttpStatusCode.Created, sentenceService.create(id, body.sentence, principal))
                     }.describe {
                         summary = "Write own sentence"
                         description = "Student only, own word. Synchronous AI feedback (corrected sentence, one-line explanation). " +
