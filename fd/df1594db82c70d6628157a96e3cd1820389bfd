@@ -1,0 +1,19 @@
+test/com/gvart/parleyroom/document/DocumentStudentAccessIntegrationTest.kt
+  s_2b5907717bc9a2::t_d2f9e9c5e61657 1-204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "fddf1594db82c70d6628157a96e3cd1820389bfd",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
