@@ -343,7 +343,8 @@ Per-lesson override of the vocab display setting for words students received in 
 A document is an ordered list of **typed blocks** owned by a teacher. Documents replace the
 lesson's old free-text `sharedDocument`. Every document is part of its owner's library;
 `audience` only records what it was made for. **Writes are teacher-only (owner)**; admins can
-read and delete; students read documents shared with them (answer keys stripped).
+read and delete; students read documents shared with them (answer keys stripped). Another
+teacher's document is 403; a student without access gets 404 `DOCUMENT_NOT_FOUND`.
 
 ### Block format
 
@@ -360,9 +361,11 @@ response served to a student (documents, versions never reach students). Clients
 
 **Rich text** (`RichText`): TipTap / ProseMirror JSON, a strict subset:
 `{ "type": "doc", "content": [ … ] }`. Nodes: `paragraph`, `heading` (`attrs.level` 1–3),
-`bulletList`, `orderedList`, `listItem`, `blockquote`, `hardBreak`, `text`. Marks: `bold`,
-`italic`, `underline`, `strike`, `highlight`, `link` (`attrs.href` must be `https://`,
-`http://` or `mailto:`). Anything else → 400. Text is text: no HTML is ever stored or rendered.
+`bulletList`, `orderedList` (`attrs.start`, `attrs.type`), `listItem`, `blockquote`, `hardBreak`,
+`text`. Marks: `bold`, `italic`, `underline`, `strike`, `highlight`, `link` (`attrs.href` must be
+`https://`, `http://` or `mailto:`; optional `target: "_blank"|null`, `rel`, `title`, `class: null`).
+No other node, mark or attribute is accepted (400) — configure the TipTap editor with exactly these
+extensions. Text is text: no HTML is ever stored or rendered.
 Plain strings are used for short fields (questions, options, sentences).
 
 Gaps in `gap_fill` text are written as `___` (three underscores); `solution.answers[i]` lists
@@ -393,6 +396,14 @@ for the viewer (same shape/rules as StudentVocab display: a student gets only th
 allowed by their effective display setting + `revealTranslations`; teachers get all).
 A row whose entry was deleted later just has no match in `vocab`.
 
+`DocumentVocabEntry = { id (entry id), lemma, article?, plural?, wordType, forms?, government?,
+exampleSentence?, level?, display?, translations, explanationDe?, revealTranslations? }`. For a
+student, `display` is their effective setting (the document's source-lesson override > teacher–student
+setting > level default); for teachers/admins `display` is null and every field is present.
+
+`media.materialId` must be one of the owner's materials. Downloading it still follows the
+material access rules (share the material too); document access does not grant it.
+
 Examples:
 ```json
 { "id": "…", "type": "gap_fill", "interactive": true, "instructions": "Ergänze die Verben.",
@@ -406,7 +417,8 @@ Examples:
   "content": { "type": "doc", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Hallo", "marks": [{ "type": "bold" }] }] }] } }
 ```
 
-Limits: ≤ 200 blocks, ≤ 200 items per block, title ≤ 255 chars, request body ≤ 1 MiB.
+Limits: ≤ 200 blocks, ≤ 200 items/questions/rows per block (writing tasks ≤ 20, options 2–12),
+title ≤ 255 chars, serialized `blocks` ≤ 1 MiB (400 `DOCUMENT_TOO_LARGE`).
 
 ### Document
 
@@ -430,7 +442,7 @@ plus `blockCount`.
 ```
 GET    /api/v1/documents/schema            -> JSON Schema (any authenticated user)
 GET    /api/v1/documents?level=&topicId=&grammarTopicId=&audience=&lessonId=&studentId=&groupId=&q=&page=&pageSize=
-       -> { documents: [DocumentSummary], total, page, pageSize }   ordered by updatedAt desc; q = title contains (ci)
+       -> { documents: [DocumentSummary], total, page, pageSize }   updatedAt desc; q = title contains (ci); pageSize ≤ 100
 POST   /api/v1/documents                   Body: DocumentInput + { studentIds?, groupIds?, lessonIds?, createdFromLessonId? } -> 201 Document
 GET    /api/v1/documents/{id}              -> Document
 PUT    /api/v1/documents/{id}              Body: DocumentInput (full replace, the autosave target) -> Document
@@ -444,7 +456,10 @@ POST   /api/v1/documents/{id}/versions/{versionId}/restore -> Document
 POST   /api/v1/lessons/{id}/documents      Body: { documentId } link (lesson teacher = document owner) -> 204
 DELETE /api/v1/lessons/{id}/documents/{documentId}  unlink -> 204
 ```
-`DocumentInput = { title, level?, topicIds: [], grammarTopicIds: [], audience, blocks: [Block] }`.
+`DocumentInput = { title, level?, topicIds: [], grammarTopicIds: [], audience, blocks: [Block] }`
+(blank title or > 255 chars → 400 `VALIDATION_FAILED`).
+Roles: create / PUT / duplicate / share / unshare / restore / lesson links = the owning teacher;
+DELETE and versions = owner or admin; GET / list = owner, admin, or a student with read access.
 Share targets: students must be linked to the owner (400 `STUDENT_NOT_LINKED`); groups must be
 the owner's (404 `GROUP_NOT_FOUND`). Tags must be in the owner's library (404 `TOPIC_NOT_FOUND` /
 `GRAMMAR_TOPIC_NOT_FOUND`); `createdFromLessonId`/`lessonIds` must be the owner's lessons
@@ -470,7 +485,8 @@ Only the newest 30 versions per document are kept.
 `lesson_documents.shared_document`, `LessonResponse.sharedDocument`,
 `LessonDocumentResponse.sharedDocument` and the `sharedDocument` field of
 `PUT /api/v1/lessons/{id}/sync` are removed (sync keeps the notes/reflection fields).
-`LessonResponse.documents: [{ id, title, updatedAt }]` lists the linked documents.
+`LessonResponse.documents: [{ id, title, updatedAt }]` lists the linked documents (students only
+see them once they are CONFIRMED on the lesson).
 **Live sync** stays poll-based: clients already poll `GET /lessons/{id}` every 10 s; when a
 `documents[].updatedAt` changes they refetch `GET /documents/{id}`. The teacher edits via
 `PUT /documents/{id}` (in any lesson status).
@@ -559,8 +575,11 @@ Every error body is a ProblemDetail with a stable machine-readable `code`
 (UPPER_SNAKE). Clients translate by `code`; `detail` is English debug text.
 
 ```json
-{ "type": "about:blank", "title": "Not Found", "status": 404, "detail": "Lesson not found", "code": "LESSON_NOT_FOUND" }
+{ "type": "about:blank", "title": "Not Found", "status": 404, "detail": "Lesson not found", "code": "LESSON_NOT_FOUND", "pointer": null }
 ```
+
+Validation errors on a request body may carry `pointer` (JSON pointer of the bad value,
+e.g. `/blocks/3/items/0/solution/answers`); it is null otherwise.
 
 Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATION_FAILED`,
 `MALFORMED_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_ERROR`.
@@ -576,6 +595,7 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 | Materials | `MATERIAL_NOT_FOUND`, `MATERIAL_FILE_NOT_FOUND`, `FOLDER_NOT_FOUND`, `TARGET_FOLDER_NOT_FOUND`, `FOLDER_NOT_EMPTY`, `FOLDER_NAME_TAKEN`, `FOLDER_CYCLE`, `FILE_TOO_LARGE` |
 | Homework / goals | `HOMEWORK_NOT_FOUND`, `HOMEWORK_INVALID_STATE`, `GOAL_NOT_FOUND`, `GOAL_NOT_ACTIVE` |
 | Vocabulary | `VOCABULARY_WORD_NOT_FOUND`, `VOCAB_ENTRY_NOT_FOUND`, `VOCAB_ENTRY_DUPLICATE`, `VOCAB_LANGUAGE_UNSUPPORTED`, `VOCAB_DISPLAY_FIELD_UNSUPPORTED`, `TEACHER_STUDENT_NOT_FOUND` |
+| Documents | `DOCUMENT_NOT_FOUND`, `DOCUMENT_INVALID_BLOCK` (+ `pointer`), `DOCUMENT_DUPLICATE_ID` (+ `pointer`), `DOCUMENT_TOO_LARGE`, `DOCUMENT_VERSION_NOT_FOUND` |
 | Library / groups | `TOPIC_NOT_FOUND`, `TOPIC_DUPLICATE`, `TOPIC_HAS_CHILDREN`, `TOPIC_CYCLE`, `GRAMMAR_TOPIC_NOT_FOUND`, `GRAMMAR_TOPIC_DUPLICATE`, `GROUP_NOT_FOUND`, `STUDENT_NOT_LINKED` |
 
 ---
