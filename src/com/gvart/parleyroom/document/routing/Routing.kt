@@ -60,13 +60,14 @@ fun Application.configureDocumentRouting() {
                         studentId = call.getQueryUUID("studentId"),
                         groupId = call.getQueryUUID("groupId"),
                         q = params["q"],
+                        blockType = params["blockType"],
                     )
                     val result = documentService.listDocuments(call.requirePrincipal(), filters, PageRequest.from(call))
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "List documents"
                     description = "Teachers: their library. Students: documents shared with them (directly, via a group, or " +
-                            "linked to a lesson they attend). Admins: all. Newest first; q matches the title."
+                            "linked to a lesson they attend). Admins: all. Newest first; q matches the title; blockType keeps documents containing a block of that type."
                     responses { HttpStatusCode.OK { schema = jsonSchema<DocumentPageResponse>() } }
                 }
 
