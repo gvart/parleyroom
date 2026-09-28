@@ -169,7 +169,7 @@ class LessonContextService {
                 .map { GrammarTopicRef(it[GrammarTopicTable.id].value.toString(), it[GrammarTopicTable.name], it[GrammarTopicTable.level]) },
             prefillNotes = lesson[LessonTable.rawNotes] ?: LessonDocumentTable.select(LessonDocumentTable.teacherNotes)
                 .where { LessonDocumentTable.lessonId eq lessonId }
-                .singleOrNull()?.get(LessonDocumentTable.teacherNotes),
+                .singleOrNull()?.get(LessonDocumentTable.teacherNotes)?.let(HtmlText::toPlainText)?.takeIf { it.isNotBlank() },
             promptUsed = lesson[LessonTable.promptUsed],
         )
     }

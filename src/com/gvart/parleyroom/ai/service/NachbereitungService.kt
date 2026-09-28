@@ -153,7 +153,7 @@ class NachbereitungService(
     }
 
     private suspend fun runGenerate(gateway: LlmGateway, ctx: LessonContext, input: JobInput, principal: UserPrincipal): JobSuccess {
-        val request = Prompts.generate(ctx.mode, ctx.toPromptText(), input.notes.orEmpty(), input.prompt.orEmpty())
+        val request = Prompts.generate(ctx.mode, ctx.toPromptText(), HtmlText.toPlainText(input.notes.orEmpty()), input.prompt.orEmpty())
         val completion = GenerationJobs.completeValidated(gateway, Prompts.nachbereitungSystem(ctx.mode), request, MAX_TOKENS, AiOutputParser::parseGeneration)
         val output = completion.value
         return transaction {
@@ -188,7 +188,7 @@ class NachbereitungService(
             Triple(ctx, currentOutput(previous, document), documentId)
         }
         val (currentText, rowEntries) = currentOutput
-        val request = Prompts.refine(ctx.mode, ctx.toPromptText(), input.notes.orEmpty(), input.prompt.orEmpty(), currentText, input.instruction.orEmpty())
+        val request = Prompts.refine(ctx.mode, ctx.toPromptText(), HtmlText.toPlainText(input.notes.orEmpty()), input.prompt.orEmpty(), currentText, input.instruction.orEmpty())
         val completion = GenerationJobs.completeValidated(gateway, Prompts.nachbereitungSystem(ctx.mode), request, MAX_TOKENS, AiOutputParser::parseGeneration)
         val output = completion.value
         return transaction {

@@ -619,10 +619,12 @@ GET /api/v1/lessons/{id}/nachbereitung -> NachbereitungState
 NachbereitungState {
   lessonId, mode: ONE_ON_ONE | CLUB,
   aiAvailable: bool,                   // false -> generate/refine return 503 AI_NOT_CONFIGURED
-  notes: string | null,                // lesson.raw_notes, else the live-classroom teacher notes (prefill)
+  notes: string | null,                // lesson.raw_notes, else the live-classroom teacher notes as PLAIN TEXT
+                                       // (HTML converted: one line per paragraph / heading / list item)
   prompt: string | null,               // lesson.prompt_used
   context: ContextSummary,             // what the server will add (shown read-only in the panel)
-  latestJob: GenerationJob | null,     // newest GENERATE/REFINE of this lesson, with result
+  latestJob: GenerationJob | null,     // newest GENERATE/REFINE of this lesson in any status (QUEUED/RUNNING
+                                       // too, so the panel resumes polling after a reload), with result
   draftDocumentId: uuid | null,        // draft of the latest successful job
   publishedAt: ISO8601 | null          // last publish of this lesson
 }
@@ -664,7 +666,7 @@ the prompt:
 
 **Privacy**: the model never receives student/teacher names, e-mails or any id (uuids are never
 sent; topics/grammar are sent by name and mapped back server-side). Notes and prompt are sent as
-Anna wrote them. Covered by a test that captures the fake provider's prompt.
+Anna wrote them (HTML notes are converted to the same plain text as the prefill). Covered by a test that captures the fake provider's prompt.
 
 **System prompt**: `resources/ai/nachbereitung-system.md` (+ `nachbereitung-club.md` for clubs,
 `fill-translations-system.md`), editable without code changes. Rules: correct German (articles,

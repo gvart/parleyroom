@@ -61,6 +61,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import java.util.UUID
@@ -356,6 +357,29 @@ class NachbereitungIntegrationTest : IntegrationTest() {
         assertEquals(job.id, after.latestJob?.id)
         assertEquals(job.documentId, after.draftDocumentId)
         assertEquals(1, client.get("/api/v1/lessons/$lessonId/ai-jobs") { bearerAuth(token) }.body<List<GenerationJobResponse>>().size)
+    }
+
+    @Test
+    fun `state prefills live-classroom notes as plain text and shows a running job`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val lessonId = seedLesson()
+        transaction {
+            com.gvart.parleyroom.lesson.data.LessonDocumentTable.insert {
+                it[this.lessonId] = lessonId
+                it[teacherNotes] = "<p>die <em>Gießkanne</em></p><ul><li><p>Blumen gießen</p></li></ul>"
+                it[createdAt] = OffsetDateTime.now()
+                it[updatedAt] = OffsetDateTime.now()
+            }
+        }
+        val state = client.get("/api/v1/lessons/$lessonId/nachbereitung") { bearerAuth(token) }.body<NachbereitungState>()
+        assertEquals("die Gießkanne\nBlumen gießen", state.notes)
+
+        val running = client.startGenerate(token, lessonId, "[fake:delay=1500]", notes = state.notes!!).body<GenerationJobResponse>()
+        val during = client.get("/api/v1/lessons/$lessonId/nachbereitung") { bearerAuth(token) }.body<NachbereitungState>()
+        assertEquals(running.id, during.latestJob?.id)
+        assertTrue(during.latestJob!!.status in setOf(GenerationJobStatus.QUEUED, GenerationJobStatus.RUNNING))
+        assertEquals(listOf("Gießkanne", "Blumen gießen"), client.awaitJob(token, running.id).nachbereitung().vocab.map { it.entry.lemma })
     }
 
     @Test
