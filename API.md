@@ -338,6 +338,153 @@ Per-lesson override of the vocab display setting for words students received in 
 
 ---
 
+## Documents (`/api/v1/documents`)
+
+A document is an ordered list of **typed blocks** owned by a teacher. Documents replace the
+lesson's old free-text `sharedDocument`. Every document is part of its owner's library;
+`audience` only records what it was made for. **Writes are teacher-only (owner)**; admins can
+read and delete; students read documents shared with them (answer keys stripped).
+
+### Block format
+
+The JSON Schema (draft 2020-12) is served at `GET /api/v1/documents/schema` (source:
+`resources/document-blocks.schema.json`). Every write is validated against it.
+
+Common fields on **every** block: `id` (uuid, stable), `type`, `interactive` (bool, default
+false: students answer in the app — P6). Every answerable item has its own stable `id`
+(uuid); homework answers reference `blockId + itemId`. Ids must be unique within a document.
+
+**Solutions**: everything under a `solution` key is the answer key. It is removed from every
+response served to a student (documents, versions never reach students). Clients render
+`solution` only for teachers.
+
+**Rich text** (`RichText`): TipTap / ProseMirror JSON, a strict subset:
+`{ "type": "doc", "content": [ … ] }`. Nodes: `paragraph`, `heading` (`attrs.level` 1–3),
+`bulletList`, `orderedList`, `listItem`, `blockquote`, `hardBreak`, `text`. Marks: `bold`,
+`italic`, `underline`, `strike`, `highlight`, `link` (`attrs.href` must be `https://`,
+`http://` or `mailto:`). Anything else → 400. Text is text: no HTML is ever stored or rendered.
+Plain strings are used for short fields (questions, options, sentences).
+
+Gaps in `gap_fill` text are written as `___` (three underscores); `solution.answers[i]` lists
+the accepted answers for the i-th gap (count must match).
+
+| type | fields (besides id/type/interactive) |
+|---|---|
+| `heading` | `text`, `level` 1–3 |
+| `rich_text` | `content: RichText` |
+| `vocab_table` | `title?`, `topicId?`, `rows: [{ id, vocabEntryId }]` |
+| `grammar_box` | `variant: TIP\|OVERVIEW`, `title?`, `content?: RichText`, `table?: { headers: [str], rows: [[str]] }`, `examples?: [str]` |
+| `gap_fill` | `instructions?`, `wordBox?: [str]` (cloze), `items: [{ id, text, hint?, solution?: { answers: [[str]] } }]` |
+| `multiple_choice` | `instructions?`, `items: [{ id, question, multiple?: bool, options: [{ id, text }], solution?: { correctOptionIds: [id] } }]` |
+| `error_correction` | `instructions?`, `items: [{ id, sentence, solution?: { corrected, explanation? } }]` |
+| `free_sentences` | `instructions?`, `items: [{ id, prompt, solution?: { sampleAnswer } }]` (build sentences from prompts, speaking questions, "use the new words") |
+| `writing_task` | `instructions?`, `instructionsTranslation?: { ru?, en? }`, `items: [{ id, prompt, register?: INFORMAL\|FORMAL, points: [str], minWords?, maxWords?, solution?: { sampleAnswer } }]` |
+| `reading` | `title?`, `text: RichText`, `questions: [Question]` |
+| `media` | `kind: AUDIO\|VIDEO`, exactly one of `url` (https) / `materialId`, `task?: RichText`, `questions: [Question]` |
+| `exam_part` | `exam` ("telc B1"), `part` ("Lesen Teil 2"), `instructions?`, `timeMinutes?`, `content?: RichText`, `questions: [Question]` |
+| `free_form` | `instructions?`, `content: RichText`, `items: [{ id, prompt, solution?: { sampleAnswer } }]` (may be empty) |
+
+`Question` = `{ id, kind: OPEN|TRUE_FALSE|CHOICE, question, options?: [{ id, text }] (CHOICE only),
+solution?: { sampleAnswer? (OPEN) | isTrue? (TRUE_FALSE) | correctOptionIds? (CHOICE) } }`.
+
+`vocab_table` rows point at the owner's library entries (400 `DOCUMENT_INVALID_BLOCK` for a
+foreign/unknown id). Responses carry a `vocab` side-list of the referenced entries rendered
+for the viewer (same shape/rules as StudentVocab display: a student gets only the fields
+allowed by their effective display setting + `revealTranslations`; teachers get all).
+A row whose entry was deleted later just has no match in `vocab`.
+
+Examples:
+```json
+{ "id": "…", "type": "gap_fill", "interactive": true, "instructions": "Ergänze die Verben.",
+  "wordBox": ["musst", "kümmern"],
+  "items": [{ "id": "…", "text": "Darum ___ du dich ___.", "solution": { "answers": [["musst"], ["kümmern"]] } }] }
+{ "id": "…", "type": "multiple_choice", "interactive": true,
+  "items": [{ "id": "…", "question": "Ich ___ gestern geblieben.", "options": [{ "id": "…", "text": "habe" }, { "id": "…", "text": "bin" }],
+              "solution": { "correctOptionIds": ["<id of bin>"] } }] }
+{ "id": "…", "type": "vocab_table", "interactive": false, "title": "Haushalt", "rows": [{ "id": "…", "vocabEntryId": "…" }] }
+{ "id": "…", "type": "rich_text", "interactive": false,
+  "content": { "type": "doc", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Hallo", "marks": [{ "type": "bold" }] }] }] } }
+```
+
+Limits: ≤ 200 blocks, ≤ 200 items per block, title ≤ 255 chars, request body ≤ 1 MiB.
+
+### Document
+
+```json
+{
+  "id": "uuid", "ownerId": "uuid", "title": "Haushalt – Wortschatz",
+  "level": "B1 | null", "topicIds": ["uuid"], "grammarTopicIds": ["uuid"],
+  "audience": "STUDENT | GROUP | LIBRARY",
+  "studentIds": ["uuid"], "groupIds": ["uuid"], "lessonIds": ["uuid"],
+  "createdFromLessonId": "uuid | null",
+  "blocks": [Block], "vocab": [DocumentVocabEntry],
+  "createdAt": "ISO8601", "updatedAt": "ISO8601"
+}
+```
+For students `studentIds` / `groupIds` are `[]` (other students are not exposed) and
+every `solution` is removed. `DocumentSummary` (list) = the same without `blocks`/`vocab`,
+plus `blockCount`.
+
+### Endpoints
+
+```
+GET    /api/v1/documents/schema            -> JSON Schema (any authenticated user)
+GET    /api/v1/documents?level=&topicId=&grammarTopicId=&audience=&lessonId=&studentId=&groupId=&q=&page=&pageSize=
+       -> { documents: [DocumentSummary], total, page, pageSize }   ordered by updatedAt desc; q = title contains (ci)
+POST   /api/v1/documents                   Body: DocumentInput + { studentIds?, groupIds?, lessonIds?, createdFromLessonId? } -> 201 Document
+GET    /api/v1/documents/{id}              -> Document
+PUT    /api/v1/documents/{id}              Body: DocumentInput (full replace, the autosave target) -> Document
+DELETE /api/v1/documents/{id}              -> 204 (owner or admin)
+POST   /api/v1/documents/{id}/duplicate    Body: { title? } -> 201 Document (new block/item ids, not shared, not linked to lessons)
+POST   /api/v1/documents/{id}/share        Body: { studentIds?, groupIds? } add targets -> Document
+POST   /api/v1/documents/{id}/unshare      Body: { studentIds?, groupIds? } remove targets -> Document
+GET    /api/v1/documents/{id}/versions     -> [DocumentVersionSummary] newest first (teacher/admin)
+GET    /api/v1/documents/{id}/versions/{versionId} -> DocumentVersion
+POST   /api/v1/documents/{id}/versions/{versionId}/restore -> Document
+POST   /api/v1/lessons/{id}/documents      Body: { documentId } link (lesson teacher = document owner) -> 204
+DELETE /api/v1/lessons/{id}/documents/{documentId}  unlink -> 204
+```
+`DocumentInput = { title, level?, topicIds: [], grammarTopicIds: [], audience, blocks: [Block] }`.
+Share targets: students must be linked to the owner (400 `STUDENT_NOT_LINKED`); groups must be
+the owner's (404 `GROUP_NOT_FOUND`). Tags must be in the owner's library (404 `TOPIC_NOT_FOUND` /
+`GRAMMAR_TOPIC_NOT_FOUND`); `createdFromLessonId`/`lessonIds` must be the owner's lessons
+(404 `LESSON_NOT_FOUND`); `createdFromLessonId` is also linked.
+
+**Student read access**: a document is readable by a student iff they are in `studentIds`, OR
+a member of one of `groupIds`, OR a CONFIRMED participant of a linked lesson.
+
+### Versions
+
+A version is a snapshot of `title + blocks` (tags and share targets are not versioned).
+`DocumentVersionSummary = { id, number, reason, title, blockCount, createdAt }`;
+`DocumentVersion` = summary + `blocks`. `number` increases per document.
+Snapshots are taken of the state **before** a change:
+- `AUTOSAVE`: on `PUT` when there is no snapshot yet or the latest is ≥ 10 min old;
+- `SHARE`: on every `share` (the state that was shared);
+- `RESTORE`: on restore, the current state before it is overwritten;
+- `DUPLICATE`: on duplicate, a snapshot of the source.
+Only the newest 30 versions per document are kept.
+
+### Lessons
+
+`lesson_documents.shared_document`, `LessonResponse.sharedDocument`,
+`LessonDocumentResponse.sharedDocument` and the `sharedDocument` field of
+`PUT /api/v1/lessons/{id}/sync` are removed (sync keeps the notes/reflection fields).
+`LessonResponse.documents: [{ id, title, updatedAt }]` lists the linked documents.
+**Live sync** stays poll-based: clients already poll `GET /lessons/{id}` every 10 s; when a
+`documents[].updatedAt` changes they refetch `GET /documents/{id}`. The teacher edits via
+`PUT /documents/{id}` (in any lesson status).
+
+### Error codes
+
+`DOCUMENT_NOT_FOUND` (404; also for students without access), `DOCUMENT_INVALID_BLOCK` (400;
+the ProblemDetail gets an extra `pointer` field with the JSON pointer of the bad value, e.g.
+`/blocks/3/items/0/solution/answers`; `detail` says what is wrong),
+`DOCUMENT_DUPLICATE_ID` (400, block/item id reused in a document), `DOCUMENT_VERSION_NOT_FOUND` (404),
+`DOCUMENT_TOO_LARGE` (400).
+
+---
+
 ## Materials (`/api/v1/materials`)
 
 Teacher-owned study resources stored in S3-compatible storage (MinIO locally, S3 on AWS). Clients upload bytes to the API; the server streams them to storage. Non-LINK materials expose a `downloadUrl` pointing at `GET /api/v1/materials/{id}/file`, which streams the stored bytes through the authenticated API.
