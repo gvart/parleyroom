@@ -41,6 +41,7 @@ class FakeLlmGateway : LlmGateway {
 
         val output = when (Prompts.section(request, "task")) {
             Prompts.TASK_FILL -> fill(request)
+            Prompts.TASK_SUGGEST_TAGS -> suggestTags(request, invalid)
             Prompts.TASK_REFINE -> refine(request, invalid)
             else -> generate(request, invalid)
         }
@@ -134,6 +135,36 @@ class FakeLlmGateway : LlmGateway {
                         if ("de_explanation" in missing) put("explanationDe", "Erklärung: $lemma")
                     })
                 }
+            }
+        }
+    }
+
+    /** Level = first CEFR token, topics / grammar = library names found in the text, else Alltag / Perfekt. */
+    private fun suggestTags(request: String, invalid: Boolean): JsonObject {
+        val text = Prompts.section(request, "material_name").orEmpty() + "\n" + Prompts.section(request, "material_text").orEmpty()
+        val lower = text.lowercase()
+        val level = Regex("\\b(A1|A2|B1|B2|C1|C2)\\b").find(text)?.value
+        val source = Prompts.section(request, "source")
+        val topics = Prompts.section(request, "library_topics").orEmpty().lines()
+            .filter { it.isNotBlank() && !it.startsWith("(") }
+            .map { path -> path.split(" > ").map(String::trim) }
+            .filter { parts -> parts.last().lowercase() in lower }
+        val grammar = Prompts.section(request, "library_grammar_topics").orEmpty().lines()
+            .filter { it.isNotBlank() && !it.startsWith("(") }
+            .map { it.replace(Regex(" \\((A1|A2|B1|B2|C1|C2)\\)$"), "").trim() }
+            .filter { it.lowercase() in lower }
+        return buildJsonObject {
+            level?.let { put("level", it) }
+            if (source != "NAME_ONLY") put("skill", "READING")
+            putJsonArray("topics") {
+                if (invalid) add(buildJsonObject { put("name", " ") })
+                else if (topics.isEmpty()) add(buildJsonObject { put("name", "Alltag") })
+                else topics.forEach { parts ->
+                    add(buildJsonObject { put("name", parts.last()); if (parts.size > 1) put("parentName", parts[parts.size - 2]) })
+                }
+            }
+            putJsonArray("grammarTopics") {
+                grammar.ifEmpty { listOf("Perfekt") }.forEach { add(buildJsonObject { put("name", it) }) }
             }
         }
     }

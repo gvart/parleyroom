@@ -8,19 +8,123 @@ can read their teachers' topics / grammar topics; admins read all.
 ```
 GET    /api/v1/topics                    -> [Topic]   flat list, build the tree from parentId
 POST   /api/v1/topics                    Body: { name, parentId?, levels?: [A1..C2] }
-PATCH  /api/v1/topics/{id}               Body: { name?, parentId?, moveToRoot?: bool, levels? }
-DELETE /api/v1/topics/{id}               409 TOPIC_HAS_CHILDREN if it has sub-topics
+PATCH  /api/v1/topics/{id}               Body: { name?, parentId?, moveToRoot?: bool, levels? }   rename / move / re-level
+DELETE /api/v1/topics/{id}?force=true    409 TOPIC_HAS_CHILDREN if it has sub-topics (also with force);
+                                         409 TOPIC_HAS_CONTENT if anything is tagged with it, unless force=true
+POST   /api/v1/topics/{id}/merge         Body: { targetId } -> 200 Topic (the target)   merge {id} INTO targetId
+POST   /api/v1/topics/{id}/merge?dryRun=true   same body -> 200 MergePreview, nothing is changed
 ```
 Topic: `{ id, teacherId, parentId?, name, levels: [Level], createdAt }`. Sibling names are
 unique case-insensitively (409 `TOPIC_DUPLICATE`); moving under a descendant is 400 `TOPIC_CYCLE`.
 
 ```
-GET    /api/v1/grammar-topics?level=B1   ordered by level, then name
+GET    /api/v1/grammar-topics?level=B1   ordered by level (nulls last), then position, then name
 POST   /api/v1/grammar-topics            Body: { name, level?, category?, explanation?, examples: [string] }
 GET    /api/v1/grammar-topics/{id}
 PUT    /api/v1/grammar-topics/{id}       full replace, same body
-DELETE /api/v1/grammar-topics/{id}
+DELETE /api/v1/grammar-topics/{id}?force=true   409 GRAMMAR_TOPIC_HAS_CONTENT if tagged anywhere, unless force=true
+POST   /api/v1/grammar-topics/{id}/merge Body: { targetId } -> 200 GrammarTopic (the target)
+POST   /api/v1/grammar-topics/{id}/merge?dryRun=true   same body -> 200 MergePreview, nothing is changed
+PUT    /api/v1/grammar-topics/order      Body: { level: A1..C2 | null, ids: [uuid] } -> [GrammarTopic] of that level, in order
 ```
+GrammarTopic: `{ id, teacherId, name, level?, category?, explanation?, examples, position, createdAt }`.
+`position` orders the checklist **within a level** (0-based, per teacher + level). A new grammar
+topic (POST, or created by Nachbereitung publish) is appended at the end of its level; a PUT
+that changes `level` moves it to the end of the new level. Reorder: `ids` must be **exactly** the
+teacher's grammar topics of that `level` (`null` = the ones without level), each once, else 400
+`GRAMMAR_ORDER_INVALID`; positions become the list index.
+
+**Content** of a topic = its tags on vocab entries, documents, materials and lessons (grammar
+topic: documents, materials, lessons). Deleting never deletes content:
+- without `force`: 409 `TOPIC_HAS_CONTENT` / `GRAMMAR_TOPIC_HAS_CONTENT`; the ProblemDetail carries
+  `usage: { words, documents, materials, lessons }` (grammar: `words` is always 0) for the confirm dialog;
+- with `force=true`: the tags are removed, then the topic is deleted (sub-topics still block: 409 `TOPIC_HAS_CHILDREN`).
+
+**Merge** (`POST /topics/{A}/merge { targetId: B }`), one transaction, teacher (owner) only:
+1. A and B must be the caller's (404 `TOPIC_NOT_FOUND`); A = B, or B inside A's subtree → 400 `TOPIC_MERGE_INVALID`.
+2. Every tag on A (vocab entry, document, material, lesson) is re-pointed to B; rows that already
+   exist for B are dropped (no duplicates, `INSERT … ON CONFLICT DO NOTHING` + delete).
+3. A's children move under B. A child whose name clashes (case-insensitive) with a child of B is
+   **merged recursively** into that child (so `Alltag > Haushalt` merged into `Wohnen` joins `Wohnen > Haushalt`).
+4. `B.levels = B.levels ∪ A.levels`; B keeps its name and parent.
+5. `vocab_table.topicId` in A's owner's documents is rewritten to B. Each rewritten document gets
+   `revision + 1` and a new `updatedAt` (no version snapshot), so an open editor's next autosave
+   gets 409 `DOCUMENT_CONFLICT` and reloads instead of writing the old id back.
+6. A is deleted. Response: B.
+
+`MergePreview` (`dryRun=true`, same validation and errors as the real merge) = what would move
+from A to B: `{ words, documents, materials, lessons, children, childClashes }` — tag rows that
+would be re-pointed (rows that already exist on B are not counted), `children` = A's direct
+sub-topics, `childClashes` = how many of them would be merged recursively. Grammar: `words`,
+`children`, `childClashes` are 0.
+
+Grammar merge (`POST /grammar-topics/{A}/merge { targetId: B }`): same checks (404
+`GRAMMAR_TOPIC_NOT_FOUND`, 400 `GRAMMAR_TOPIC_MERGE_INVALID` for A = B); document / material /
+lesson tags re-pointed with dedupe; B keeps its name, level and position; B's empty
+`category` / `explanation` are filled from A; `examples = B.examples ∪ A.examples` (order kept,
+duplicates dropped); A is deleted. Response: B.
+
+Job results of earlier AI runs (Nachbereitung / tag suggestions) are not rewritten: an
+`existingId` pointing at a merged/deleted topic just 404s (`TOPIC_NOT_FOUND`) if it is sent back.
+
+## Library views (`/api/v1/library`, teacher only)
+
+Read-only aggregates over the caller's own library for the portal's "Bibliothek" (brief §5.5).
+**Teacher only** (students and admins: 403). Every endpoint runs a fixed number of grouped
+queries (no per-topic queries).
+
+```
+GET /api/v1/library/summary?level=B1          -> LibrarySummary
+GET /api/v1/library/topics/{id}?level=B1      -> TopicLibrary          404 TOPIC_NOT_FOUND (also another teacher's)
+GET /api/v1/library/grammar?level=B1          -> [GrammarLevelGroup]   the checklist
+GET /api/v1/library/grammar/{id}              -> GrammarTopicLibrary   404 GRAMMAR_TOPIC_NOT_FOUND
+```
+`level` (optional) restricts **word / document / material** counts and lists to items with exactly
+that level (items without a level only appear when `level` is omitted). Lessons, covered-by and the
+`levels` / `totals` blocks of the summary are never level-filtered. On `/library/grammar`, `level`
+only selects that level's group (its counts are not level-filtered).
+
+```
+LibrarySummary {
+  levels: [{ level: A1..C2 | null,              // null bucket = items without level; always all 7 buckets
+             words, documents, materials,        // by the item's own level
+             topics,                             // topics whose `levels` contain it (null: topics with no levels)
+             grammarTopics }],                   // by grammar topic level
+  totals: { words, documents, materials, topics, grammarTopics },
+  topics: [{ topicId,
+              words, documents, materials, lessons, coveredStudents,     // DIRECT tags on this topic only
+              subtree: { words, documents, materials } }]                // this topic + all descendants, distinct items
+}                                                                         // (an item tagged twice in the subtree counts once)
+TopicLibrary {
+  topic: Topic,
+  path: [TopicRef],                   // ancestors, root first (excludes the topic)
+  children: [TopicRef],               // name asc
+  words: [VocabEntry],                // tagged entries, lemma asc
+  documents: [DocumentSummary],       // tagged, updatedAt desc
+  materials: [MaterialResponse],      // tagged, name asc
+  lessons: [LibraryLessonRef],        // tagged lessons, scheduledAt desc
+  coveredBy: [CoveredStudent]
+}
+GrammarLevelGroup { level: A1..C2 | null, topics: [GrammarChecklistItem] }   // A1..C2 then null; empty levels omitted;
+                                                                             // with ?level= only that group
+GrammarChecklistItem { grammarTopic: GrammarTopic, documents, materials, lessons, coveredStudents }   // counts, ordered by position
+GrammarTopicLibrary {
+  grammarTopic: GrammarTopic,         // explanation + examples = the "explanation" link target
+  documents: [DocumentSummary], materials: [MaterialResponse], lessons: [LibraryLessonRef],
+  coveredBy: [CoveredStudent]
+}
+LibraryLessonRef { id, title, scheduledAt, status, groupId? }
+CoveredStudent  { studentId, firstName, lastName, via: [LESSON | VOCAB], lastAt }   // lastName asc, firstName asc
+```
+**Covered by** (topic): a student is listed if
+- **LESSON**: they are a `CONFIRMED` participant (`lesson_students`) of a lesson of this teacher that
+  is tagged with the topic, is not `CANCELLED` / `REQUEST`, and has `scheduledAt ≤ now`; or
+- **VOCAB**: they have a `student_vocab` row for an entry of this teacher's library tagged with the topic.
+
+One row per student; `via` lists every source that applies; `lastAt` = the latest of the lesson's
+`scheduledAt` / the student_vocab `addedAt` over all matching rows. Direct tags only (a student
+covered `Haushalt` is not listed under its parent `Alltag`). Grammar topics: the LESSON rule only
+(`via` is always `[LESSON]`). `coveredStudents` counts in the summary / checklist use the same rules.
 
 ## Groups / clubs (`/api/v1/groups`)
 
@@ -466,7 +570,8 @@ title ≤ 255 chars, serialized `blocks` ≤ 1 MiB (400 `DOCUMENT_TOO_LARGE`).
 ```
 For students `studentIds` / `groupIds` are `[]` (other students are not exposed) and
 every `solution` is removed. `DocumentSummary` (list) = the same without `blocks`/`vocab`,
-plus `blockCount`.
+plus `blockCount` and `blockTypes: [string]` (distinct block types in document order, e.g.
+`["heading", "vocab_table", "gap_fill"]`).
 
 **Revision (optimistic concurrency)**: `revision` starts at 1 and is bumped by every successful
 write to the document (`PUT`, share, unshare, restore). `PUT` must send the revision it was based
@@ -478,8 +583,9 @@ and `updatedAt`.
 
 ```
 GET    /api/v1/documents/schema            -> JSON Schema (any authenticated user)
-GET    /api/v1/documents?level=&topicId=&grammarTopicId=&audience=&lessonId=&studentId=&groupId=&q=&page=&pageSize=
+GET    /api/v1/documents?level=&topicId=&grammarTopicId=&blockType=&audience=&lessonId=&studentId=&groupId=&q=&page=&pageSize=
        -> { documents: [DocumentSummary], total, page, pageSize }   updatedAt desc; q = title contains (ci); pageSize ≤ 100
+       blockType = a block type from the table above (documents containing ≥ 1 such block; unknown → 400 VALIDATION_FAILED)
 POST   /api/v1/documents                   Body: CreateDocument -> 201 Document
 GET    /api/v1/documents/{id}              -> Document
 PUT    /api/v1/documents/{id}              Body: DocumentInput + { revision } (full replace, the autosave target) -> Document
@@ -562,6 +668,12 @@ Anna reviews / refines → one transactional **publish**. Everything here is **t
 ### Configuration
 
 ```
+GET /api/v1/ai/status -> { available: bool }    teacher only (students / admins 403)
+```
+`available` is false when no provider is configured; the portal then hides AI buttons (generate,
+fill-missing, suggest-tags).
+
+```
 ai.provider  = anthropic | fake          AI_PROVIDER        (default anthropic)
 ai.model     = claude-sonnet-5           AI_MODEL
 ai.anthropic_api_key                     ANTHROPIC_API_KEY  (never in the repo)
@@ -583,17 +695,18 @@ On startup every `QUEUED` / `RUNNING` job left by a previous process is marked `
 
 ```
 GenerationJob {
-  id, kind: GENERATE | REFINE | FILL_TRANSLATIONS,
+  id, kind: GENERATE | REFINE | FILL_TRANSLATIONS | SUGGEST_TAGS,
   status: QUEUED | RUNNING | SUCCEEDED | FAILED,
-  lessonId: uuid | null,            // null for FILL_TRANSLATIONS
+  lessonId: uuid | null,            // null for FILL_TRANSLATIONS / SUGGEST_TAGS
+  materialId: uuid | null,          // SUGGEST_TAGS only (deleting the material deletes its jobs)
   parentJobId: uuid | null,         // REFINE: the job it refines
   documentId: uuid | null,          // the draft document (GENERATE/REFINE, set on success)
   input: {                          // what the teacher sent
     notes?, prompt?, promptTemplateId?,       // GENERATE
     instruction?,                             // REFINE
     entryIds?, fields?                        // FILL_TRANSLATIONS
-  },
-  result: NachbereitungResult | FillTranslationsResult | null,   // only when SUCCEEDED
+  },                                          // SUGGEST_TAGS: {}
+  result: NachbereitungResult | FillTranslationsResult | SuggestTagsResult | null,   // only when SUCCEEDED
   error: { code, message } | null,  // only when FAILED; message is short English debug text, never model output
   model: "claude-sonnet-5" | "fake" | null,
   attempts: 0..2,                   // model calls made (1 + at most one validation retry)
@@ -603,7 +716,8 @@ GenerationJob {
 ```
 Job error codes (in `error.code`, not HTTP statuses): `AI_OUTPUT_INVALID` (still invalid after
 the retry), `AI_PROVIDER_ERROR` (provider/network error), `AI_RATE_LIMITED` (provider 429),
-`AI_TIMEOUT`, `AI_INTERRUPTED` (server restarted), `DOCUMENT_NOT_FOUND` (REFINE: draft deleted meanwhile).
+`AI_TIMEOUT`, `AI_INTERRUPTED` (server restarted), `DOCUMENT_NOT_FOUND` (REFINE: draft deleted meanwhile),
+`MATERIAL_NOT_FOUND` (SUGGEST_TAGS: material gone before the job ran).
 
 ```
 GET  /api/v1/ai/jobs/{id}                  -> GenerationJob          404 AI_JOB_NOT_FOUND (also for other teachers' jobs)
@@ -875,7 +989,7 @@ and (club) a `grammar_box` TIP + `free_sentences` SPEAKING. Suggests topic `Allt
 
 | Code | Status | Notes |
 |---|---|---|
-| `AI_NOT_CONFIGURED` | 503 | no provider key; starting a job (generate, refine, fill-missing) |
+| `AI_NOT_CONFIGURED` | 503 | no provider key; starting a job (generate, refine, fill-missing, suggest-tags) |
 | `AI_RATE_LIMITED` | 429 | too many active jobs for this teacher (also a job error code for provider 429) |
 | `AI_JOB_NOT_FOUND` | 404 | |
 | `AI_JOB_NOT_READY` | 409 | refine/review/publish on a job that is not SUCCEEDED (or wrong kind) |
@@ -939,6 +1053,64 @@ DELETE /api/v1/materials/{id}
 `topicIds` / `grammarTopicIds` replace the material's tags (`[]` clears); `GET /api/v1/materials`
 filters by `topicId` and `grammarTopicId`. PUT/DELETE: owning teacher or admin only. DELETE also removes the stored object. GET `/file` streams the stored object for non-LINK materials (same access rules as GET by id).
 
+### AI tag suggestions (brief §3 "tagging easy, AI-suggested")
+
+```
+POST /api/v1/materials/{id}/suggest-tags   (no body) -> 202 GenerationJob (kind SUGGEST_TAGS, materialId set)
+```
+Owning teacher only (other teachers 404 `MATERIAL_NOT_FOUND`; admins / students 403). 503
+`AI_NOT_CONFIGURED`, 429 `AI_RATE_LIMITED` as for every job. Poll `GET /api/v1/ai/jobs/{id}`.
+**Suggestions only**: nothing is written to the material or the library. Anna applies them with the
+existing `PUT /api/v1/materials/{id}` (`level`, `skill`, `topicIds`, `grammarTopicIds`), after
+creating the accepted new topics / grammar topics with `POST /topics` / `POST /grammar-topics`.
+
+**Auto-start on upload (opt-in)**: the `metadata` part of `POST /api/v1/materials` accepts
+`suggestTags: true`. After the material is stored the server starts a SUGGEST_TAGS job and returns
+its id in `MaterialResponse.suggestTagsJobId` (only in that 201 response). The upload never fails
+because of AI: if AI is not configured or the teacher is at the job limit, the material is created
+and `suggestTagsJobId` is `null` (the portal can offer the button later).
+
+**Text sent to the model** (at most **6 000 chars** after whitespace normalisation, cut at a word
+boundary):
+- always the material `name` (as Anna typed it, not the uploaded file name);
+- `PDF`-type materials with a stored file, chosen by content type, else file extension:
+  - PDF (`application/pdf`, `.pdf`): text of pages 1–3 via **Apache PDFBox 3** (text only, no
+    images / OCR); files > 20 MiB, encrypted or unreadable PDFs → name only;
+  - DOCX (`application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `.docx`):
+    `word/document.xml` read straight from the zip (`java.util.zip` + StAX with DTDs / external
+    entities disabled; `w:t` text, `w:p` → newline, `w:tab` → space; XML read capped at 5 MiB); no Apache POI;
+  - plain text (`text/plain`, `text/markdown`, `text/csv`, `.txt`, `.md`, `.csv`): UTF-8, as is;
+- `LINK`, `AUDIO`, `VIDEO` and any other file type: name only (links are never fetched).
+
+Plus the teacher's library as names (topic paths `Alltag > Haushalt` and grammar names with level,
+≤ 300 each, same as Nachbereitung) so the model reuses existing names. **Privacy**: nothing else
+from the database is sent — no student or teacher names, e-mails, ids, lesson data or share
+targets. The extracted text is sent as uploaded (it may contain whatever Anna put in the file).
+Covered by a test that captures the fake provider's prompt.
+
+Model output (validated, one retry with the problems, then `AI_OUTPUT_INVALID`):
+```json
+{ "level": "B1", "skill": "READING",
+  "topics": [{ "name": "Haushalt", "parentName": "Alltag" }],
+  "grammarTopics": [{ "name": "Perfekt", "level": "A2" }] }
+```
+`level` A1..C2 or null, `skill` a `MaterialSkill` or null, ≤ 5 topics and ≤ 5 grammar topics, names
+non-blank ≤ 255 chars (case-insensitive duplicates dropped).
+```
+SuggestTagsResult {
+  level: A1..C2 | null,
+  skill: SPEAKING | LISTENING | READING | WRITING | GRAMMAR | VOCAB | null,
+  topics: [{ name, parentName?, existingId: uuid | null }],        // existingId = matched library topic
+  grammarTopics: [{ name, level?, existingId: uuid | null }],
+  source: { kind: PDF | DOCX | TEXT | NAME_ONLY, chars: int, truncated: bool }   // what was sent
+}
+```
+Matching = the Nachbereitung matching (topics by name case-insensitive, `parentName` breaks ties;
+grammar by name). **Fake provider**: level = first `A1`..`C2` token in the text (else null); skill
+`READING` for PDF/DOCX/TEXT, else null; topics = library topics whose name occurs in the text,
+else `Alltag`; grammar = library grammar names occurring in the text, else `Perfekt`; the
+`[fake:…]` markers work when they occur in the material name.
+
 ### Material response
 ```json
 {
@@ -953,7 +1125,8 @@ filters by `topicId` and `grammarTopicId`. PUT/DELETE: owning teacher or admin o
   "downloadUrl": "/api/v1/materials/{id}/file for PDF/AUDIO/VIDEO, external URL for LINK, null if no file",
   "topicIds": ["uuid"],
   "grammarTopicIds": ["uuid"],
-  "createdAt": "ISO8601"
+  "createdAt": "ISO8601",
+  "suggestTagsJobId": "uuid | null   (only in the upload response with suggestTags: true)"
 }
 ```
 
@@ -969,8 +1142,9 @@ Every error body is a ProblemDetail with a stable machine-readable `code`
 ```
 
 Optional extension members, only present when they apply: `pointer` (JSON pointer of the bad
-value in the request body, e.g. `/blocks/3/items/0/solution/answers`) and `currentRevision`
-(on `DOCUMENT_CONFLICT`).
+value in the request body, e.g. `/blocks/3/items/0/solution/answers`), `currentRevision`
+(on `DOCUMENT_CONFLICT`) and `usage: { words, documents, materials, lessons }` (on
+`TOPIC_HAS_CONTENT` / `GRAMMAR_TOPIC_HAS_CONTENT`).
 
 Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATION_FAILED`,
 `MALFORMED_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_ERROR`.
@@ -988,7 +1162,7 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 | Vocabulary | `VOCABULARY_WORD_NOT_FOUND`, `VOCAB_ENTRY_NOT_FOUND`, `VOCAB_ENTRY_DUPLICATE`, `VOCAB_LANGUAGE_UNSUPPORTED`, `VOCAB_DISPLAY_FIELD_UNSUPPORTED`, `TEACHER_STUDENT_NOT_FOUND` |
 | Documents | `DOCUMENT_NOT_FOUND`, `DOCUMENT_INVALID_BLOCK` (+ `pointer`), `DOCUMENT_DUPLICATE_ID` (+ `pointer`), `DOCUMENT_TOO_LARGE`, `DOCUMENT_CONFLICT` (409, + `currentRevision`), `DOCUMENT_VERSION_NOT_FOUND` |
 | AI / Nachbereitung | `AI_NOT_CONFIGURED` (503), `AI_RATE_LIMITED` (429), `AI_JOB_NOT_FOUND`, `AI_JOB_NOT_READY`, `AI_JOB_LESSON_MISMATCH`, `NACHBEREITUNG_NO_ATTENDEES`, `PROMPT_TEMPLATE_NOT_FOUND`, `PROMPT_TEMPLATE_DUPLICATE`; job-only: `AI_OUTPUT_INVALID`, `AI_PROVIDER_ERROR`, `AI_TIMEOUT`, `AI_INTERRUPTED` |
-| Library / groups | `TOPIC_NOT_FOUND`, `TOPIC_DUPLICATE`, `TOPIC_HAS_CHILDREN`, `TOPIC_CYCLE`, `GRAMMAR_TOPIC_NOT_FOUND`, `GRAMMAR_TOPIC_DUPLICATE`, `GROUP_NOT_FOUND`, `STUDENT_NOT_LINKED` |
+| Library / groups | `TOPIC_NOT_FOUND`, `TOPIC_DUPLICATE`, `TOPIC_HAS_CHILDREN`, `TOPIC_HAS_CONTENT` (409, + `usage`), `TOPIC_CYCLE`, `TOPIC_MERGE_INVALID`, `GRAMMAR_TOPIC_NOT_FOUND`, `GRAMMAR_TOPIC_DUPLICATE`, `GRAMMAR_TOPIC_HAS_CONTENT` (409, + `usage`), `GRAMMAR_TOPIC_MERGE_INVALID`, `GRAMMAR_ORDER_INVALID`, `GROUP_NOT_FOUND`, `STUDENT_NOT_LINKED` |
 
 ---
 

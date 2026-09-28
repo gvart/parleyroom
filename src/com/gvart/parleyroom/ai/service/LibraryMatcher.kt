@@ -3,6 +3,7 @@ package com.gvart.parleyroom.ai.service
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.topic.data.GrammarTopicTable
 import com.gvart.parleyroom.topic.data.TopicTable
+import com.gvart.parleyroom.topic.service.GrammarTopicService
 import com.gvart.parleyroom.vocabulary.data.NounArticle
 import com.gvart.parleyroom.vocabulary.data.VocabEntryTable
 import com.gvart.parleyroom.vocabulary.data.WordType
@@ -75,6 +76,7 @@ class LibraryMatcher(private val teacherId: UUID) {
             it[GrammarTopicTable.name] = name.trim()
             it[GrammarTopicTable.level] = level
             it[examples] = emptyList()
+            it[position] = GrammarTopicService.nextPosition(this@LibraryMatcher.teacherId, level)
             it[createdAt] = now
             it[updatedAt] = now
         }.value

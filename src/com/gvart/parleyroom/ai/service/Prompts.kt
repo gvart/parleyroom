@@ -12,6 +12,7 @@ object Prompts {
     const val TASK_GENERATE = "generate"
     const val TASK_REFINE = "refine"
     const val TASK_FILL = "fill_translations"
+    const val TASK_SUGGEST_TAGS = "suggest_tags"
     const val VALIDATION_ERRORS = "validation_errors"
 
     private fun resource(name: String): String =
@@ -22,6 +23,7 @@ object Prompts {
     }
     private val clubSystem: String by lazy { resource("nachbereitung-club.md") }
     val fillSystem: String by lazy { resource("fill-translations-system.md") }
+    val suggestTagsSystem: String by lazy { resource("suggest-tags-system.md") }
 
     fun nachbereitungSystem(mode: NachbereitungMode): String =
         if (mode == NachbereitungMode.CLUB) nachbereitungSystem + "\n\n" + clubSystem else nachbereitungSystem
@@ -51,6 +53,17 @@ object Prompts {
         section("task", TASK_FILL)
         section("fields", fields.joinToString(", "))
         section("entries", entries)
+    }
+
+    /** Only the material's name, its extracted text and the library names: nothing about students. */
+    fun suggestTags(name: String, sourceKind: String, text: String, topicPaths: List<String>, grammar: List<String>): String = buildString {
+        section("task", TASK_SUGGEST_TAGS)
+        section("material_name", name)
+        section("source", sourceKind)
+        // The text is the teacher's file: keep it from closing our sections.
+        section("material_text", text.replace("</", "< /").ifBlank { "(no text: use the name only)" })
+        section("library_topics", topicPaths.joinToString("\n").ifEmpty { "(empty library)" })
+        section("library_grammar_topics", grammar.joinToString("\n").ifEmpty { "(empty library)" })
     }
 
     fun retry(issues: List<Issue>): String = buildString {

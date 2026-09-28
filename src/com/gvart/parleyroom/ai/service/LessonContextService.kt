@@ -251,7 +251,7 @@ class LessonContextService {
     }
 
     /** The teacher's topic tree as "Alltag > Haushalt" paths, sorted. */
-    private fun topicPaths(teacherId: UUID): List<String> {
+    fun topicPaths(teacherId: UUID): List<String> {
         val topics = TopicTable.selectAll().where { TopicTable.teacherId eq teacherId }
             .associate { it[TopicTable.id].value to (it[TopicTable.parentId]?.value to it[TopicTable.name]) }
         fun path(id: UUID, depth: Int = 0): String {

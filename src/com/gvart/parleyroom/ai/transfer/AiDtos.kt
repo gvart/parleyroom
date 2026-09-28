@@ -7,6 +7,7 @@ import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
 import com.gvart.parleyroom.document.transfer.DocumentSummary
 import com.gvart.parleyroom.lesson.transfer.CorrectedSentenceInput
+import com.gvart.parleyroom.material.data.MaterialSkill
 import com.gvart.parleyroom.material.transfer.MaterialResponse
 import com.gvart.parleyroom.topic.transfer.GrammarTopicRef
 import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
@@ -43,6 +44,8 @@ data class GenerationJobResponse(
     val kind: GenerationJobKind,
     val status: GenerationJobStatus,
     val lessonId: String? = null,
+    /** SUGGEST_TAGS: the material whose tags are suggested. */
+    val materialId: String? = null,
     val parentJobId: String? = null,
     val documentId: String? = null,
     val input: JobInput,
@@ -100,6 +103,31 @@ data class FillTranslationsResult(val updated: List<FilledEntry>, val skipped: L
 
 @Serializable
 data class FilledEntry(val entryId: String, val filled: List<String>)
+
+enum class TextSourceKind { PDF, DOCX, TEXT, NAME_ONLY }
+
+/** What was sent to the model for a SUGGEST_TAGS job. */
+@Serializable
+data class TextSource(val kind: TextSourceKind, val chars: Int, val truncated: Boolean)
+
+@Serializable
+data class SuggestedTopic(val name: String, val parentName: String? = null, val existingId: String? = null)
+
+@Serializable
+data class SuggestedGrammarTopic(val name: String, val level: LanguageLevel? = null, val existingId: String? = null)
+
+/** SUGGEST_TAGS result: suggestions only, applied by the teacher via PUT /materials/{id}. */
+@Serializable
+data class SuggestTagsResult(
+    val level: LanguageLevel? = null,
+    val skill: MaterialSkill? = null,
+    val topics: List<SuggestedTopic>,
+    val grammarTopics: List<SuggestedGrammarTopic>,
+    val source: TextSource,
+)
+
+@Serializable
+data class AiStatusResponse(val available: Boolean)
 
 // ---- Requests ----
 

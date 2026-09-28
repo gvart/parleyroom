@@ -25,8 +25,10 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.and
@@ -127,6 +129,7 @@ class DocumentSupport {
                 createdFromLessonId = row[DocumentTable.createdFromLessonId]?.value?.toString(),
                 revision = row[DocumentTable.revision],
                 blockCount = row[DocumentTable.blocks].size,
+                blockTypes = row[DocumentTable.blocks].mapNotNull { (it as? JsonObject)?.get("type")?.jsonPrimitive?.contentOrNull }.distinct(),
                 createdAt = row[DocumentTable.createdAt],
                 updatedAt = row[DocumentTable.updatedAt],
             )

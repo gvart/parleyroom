@@ -15,6 +15,8 @@ data class GrammarTopicResponse(
     val category: String? = null,
     val explanation: String? = null,
     val examples: List<String> = emptyList(),
+    /** Checklist order within the level (0-based). */
+    val position: Int,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
 )
@@ -36,6 +38,13 @@ data class GrammarTopicRequest(
         return if (errors.isNotEmpty()) ValidationResult.Invalid(errors) else ValidationResult.Valid
     }
 }
+
+/** `PUT /grammar-topics/order`: every grammar topic of [level] (null = without level), in the new order. */
+@Serializable
+data class ReorderGrammarTopicsRequest(
+    val level: LanguageLevel? = null,
+    val ids: List<String>,
+)
 
 @Serializable
 data class GrammarTopicRef(

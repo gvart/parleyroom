@@ -4,6 +4,7 @@ import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.pgEnum
 import com.gvart.parleyroom.document.data.DocumentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
+import com.gvart.parleyroom.material.data.MaterialTable
 import com.gvart.parleyroom.user.data.UserTable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -11,7 +12,7 @@ import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 import org.jetbrains.exposed.v1.json.jsonb
 
-enum class GenerationJobKind { GENERATE, REFINE, FILL_TRANSLATIONS }
+enum class GenerationJobKind { GENERATE, REFINE, FILL_TRANSLATIONS, SUGGEST_TAGS }
 enum class GenerationJobStatus { QUEUED, RUNNING, SUCCEEDED, FAILED }
 enum class PromptTemplateLessonType { ONE_ON_ONE, CLUB }
 
@@ -22,6 +23,7 @@ object GenerationJobTable : UUIDTable("generation_jobs") {
     val status = pgEnum<GenerationJobStatus>("status", "GENERATION_JOB_STATUS")
     val parentJobId = reference("parent_job_id", GenerationJobTable).nullable()
     val documentId = reference("document_id", DocumentTable).nullable()
+    val materialId = reference("material_id", MaterialTable).nullable()
     val input = jsonb<JsonElement>("input", Json.Default)
     val result = jsonb<JsonElement>("result", Json.Default).nullable()
     val errorCode = varchar("error_code", 64).nullable()

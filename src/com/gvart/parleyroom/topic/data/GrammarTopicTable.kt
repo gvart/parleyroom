@@ -14,6 +14,7 @@ object GrammarTopicTable : UUIDTable("grammar_topics") {
     val category = varchar("category", 100).nullable()
     val explanation = text("explanation").nullable()
     val examples = array<String>("examples", TextColumnType())
+    val position = integer("position").default(0)
     val createdAt = timestampWithTimeZone("created_at")
     val updatedAt = timestampWithTimeZone("updated_at")
 }

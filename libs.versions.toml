@@ -6,6 +6,7 @@ ktor = "3.6.0"
 aws-sdk = "2.55.6"
 koog = "1.3.0"
 json-schema-validator = "0.5.5"
+pdfbox = "3.0.7"
 
 [libraries]
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
@@ -22,6 +23,7 @@ koog-agents-core = { module = "ai.koog:agents-core", version.ref = "koog" }
 koog-anthropic = { module = "ai.koog:prompt-executor-anthropic-client", version.ref = "koog" }
 koog-http-client-ktor = { module = "ai.koog:http-client-ktor", version.ref = "koog" }
 json-schema-validator = { module = "io.github.optimumcode:json-schema-validator", version.ref = "json-schema-validator" }
+pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 aws-sdk-s3 = { module = "software.amazon.awssdk:s3", version.ref = "aws-sdk" }
 testcontainers = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }

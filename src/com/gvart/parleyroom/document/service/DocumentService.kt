@@ -49,6 +49,7 @@ import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.core.lowerCase
 import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.jdbc.andWhere
+import org.jetbrains.exposed.v1.json.contains
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
@@ -73,6 +74,7 @@ class DocumentService(
         val studentId: UUID? = null,
         val groupId: UUID? = null,
         val q: String? = null,
+        val blockType: String? = null,
     )
 
     fun listDocuments(principal: UserPrincipal, filters: Filters, page: PageRequest): DocumentPageResponse = transaction {
@@ -95,6 +97,11 @@ class DocumentService(
         filters.lessonId?.let { query.andWhere { linkedTo(DocumentLessonTable, DocumentLessonTable.documentId, DocumentLessonTable.lessonId, it) } }
         filters.studentId?.let { query.andWhere { linkedTo(DocumentStudentTable, DocumentStudentTable.documentId, DocumentStudentTable.studentId, it) } }
         filters.groupId?.let { query.andWhere { linkedTo(DocumentGroupTable, DocumentGroupTable.documentId, DocumentGroupTable.groupId, it) } }
+        filters.blockType?.let { type ->
+            if (type !in DocumentBlockValidator.BLOCK_TYPES)
+                throw BadRequestException("Unknown block type '$type'", code = "VALIDATION_FAILED")
+            query.andWhere { DocumentTable.blocks.contains("[{\"type\":\"$type\"}]") }
+        }
         filters.q?.takeIf { it.isNotBlank() }?.let { q ->
             query.andWhere { DocumentTable.title.lowerCase() like "%${escapeLike(q.trim().lowercase())}%" }
         }

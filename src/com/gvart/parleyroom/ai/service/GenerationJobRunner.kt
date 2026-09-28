@@ -74,6 +74,7 @@ class GenerationJobRunner(private val config: AiConfig) {
         input: JsonElement,
         parentJobId: UUID? = null,
         documentId: UUID? = null,
+        materialId: UUID? = null,
         modelId: String,
     ): UUID = synchronized(admission) {
         transaction {
@@ -95,6 +96,7 @@ class GenerationJobRunner(private val config: AiConfig) {
                 it[status] = GenerationJobStatus.QUEUED
                 it[GenerationJobTable.parentJobId] = parentJobId
                 it[GenerationJobTable.documentId] = documentId
+                it[GenerationJobTable.materialId] = materialId
                 it[GenerationJobTable.input] = input
                 it[model] = modelId
                 it[createdAt] = OffsetDateTime.now()

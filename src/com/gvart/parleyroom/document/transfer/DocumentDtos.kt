@@ -111,6 +111,8 @@ data class DocumentSummary(
     val createdFromLessonId: String? = null,
     val revision: Int,
     val blockCount: Int,
+    /** Distinct block types in document order. */
+    val blockTypes: List<String> = emptyList(),
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
     @Serializable(with = OffsetDateTimeSerializer::class)

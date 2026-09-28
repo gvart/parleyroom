@@ -48,3 +48,20 @@ data class TopicRef(
     val id: String,
     val name: String,
 )
+
+/** Body of `POST /topics/{id}/merge` and `POST /grammar-topics/{id}/merge`: merge {id} into [targetId]. */
+@Serializable
+data class MergeRequest(
+    val targetId: String,
+)
+
+/** What a merge would move (`?dryRun=true`). Grammar merges have no words or children. */
+@Serializable
+data class MergePreview(
+    val words: Long,
+    val documents: Long,
+    val materials: Long,
+    val lessons: Long,
+    val children: Long,
+    val childClashes: Long,
+)

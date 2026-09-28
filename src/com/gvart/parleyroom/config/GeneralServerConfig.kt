@@ -243,7 +243,7 @@ fun Application.generalConfig() {
             call.respond(
                 HttpStatusCode.Conflict,
                 ProblemDetail.of(HttpStatusCode.Conflict, cause.message, cause.code ?: "CONFLICT")
-                    .copy(currentRevision = cause.currentRevision),
+                    .copy(currentRevision = cause.currentRevision, usage = cause.usage),
             )
         }
 

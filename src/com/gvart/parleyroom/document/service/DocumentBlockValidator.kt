@@ -26,6 +26,12 @@ import java.util.UUID
  */
 object DocumentBlockValidator {
 
+    /** Every block type of the published schema. */
+    val BLOCK_TYPES = setOf(
+        "heading", "rich_text", "vocab_table", "grammar_box", "gap_fill", "multiple_choice", "error_correction",
+        "free_sentences", "writing_task", "reading", "media", "exam_part", "free_form",
+    )
+
     const val MAX_BLOCKS_BYTES = 1024 * 1024
     private const val GAP = "___"
 

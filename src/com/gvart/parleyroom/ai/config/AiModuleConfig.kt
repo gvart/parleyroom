@@ -11,6 +11,7 @@ import com.gvart.parleyroom.ai.service.LibrarySuggestionService
 import com.gvart.parleyroom.ai.service.NachbereitungPublishService
 import com.gvart.parleyroom.ai.service.NachbereitungService
 import com.gvart.parleyroom.ai.service.PromptTemplateService
+import com.gvart.parleyroom.ai.service.SuggestTagsService
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.plugins.di.dependencies
@@ -51,6 +52,7 @@ fun Application.configureAiModule() {
         provide(PromptTemplateService::class)
         provide(LibrarySuggestionService::class)
         provide(FillTranslationsService::class)
+        provide(SuggestTagsService::class)
     }
 
     configureAiRouting()
