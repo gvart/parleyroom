@@ -285,8 +285,9 @@ shown as context, incl. `vocab_table` with the viewer-resolved `vocab` side-list
 | `free_sentences` (purpose ≠ `SPEAKING`) | `items[]` | `{ "text" }` | review |
 | `writing_task`, `free_form` | `items[]` | `{ "text" }` | review |
 
-MATERIAL/TASK units: `{ "text"? }` (the text answer for `TEXT`, an optional note otherwise) +
-uploads for `AUDIO`/`VIDEO`/`FILE`. `text` ≤ 20 000 chars, each gap ≤ 500.
+MATERIAL/TASK units: `{ "text"?, "uploadIds"?: [uuid] }` — `text` is the answer for `TEXT` (an
+optional note otherwise); `uploadIds` (AUDIO/VIDEO/FILE only, ≤ 5) must be uploads of this homework
+and unit (see Uploads). `text` ≤ 20 000 chars, each gap ≤ 500.
 Unit address: `{ assignmentItemId, blockId?, itemId? }` (`blockId` + `itemId` for DOCUMENT
 units, both absent for MATERIAL/TASK). A DOCUMENT item with no answerable unit → 400
 `HOMEWORK_ITEM_INVALID` (mark the exercises interactive, or use a MATERIAL/TASK item).
@@ -322,6 +323,10 @@ SUBMITTED|REVIEWED --review RETURNED--> OPEN (rework, then submit again)
   student reworks and resubmits) | `DONE`. DONE is final (no more changes; teacher may still
   delete the homework).
 - On resubmit, teacher override + comment are cleared for units whose answer changed.
+- `lastOutcome: REVIEWED | RETURNED | DONE | null` = the teacher's latest review outcome. After a
+  return the status is `OPEN` again with `lastOutcome = RETURNED`, `returnedAt` and the return
+  `feedback`, so the portal can show "zur Überarbeitung zurückgegeben". It stays until the next
+  review outcome.
 - Any write in the wrong state → 409 `SUBMISSION_LOCKED` (student answer/upload/submit when not
   OPEN) or 409 `HOMEWORK_INVALID_STATE` (review actions).
 
@@ -330,9 +335,14 @@ SUBMITTED|REVIEWED --review RETURNED--> OPEN (rework, then submit again)
 - `solution` keys are stripped from every snapshot and `autoResult` / `autoScore` /
   `caseMismatch` / `correct` / `summary` are **null** unless status is `REVIEWED` or `DONE`.
   Before that the student sees items, their own answers and uploads, and "submitted".
-- `feedback` and per-unit `comment` are visible once the teacher has sent them (REVIEWED, DONE, or
-  OPEN after a return). Draft review edits (`PUT …/review`) are **not** visible to the student.
-- Teachers see everything (incl. the student's current drafts); admins read everything.
+- `feedback`, per-unit `comment` and `teacherCorrect` are visible only in `REVIEWED`, `DONE`, or
+  `OPEN` with `lastOutcome = RETURNED` (feedback + comments only, still no results/solutions). While
+  `SUBMITTED` they are hidden, so review drafts (`PUT …/review`, allowed only in SUBMITTED) are never
+  seen early. Changing a REVIEWED homework goes through `POST …/review` again.
+- **Teachers never see draft content.** While the homework is `OPEN` (first attempt or after a
+  return) teachers/admins get `answer: null` for every unit and no `uploads` (download 404), only
+  progress: `answeredUnits`, `totalUnits`, `lastSavedAt`. From `SUBMITTED` on they see the full
+  submitted content, auto results and everything else.
 
 ### Endpoints — teacher
 
@@ -343,7 +353,7 @@ GET    /api/v1/assignments/{id}            -> Assignment (items with full snapsh
 PATCH  /api/v1/assignments/{id}            Body: { title?, instructions?, dueDate?, clearDueDate? } -> Assignment
 DELETE /api/v1/assignments/{id}            -> 204 (owner or admin; deletes all homework + stored uploads)
 DELETE /api/v1/homework/{id}               -> 204 (owner or admin; removes one student's homework)
-PUT    /api/v1/homework/{id}/review        Body: ReviewDraft -> Homework   (autosave, SUBMITTED/REVIEWED only, no status change)
+PUT    /api/v1/homework/{id}/review        Body: ReviewDraft -> Homework   (autosave, SUBMITTED only, no status change)
 POST   /api/v1/homework/{id}/review        Body: ReviewDraft + { outcome: REVIEWED|RETURNED|DONE } -> Homework
 ```
 `CreateAssignment = { title (1..255), instructions? (≤ 10 000), dueDate? (YYYY-MM-DD), lessonId?,
@@ -364,7 +374,8 @@ clears; units not listed are untouched. Only units that exist in the assignment 
 GET    /api/v1/homework?studentId=&assignmentId=&lessonId=&status=OPEN,SUBMITTED&dueBefore=&dueAfter=&sort=due|submitted|created&page=&pageSize=
        -> { homework: [HomeworkSummary], total, page, pageSize }
 GET    /api/v1/homework/{id}               -> Homework
-PUT    /api/v1/homework/{id}/answers       Body: { answers: [{ assignmentItemId, blockId?, itemId?, answer: {…} | null }] } -> Homework
+GET    /api/v1/homework/counts             -> teacher/admin: { toReview, overdue, openTotal } · student: { open, dueSoon, returned }
+PUT    /api/v1/homework/{id}/answers       Body: { answers: [{ assignmentItemId, blockId?, itemId?, answer: {…} | null }] } -> AnswersSaved
 POST   /api/v1/homework/{id}/submit        (no body) -> Homework
 POST   /api/v1/homework/{id}/items/{assignmentItemId}/uploads   multipart `file` -> 201 HomeworkUpload
 DELETE /api/v1/homework/{id}/uploads/{uploadId}                 -> 204
@@ -375,23 +386,29 @@ List: students → own; teachers → homework of their assignments (`studentId` 
 admins → all. `status` is a comma list. Sort: `due` = dueDate asc nulls last (default for
 students), `submitted` = submittedAt asc (the teacher's "Hausaufgaben zu korrigieren" queue =
 `status=SUBMITTED&sort=submitted`), `created` = desc (default for teachers).
-Answers / submit / uploads: the assigned student only (teacher/admin 403). `answers` upserts the
-listed units (partial — the 1.5 s autosave sends only changed units); `answer: null` removes one.
+Answers / submit / uploads: the assigned student only (teacher/admin 403). `PUT …/answers` is a
+**partial, idempotent merge**: only the listed units change (the 1.5 s autosave sends only changed
+units; sending the same body twice is a no-op), `answer: null` removes one. It never submits.
+`AnswersSaved = { updatedAt, lastSavedAt, answeredUnits, totalUnits }`.
+Counts (one query, "today" in the caller's timezone): `toReview` = SUBMITTED; `overdue` = OPEN with
+`dueDate < today`; `openTotal` = OPEN; student `open` = OPEN; `dueSoon` = OPEN with
+`dueDate ≤ today + 2` (overdue included); `returned` = OPEN with `lastOutcome = RETURNED`.
 Payload must match the unit type (400 `HOMEWORK_ANSWER_INVALID` + `pointer`); unknown unit →
 400 `HOMEWORK_ITEM_INVALID`. Submitting with unanswered units is allowed (the portal confirms).
 
 ### Uploads
 
 Only for MATERIAL/TASK units with `responseType` AUDIO / VIDEO / FILE, while `OPEN`, ≤ 5 per unit
-(409 `UPLOAD_LIMIT_REACHED`). Size limit = `STORAGE_MAX_FILE_SIZE` (400 `FILE_TOO_LARGE`).
+(409 `UPLOAD_LIMIT_REACHED`). The response carries the upload `id`; the client then lists it in the
+unit's answer (`uploadIds`). Deleting an upload also removes it from the answer. Size limit = `STORAGE_MAX_FILE_SIZE` (400 `FILE_TOO_LARGE`).
 Content type = the part's `Content-Type` without parameters (`audio/webm;codecs=opus` →
 `audio/webm`), must be in the allowlist, else 400 `UPLOAD_TYPE_NOT_ALLOWED`:
 - AUDIO: `audio/webm`, `audio/ogg`, `audio/mpeg`, `audio/mp4`, `audio/x-m4a`, `audio/aac`, `audio/wav`, `audio/x-wav`
 - VIDEO: `video/webm`, `video/mp4`, `video/quicktime`
 - FILE: `application/pdf`, DOCX, `application/msword`, `image/jpeg`, `image/png`, `image/webp`, `image/heic`, `text/plain`
 
-Stored at `homework/{homeworkId}/{uploadId}/{safeName}`; streamed back through the API with the
-same access as `GET /homework/{id}`. Deleted with the homework/assignment. The browser records
+Stored at `homework/{homeworkId}/{uploadId}/{safeName}`; streamed back through the API (authed
+`GET …/file`) to the student and — once submitted — the teacher / admin. Deleted with the homework/assignment. The browser records
 audio with `MediaRecorder` and uploads the blob like a file.
 `HomeworkUpload = { id, assignmentItemId, fileName, contentType, size, downloadUrl, createdAt }`.
 
@@ -411,9 +428,9 @@ AssignmentSummary = Assignment without items/homework + { itemCount, studentCoun
 AssignmentItem = { id, position, kind, title, task?, responseType?,
   documentId?, documentRevision?, blocks?: [Block], vocab?: [DocumentVocabEntry],   // DOCUMENT
   materialId?, material?: { id, name, type, contentType?, downloadUrl? } }          // MATERIAL (null if deleted)
-HomeworkSummary = { id, assignmentId, title, dueDate?, lessonId?, status, attempt, itemCount,
+HomeworkSummary = { id, assignmentId, title, dueDate?, lessonId?, status, lastOutcome?, attempt, itemCount,
   student: { id, firstName, lastName }, teacher: { id, firstName, lastName },
-  answeredUnits, totalUnits, summary?, submittedAt?, reviewedAt?, returnedAt?, doneAt?, createdAt, updatedAt }
+  answeredUnits, totalUnits, lastSavedAt?, summary?, submittedAt?, reviewedAt?, returnedAt?, doneAt?, createdAt, updatedAt }
 Homework = HomeworkSummary + { instructions?, feedback?, items: [AssignmentItem],  // blocks solution-stripped for students before review
   units: [Unit], uploads: [HomeworkUpload] }
 Unit = { assignmentItemId, blockId?, itemId?, blockType?, questionKind?, check: AUTO|REVIEW,
