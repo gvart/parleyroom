@@ -5,7 +5,6 @@ import com.gvart.parleyroom.admin.service.AdminService
 import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetPasswordRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetStatusRequest
-import com.gvart.parleyroom.admin.transfer.AdminStatsResponse
 import com.gvart.parleyroom.admin.transfer.AdminUpdateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminUserListResponse
 import com.gvart.parleyroom.admin.transfer.AdminUserResponse
@@ -196,19 +195,6 @@ fun Application.configureAdminRouting() {
                         HttpStatusCode.OK { schema = jsonSchema<AdminUserResponse>() }
                         HttpStatusCode.BadRequest { schema = jsonSchema<ProblemDetail>() }
                         HttpStatusCode.NotFound { schema = jsonSchema<ProblemDetail>() }
-                        HttpStatusCode.Forbidden { schema = jsonSchema<ProblemDetail>() }
-                    }
-                }
-
-                get("/stats") {
-                    val principal = call.requirePrincipal()
-                    requireAdmin(principal)
-                    call.respond(HttpStatusCode.OK, adminService.getStats())
-                }.describe {
-                    summary = "System statistics (admin)"
-                    description = "User, security, activity, and domain counts."
-                    responses {
-                        HttpStatusCode.OK { schema = jsonSchema<AdminStatsResponse>() }
                         HttpStatusCode.Forbidden { schema = jsonSchema<ProblemDetail>() }
                     }
                 }

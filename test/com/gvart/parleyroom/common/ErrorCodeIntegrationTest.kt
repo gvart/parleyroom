@@ -61,7 +61,7 @@ class ErrorCodeIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val token = getStudentToken(client)
 
-        client.get("/api/v1/admin/stats") {
+        client.get("/api/v1/admin/users") {
             bearerAuth(token)
         }.assertProblem(HttpStatusCode.Forbidden, "FORBIDDEN")
     }

@@ -1,7 +1,6 @@
 package com.gvart.parleyroom.admin
 
 import com.gvart.parleyroom.IntegrationTest
-import com.gvart.parleyroom.admin.transfer.AdminStatsResponse
 import com.gvart.parleyroom.admin.transfer.AdminUserListResponse
 import com.gvart.parleyroom.admin.transfer.AdminUserResponse
 import com.gvart.parleyroom.common.transfer.ProblemDetail
@@ -34,7 +33,6 @@ import java.time.OffsetDateTime
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
@@ -54,13 +52,6 @@ class AdminIntegrationTest : IntegrationTest() {
     fun `teacher cannot access admin list`() = testApp {
         val client = createJsonClient(this)
         val response = client.get("/api/v1/admin/users") { bearerAuth(getTeacherToken(client)) }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
-    }
-
-    @Test
-    fun `student cannot access admin stats`() = testApp {
-        val client = createJsonClient(this)
-        val response = client.get("/api/v1/admin/stats") { bearerAuth(getStudentToken(client)) }
         assertEquals(HttpStatusCode.Forbidden, response.status)
     }
 
@@ -472,39 +463,6 @@ class AdminIntegrationTest : IntegrationTest() {
             setBody(mapOf("status" to "INACTIVE"))
         }
         assertEquals(HttpStatusCode.BadRequest, response.status)
-    }
-
-    // -------- Stats --------
-
-    @Test
-    fun `admin stats returns counts for all sections`() = testApp {
-        val client = createJsonClient(this)
-        val response = client.get("/api/v1/admin/stats") { bearerAuth(getAdminToken(client)) }
-        assertEquals(HttpStatusCode.OK, response.status)
-        val body = response.body<AdminStatsResponse>()
-
-        assertTrue(body.users.total >= 4)
-        assertNotNull(body.users.byRole["ADMIN"])
-        assertNotNull(body.users.byRole["TEACHER"])
-        assertNotNull(body.users.byRole["STUDENT"])
-        assertNotNull(body.users.byStatus["ACTIVE"])
-        assertTrue(body.users.byRole["ADMIN"]!! >= 1)
-    }
-
-    @Test
-    fun `stats security reflects locked accounts`() = testApp {
-        val client = createJsonClient(this)
-        val adminToken = getAdminToken(client)
-        transaction {
-            UserTable.update({ UserTable.id eq UUID.fromString(STUDENT_ID) }) {
-                it[failedLoginAttempts] = 5
-                it[lockedUntil] = OffsetDateTime.now().plusMinutes(15)
-            }
-        }
-        val response = client.get("/api/v1/admin/stats") { bearerAuth(adminToken) }
-        val body = response.body<AdminStatsResponse>()
-        assertTrue(body.security.currentlyLocked >= 1)
-        assertTrue(body.security.withFailedAttempts >= 1)
     }
 
     // -------- Helpers --------

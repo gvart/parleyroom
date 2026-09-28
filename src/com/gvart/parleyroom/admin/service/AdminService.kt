@@ -1,40 +1,25 @@
 package com.gvart.parleyroom.admin.service
 
 import com.gvart.parleyroom.common.service.singleOrNotFound
-import com.gvart.parleyroom.admin.transfer.ActivityStats
 import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
-import com.gvart.parleyroom.admin.transfer.AdminStatsResponse
 import com.gvart.parleyroom.admin.transfer.AdminUpdateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminUserListResponse
 import com.gvart.parleyroom.admin.transfer.AdminUserResponse
-import com.gvart.parleyroom.admin.transfer.DomainStats
-import com.gvart.parleyroom.admin.transfer.SecurityStats
-import com.gvart.parleyroom.admin.transfer.UserStats
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
-import com.gvart.parleyroom.goal.data.GoalStatus
-import com.gvart.parleyroom.goal.data.GoalTable
-import com.gvart.parleyroom.homework.data.HomeworkTable
-import com.gvart.parleyroom.lesson.data.LessonTable
-import com.gvart.parleyroom.material.data.MaterialTable
-import com.gvart.parleyroom.registration.data.RegistrationTable
 import com.gvart.parleyroom.user.data.RefreshTokenTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.data.requireSupportedLocale
 import com.gvart.parleyroom.user.security.UserPrincipal
-import com.gvart.parleyroom.vocabulary.data.StudentVocabTable
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.greater
-import org.jetbrains.exposed.v1.core.greaterEq
-import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.core.lowerCase
 import org.jetbrains.exposed.v1.core.neq
@@ -229,74 +214,6 @@ class AdminService {
             RefreshTokenTable.deleteWhere { userId eq id }
         }
         toResponse(loadById(id))
-    }
-
-    fun getStats(): AdminStatsResponse = transaction {
-        val now = OffsetDateTime.now()
-
-        val total = UserTable.selectAll().count()
-        val byRole = UserRole.entries.associate { role ->
-            role.name to UserTable.selectAll().where { UserTable.role eq role }.count()
-        }
-        val byStatus = UserStatus.entries.associate { status ->
-            status.name to UserTable.selectAll().where { UserTable.status eq status }.count()
-        }
-
-        val currentlyLocked = UserTable.selectAll()
-            .where { UserTable.lockedUntil.isNotNull() and (UserTable.lockedUntil greater now) }
-            .count()
-        val withFailedAttempts = UserTable.selectAll()
-            .where { UserTable.failedLoginAttempts greater 0 }
-            .count()
-        val pendingInvitations = RegistrationTable.selectAll()
-            .where {
-                (RegistrationTable.used eq false) and
-                    (RegistrationTable.expiresAt greaterEq now)
-            }
-            .count()
-
-        val sevenDaysAgo = now.minusDays(7)
-        val thirtyDaysAgo = now.minusDays(30)
-        val registered7 = UserTable.selectAll()
-            .where { UserTable.createdAt greaterEq sevenDaysAgo }
-            .count()
-        val registered30 = UserTable.selectAll()
-            .where { UserTable.createdAt greaterEq thirtyDaysAgo }
-            .count()
-        val activeRefreshTokens = RefreshTokenTable.selectAll()
-            .where { RefreshTokenTable.expiresAt greater now }
-            .count()
-
-        val lessons = LessonTable.selectAll().count()
-        val homework = HomeworkTable.selectAll().count()
-        val materials = MaterialTable.selectAll().count()
-        val vocabularyWords = StudentVocabTable.selectAll().count()
-        val learningGoals = GoalTable.selectAll().where { GoalTable.status eq GoalStatus.ACTIVE }.count()
-
-        AdminStatsResponse(
-            users = UserStats(
-                total = total,
-                byRole = byRole,
-                byStatus = byStatus,
-            ),
-            security = SecurityStats(
-                currentlyLocked = currentlyLocked,
-                withFailedAttempts = withFailedAttempts,
-                pendingInvitations = pendingInvitations,
-            ),
-            activity = ActivityStats(
-                registeredLast7Days = registered7,
-                registeredLast30Days = registered30,
-                activeRefreshTokens = activeRefreshTokens,
-            ),
-            domain = DomainStats(
-                lessons = lessons,
-                homework = homework,
-                materials = materials,
-                vocabularyWords = vocabularyWords,
-                learningGoals = learningGoals,
-            ),
-        )
     }
 
     private fun loadById(id: UUID): ResultRow =

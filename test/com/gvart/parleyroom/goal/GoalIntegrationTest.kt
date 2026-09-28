@@ -232,19 +232,6 @@ class GoalIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `admin stats count active goals as learningGoals`() = testApp {
-        val client = createJsonClient(this)
-        startApplication() // loads the test data before seeding
-        val teacher = getTeacherToken(client)
-        client.created(teacher, """{ "studentId": "$STUDENT_ID", "type": "LEVEL", "targetLevel": "B1" }""")
-        val archived = client.created(teacher, """{ "studentId": "$STUDENT_ID", "type": "LEVEL", "targetLevel": "B2" }""")
-        client.patchGoal(teacher, archived.str("id"), """{ "status": "ARCHIVED" }""")
-
-        val stats = client.get("/api/v1/admin/stats") { bearerAuth(getAdminToken(client)) }.body<JsonObject>()
-        assertEquals(1, stats.obj("domain").int("learningGoals"))
-    }
-
-    @Test
     fun `patch rules and delete`() = testApp {
         val client = createJsonClient(this)
         startApplication() // loads the test data before seeding
