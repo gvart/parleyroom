@@ -127,7 +127,6 @@ class DocumentService(
         val createdFromLessonId = request.createdFromLessonId?.let(UUID::fromString)
         val lessonIds = requireOwnLessons(ownerId, request.lessonIds + listOfNotNull(request.createdFromLessonId))
 
-        val now = OffsetDateTime.now()
         val id = DocumentTable.insertAndGetId {
             it[DocumentTable.ownerId] = ownerId
             it[title] = input.title.trim()
@@ -135,8 +134,6 @@ class DocumentService(
             it[audience] = input.audience
             it[blocks] = input.blocks
             it[DocumentTable.createdFromLessonId] = createdFromLessonId
-            it[createdAt] = now
-            it[updatedAt] = now
         }.value
         replaceTags(id, tags)
         insertLinks(DocumentStudentTable, DocumentStudentTable.documentId, DocumentStudentTable.studentId, DocumentStudentTable.sharedAt, id, studentIds)
@@ -158,7 +155,6 @@ class DocumentService(
             it[audience] = input.audience
             it[blocks] = input.blocks
             it[revision] = DocumentTable.revision + 1
-            it[updatedAt] = OffsetDateTime.now()
         }
         // A concurrent write got in between the read and this update.
         if (updated == 0) throw conflict(support.findDocument(documentId)[DocumentTable.revision])
@@ -175,7 +171,6 @@ class DocumentService(
     fun duplicateDocument(documentId: UUID, request: DuplicateDocumentRequest, principal: UserPrincipal): DocumentResponse = transaction {
         val source = support.requireOwned(documentId, principal)
         versions.snapshot(source, DocumentVersionReason.DUPLICATE, principal)
-        val now = OffsetDateTime.now()
         val id = DocumentTable.insertAndGetId {
             it[ownerId] = principal.id
             it[title] = request.title?.trim() ?: source[DocumentTable.title]
@@ -183,8 +178,6 @@ class DocumentService(
             it[audience] = source[DocumentTable.audience]
             it[blocks] = withNewIds(source[DocumentTable.blocks])
             it[createdFromLessonId] = source[DocumentTable.createdFromLessonId]
-            it[createdAt] = now
-            it[updatedAt] = now
         }.value
         val topicIds = DocumentTopicTable.select(DocumentTopicTable.topicId)
             .where { DocumentTopicTable.documentId eq documentId }
