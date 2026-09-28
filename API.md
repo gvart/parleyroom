@@ -743,30 +743,38 @@ StudentProgress {
   levels: [Level],                   // checklist levels, ascending (one unless includeLower)
   checklistEmpty: bool,              // no grammar topic on the checklist -> no fake 0 %
   thresholds: { needsWorkBelow: 0.6, minScoredItems: 3 },
-  grammar: [{ level, items: [GrammarProgressItem] }],   // levels ascending, items by position then name
-  topics: [TopicProgressItem],                          // path asc
+  grammar: [GrammarProgressLevel],   // levels ascending; a level without grammar topics is still listed (empty items)
+  topics: [TopicProgressItem],       // path then name, case-insensitive
   summary: ProgressSummary
 }
+GrammarProgressLevel {
+  level, checklistEmpty: bool,       // this level has no grammar topic -> tell "empty" from "0 %"
+  counts: GrammarCounts,
+  items: [GrammarProgressItem]       // position, then name
+}
 GrammarProgressItem {
-  grammarTopic: { id, name, level, category?, position },
-  status: NOT_COVERED | COVERED | PRACTICED | NEEDS_WORK,   // effective
-  derivedStatus: …same enum,
-  override: { status, note?, teacherId, updatedAt } | null, // note is null for students
+  id, name, level, category?, position,          // the grammar topic
+  derived: NOT_COVERED | COVERED | PRACTICED | NEEDS_WORK,
+  override: { status, note?, updatedAt, updatedBy } | null,   // note: teachers/admins only (null for the student)
+  effective: …same enum,                          // override.status ?? derived
   evidence: {
     lessonCount, lastLessonAt?,                  // attended lessons tagged with it
-    homeworkCount, lastPracticedAt?,             // submitted homework with a tagged item; max submittedAt
-    scored: { correct, total }, correctRate?     // correct / total, null when total = 0
+    homeworkScored: { correct, total },          // scored units (see above)
+    lastPracticedAt?                             // latest submittedAt of a qualifying homework
   }
 }
 TopicProgressItem {
-  topic: { id, parentId?, name, levels, path },  // path = "Alltag > Haushalt"
-  covered: bool, via: [LESSON | VOCAB], lastAt?,
-  words: { total, learned }
+  id, name, parentId?, levels,
+  path: [string],                                // ancestor names, root first (excludes the topic itself)
+  covered: bool, via: [LESSON | VOCAB],
+  lastLessonAt?,                                 // latest attended lesson tagged with it
+  words: { learned, total }
 }
+GrammarCounts { total, notCovered, covered, practiced, needsWork,        // by effective status, exclusive
+                percent: { notCovered, covered, practiced, needsWork, reached } | null }
+                // integer % of total (reached = 100 − notCovered %); null when total = 0
 ProgressSummary {
-  grammar: { total, notCovered, covered, practiced, needsWork,       // by effective status, exclusive
-             percent: { notCovered, covered, practiced, needsWork, reached } | null },
-                                   // integer % of total; reached = 100 − notCovered share; null if checklistEmpty
+  grammar: GrammarCounts,                        // over all checklist levels
   topics: { total, covered, percent? },          // percent null when total = 0
   vocab: { total, learned, percent? },           // all S's words of T's library (not level-filtered)
   streak: { current, longest, todayDone }        // the student's learning streak (same as /users/{id}/streak)
@@ -778,7 +786,8 @@ ProgressSummary {
 Brief §5.9 / decision 10: **auto-tracked** goals replace the old manual-percentage goals (table
 `learning_goals`, `PUT …/progress`, `/complete`, `/abandon` are removed; the prod DB is reset). The
 teacher sets a goal for a student; progress is **computed** from the progress data above, never
-typed in.
+typed in. The path stays `/api/v1/goals`; the request/response shapes are **replaced in place** (old
+clients break — acceptable, there are none besides the portal, which ships with this change).
 
 ```
 GET    /api/v1/goals?studentId=&status=ACTIVE,ACHIEVED   -> [Goal]   ACTIVE first, then targetDate asc nulls last, createdAt desc
@@ -806,6 +815,7 @@ teacher's timezone). `type` cannot change. Status is set by the teacher (any tra
 Goal {
   id, studentId, teacherId, type, examName?, targetLevel, targetDate?, note?,
   status: ACTIVE | ACHIEVED | ARCHIVED, statusChangedAt?, createdAt, updatedAt,
+  baselinePercent: 0..100 | null,    // progress percent computed when the goal was created (null: checklist was empty)
   progress: GoalProgress
 }
 GoalProgress {
@@ -813,9 +823,9 @@ GoalProgress {
   checklistEmpty: bool,
   grammar: { total, practiced, covered, needsWork, notCovered },   // target level only, effective statuses
   topics: { total, covered },        // teacher topics whose levels contain the target level
-  daysLeft: int | null,              // targetDate − today (student's timezone); negative when past
+  daysLeft: int | null,              // targetDate − today (student's timezone); negative when past; null without targetDate
   expectedPercent: 0..100 | null,
-  onTrack: bool | null               // null unless ACTIVE + targetDate + percent
+  onTrack: bool | null               // null without targetDate, when not ACTIVE, or percent is null
 }
 ```
 **Progress formula** (computed on every read, against the goal teacher's library, target level only —
@@ -829,10 +839,12 @@ percent      = round(100 × (0.8 × grammarScore + 0.2 × topicsScore))     (|T|
 ```
 NEEDS_WORK earns half credit: it was practiced, but the results are weak. Overrides count (effective status).
 
-**On track** (only `ACTIVE` goals with `targetDate` and a `percent`), dates in the student's timezone:
+**On track** (only `ACTIVE` goals with `targetDate` and a `percent`), dates in the student's timezone.
+The **baseline** is the goal's `percent` at creation (stored once; `null` → 0), so a student who
+already stands at 60 % is measured against the remaining 40 %:
 ```
 start = createdAt date;  span = max(1, targetDate − start) days;  elapsed = clamp(today − start, 0, span)
-expectedPercent = round(100 × elapsed / span)
+expectedPercent = round(baseline + (elapsed / span) × (100 − baseline))
 onTrack = percent ≥ expectedPercent − 10          (10-point tolerance; past the date: expected = 100)
 ```
 Listing goals runs a fixed number of grouped queries per distinct teacher in the result (no per-goal
@@ -841,7 +853,7 @@ queries).
 ### Tables (V14)
 
 `learning_goals` + enums `GOAL_SET_BY` / `GOAL_STATUS` dropped. `goals` (student_id, teacher_id,
-type `GOAL_TYPE`, exam_name?, target_level, target_date?, note?, status `GOAL_STATUS`
+type `GOAL_TYPE`, exam_name?, target_level, target_date?, note?, baseline_percent?, status `GOAL_STATUS`
 (ACTIVE/ACHIEVED/ARCHIVED), status_changed_at?, created/updated_at; CHECK exam ⇒ exam_name + target_date),
 `grammar_progress_overrides` (PK student_id + grammar_topic_id, grammar topic `ON DELETE CASCADE`,
 teacher_id, status `GRAMMAR_PROGRESS_STATUS`, note?, updated_at). Index
@@ -1229,9 +1241,9 @@ ContextSummary {
   knownWordCount,                      // words the context sends (1:1: the student's words from this teacher)
   coveredGrammar: [{ id, name, level }],
   grammarGaps: {                       // P8: what the model is told to target (same lists as the prompt)
-    needsWork: [{ id, name, level }],
-    notCovered: [{ id, name, level }],
-    checklistEmpty: bool               // no grammar topic at the context level (or no level)
+    needsWork: [string],               // grammar topic names, checklist order, ≤ 30
+    notCovered: [string],              // ≤ 30
+    needsWorkCount, notCoveredCount    // uncapped totals
   },
   libraryTopicCount, libraryGrammarTopicCount,
   attendees: [{ id, firstName, lastName }],   // who publish targets (1:1: the student; club: confirmed attendees)
