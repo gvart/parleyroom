@@ -1,0 +1,50 @@
+test/com/gvart/parleyroom/practice/PracticeFixtures.kt
+  s_2b5907717bc9a2::t_7b9d0a469164c5 1-75
+test/com/gvart/parleyroom/practice/PracticeIntegrationTest.kt
+  s_2b5907717bc9a2::t_44344ad2eb06a2 1-386
+  s_2b5907717bc9a2::t_c26a0e156e355a 387-390
+src/com/gvart/parleyroom/practice/service/PracticeService.kt
+  s_2b5907717bc9a2::t_281b7674816992 1-278
+src/com/gvart/parleyroom/practice/routing/Routing.kt
+  s_2b5907717bc9a2::t_2cea8feb04170e 1-160
+src/com/gvart/parleyroom/practice/service/SentenceService.kt
+  s_2b5907717bc9a2::t_e5ff592300dd4e 1-170
+resources/ai/sentence-feedback-system.md
+  s_2b5907717bc9a2::t_e0c1344d1744a0 1-38
+resources/application.conf
+  s_2b5907717bc9a2::t_ab3fa8982e72a9 97-108
+src/com/gvart/parleyroom/Application.kt
+  s_2b5907717bc9a2::t_7879b418c03ae8 17,52
+src/com/gvart/parleyroom/activity/data/LearningActivityTable.kt
+  s_2b5907717bc9a2::t_75b12c6414b421 9
+src/com/gvart/parleyroom/ai/llm/FakeLlmGateway.kt
+  s_2b5907717bc9a2::t_4a47c0bf0c8336 24,46,173-207
+src/com/gvart/parleyroom/ai/service/AiOutput.kt
+  s_2b5907717bc9a2::t_5605dec31e7d32 95-104,207-228
+src/com/gvart/parleyroom/ai/service/Prompts.kt
+  s_2b5907717bc9a2::t_a5dac5d0eda10d 16,28,71-80
+src/com/gvart/parleyroom/practice/config/PracticeModuleConfig.kt
+  s_2b5907717bc9a2::t_72eb3add4e4fc4 1-36
+src/com/gvart/parleyroom/practice/service/PracticeSupport.kt
+  s_2b5907717bc9a2::t_67a473e7972cf0 1-33
+src/com/gvart/parleyroom/vocabulary/data/StudentVocabTable.kt
+  s_2b5907717bc9a2::t_6102cca961558a 23,25-26
+src/com/gvart/parleyroom/vocabulary/service/VocabularyService.kt
+  s_2b5907717bc9a2::t_7ab5ea950bf76d 108,195-200
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "f51bbe4615c62a40e650b256ca78f46dffbfb4bd",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+src/com/gvart/parleyroom/practice/routing/Routing.kt
+  s_2b5907717bc9a2::t_673190a686ed29 27,87-91,106-110,125-129
+src/com/gvart/parleyroom/practice/service/PracticeService.kt
+  s_2b5907717bc9a2::t_245ad7d793a11e 98-104,106-108,113-114,116
+test/com/gvart/parleyroom/practice/PracticeIntegrationTest.kt
+  s_2b5907717bc9a2::t_3fb4ae153e4f0b 153-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "a340d06ef166d4a0e8d1c2e0a75917308b1057ba",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
