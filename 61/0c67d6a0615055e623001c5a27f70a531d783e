@@ -1,0 +1,29 @@
+src/com/gvart/parleyroom/ai/routing/Routing.kt
+  s_2b5907717bc9a2::t_3c2c3ae8b35064 201
+src/com/gvart/parleyroom/ai/service/GenerationJobs.kt
+  s_2b5907717bc9a2::t_46729a8df0232c 54,65
+test/com/gvart/parleyroom/ai/FillTranslationsIntegrationTest.kt
+  s_2b5907717bc9a2::t_b305e76100d3f5 4,51
+test/com/gvart/parleyroom/ai/NachbereitungIntegrationTest.kt
+  s_2b5907717bc9a2::t_0674b0b977a893 362,366-368
+test/com/gvart/parleyroom/ai/SuggestTagsIntegrationTest.kt
+  s_2b5907717bc9a2::t_884798ec2dd291 110-122,167,172,174,192,194,210,216,225,227,237-239
+test/com/gvart/parleyroom/vocabulary/VocabularyIntegrationTest.kt
+  s_2b5907717bc9a2::t_fcfe8fb4dfbab4 16,40-42,44,262,269-271
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "610c67d6a0615055e623001c5a27f70a531d783e",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
