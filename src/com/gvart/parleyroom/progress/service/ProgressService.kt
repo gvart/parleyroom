@@ -81,7 +81,7 @@ class ProgressService(
             level = used,
             levels = levels,
             checklistEmpty = evaluations.isEmpty(),
-            thresholds = ProgressThresholds(calculator.config.needsWorkBelow, calculator.config.minScoredItems),
+            thresholds = ProgressThresholds(calculator.config.needsWorkBelow, calculator.config.minScoredItems, calculator.config.needsWorkWindow),
             grammar = grammar,
             topics = topics.map {
                 TopicProgressItem(
