@@ -216,7 +216,7 @@ fun Application.generalConfig() {
         }
 
         exception<BadRequestException> { call, cause ->
-            call.respond(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, cause.code ?: "BAD_REQUEST"))
+            call.respond(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, cause.code ?: "BAD_REQUEST", cause.pointer))
         }
 
         exception<ConflictException> { call, cause ->

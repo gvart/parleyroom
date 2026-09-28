@@ -66,6 +66,7 @@ dependencies:
   - $libs.koog.agents.core
   - $libs.koog.anthropic
   - $libs.koog.http.client.ktor
+  - $libs.json.schema.validator
 
 test-dependencies:
   - $ktor.server.testHost
