@@ -129,15 +129,6 @@ fun Application.configureVocabularyRouting() {
                         parameters { path("id") { description = "Student vocab UUID" } }
                         responses { HttpStatusCode.NoContent { description = "Removed" } }
                     }
-
-                    post("/review") {
-                        call.respond(HttpStatusCode.OK, vocabularyService.reviewWord(call.getPathUUID(), call.requirePrincipal()))
-                    }.describe {
-                        summary = "Review word"
-                        description = "Marks a word as reviewed (reps+1) and schedules the next review (interval doubles, max 64 days)."
-                        parameters { path("id") { description = "Student vocab UUID" } }
-                        responses { HttpStatusCode.OK { schema = jsonSchema<StudentVocabResponse>() } }
-                    }
                 }
             }
 

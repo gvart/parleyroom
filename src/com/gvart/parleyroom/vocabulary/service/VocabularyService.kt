@@ -1,7 +1,5 @@
 package com.gvart.parleyroom.vocabulary.service
 
-import com.gvart.parleyroom.activity.data.ActivityKind
-import com.gvart.parleyroom.activity.service.LearningActivityRecorder
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.service.singleOrNotFound
@@ -33,8 +31,6 @@ import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
-import java.time.Duration
-import java.time.OffsetDateTime
 import java.util.UUID
 
 /** A student's vocabulary (student_vocab joined with the teacher's library entry). */
@@ -106,52 +102,10 @@ class VocabularyService {
     }
 
     /**
-     * Simple "knew it" review, mapped onto the FSRS columns until the FSRS scheduler lands:
-     * interval doubles per review (capped at 64 days); LEARNING → REVIEW after 3, LEARNED after 5.
-     */
-    fun reviewWord(id: UUID, principal: UserPrincipal): StudentVocabResponse = transaction {
-        val row = findWord(id)
-        val studentId = row[StudentVocabTable.studentId].value
-        AuthorizationHelper.requireAccessToStudent(studentId, principal)
-
-        val now = OffsetDateTime.now()
-        val reps = row[StudentVocabTable.reps] + 1
-        val status = when {
-            reps >= 5 -> StudentVocabStatus.LEARNED
-            reps >= 3 -> StudentVocabStatus.REVIEW
-            else -> StudentVocabStatus.LEARNING
-        }
-        val scheduledDays = 1 shl minOf(reps, 6)
-        val elapsedDays = row[StudentVocabTable.lastReview]?.let { Duration.between(it, now).toDays().toInt() } ?: 0
-
-        StudentVocabTable.update({ StudentVocabTable.id eq id }) {
-            it[StudentVocabTable.reps] = reps
-            it[StudentVocabTable.status] = status
-            it[StudentVocabTable.scheduledDays] = scheduledDays
-            it[StudentVocabTable.elapsedDays] = elapsedDays
-            it[due] = now.plusDays(scheduledDays.toLong())
-            it[lastReview] = now
-            it[state] = if (status == StudentVocabStatus.LEARNING) FSRS_LEARNING else FSRS_REVIEW
-        }
-
-        if (principal.id == studentId)
-            LearningActivityRecorder.record(studentId, ActivityKind.VOCAB_REVIEW, id)
-
-        toResponses(listOf(findWord(id)), principal).single()
-    }
-
-    private fun joined() = StudentVocabTable.join(
-        VocabEntryTable, JoinType.INNER, StudentVocabTable.vocabEntryId, VocabEntryTable.id,
-    )
-
-    private fun findWord(id: UUID): ResultRow =
-        joined().selectAll().where { StudentVocabTable.id eq id }.singleOrNotFound("Vocabulary word")
-
-    /**
      * Resolves the display setting per row (lesson override → teacher–student setting →
      * level default) and strips hidden fields for students.
      */
-    private fun toResponses(rows: List<ResultRow>, principal: UserPrincipal): List<StudentVocabResponse> {
+    fun toResponses(rows: List<ResultRow>, principal: UserPrincipal): List<StudentVocabResponse> {
         if (rows.isEmpty()) return emptyList()
         val topicsByEntry = VocabEntryService.topicIdsByEntry(rows.map { it[VocabEntryTable.id].value }.distinct())
         val settings = DisplaySettingResolver.load(rows)
@@ -238,7 +192,11 @@ class VocabularyService {
     }
 
     companion object {
-        private const val FSRS_LEARNING: Short = 1
-        private const val FSRS_REVIEW: Short = 2
+        fun joined() = StudentVocabTable.join(
+            VocabEntryTable, JoinType.INNER, StudentVocabTable.vocabEntryId, VocabEntryTable.id,
+        )
+
+        fun findWord(id: UUID): ResultRow =
+            joined().selectAll().where { StudentVocabTable.id eq id }.singleOrNotFound("Vocabulary word")
     }
 }

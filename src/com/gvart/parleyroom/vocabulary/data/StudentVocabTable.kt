@@ -20,7 +20,10 @@ object StudentVocabTable : UUIDTable("student_vocab") {
     val scheduledDays = integer("scheduled_days").default(0)
     val reps = integer("reps").default(0)
     val lapses = integer("lapses").default(0)
+    /** FSRS state: 0 NEW, 1 LEARNING, 2 REVIEW, 3 RELEARNING (see practice/service/Fsrs.kt). */
     val state = short("state").default(0)
+    /** FSRS learning step index, null outside LEARNING / RELEARNING. */
+    val step = short("step").nullable()
     val lastReview = timestampWithTimeZone("last_review").nullable()
     val addedAt = timestampWithTimeZone("added_at")
 
