@@ -1,0 +1,418 @@
+[
+ {
+  "id": "10000000-0000-0000-0000-000000000005",
+  "type": "heading",
+  "interactive": false,
+  "text": "Haushalt",
+  "level": 1
+ },
+ {
+  "id": "10000000-0000-0000-0000-000000000006",
+  "type": "rich_text",
+  "interactive": false,
+  "content": {
+   "type": "doc",
+   "content": [
+    {
+     "type": "heading",
+     "attrs": {
+      "level": 2
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Einleitung"
+      }
+     ]
+    },
+    {
+     "type": "paragraph",
+     "content": [
+      {
+       "type": "text",
+       "text": "Hallo ",
+       "marks": [
+        {
+         "type": "bold"
+        }
+       ]
+      },
+      {
+       "type": "hardBreak"
+      },
+      {
+       "type": "text",
+       "text": "Link",
+       "marks": [
+        {
+         "type": "link",
+         "attrs": {
+          "href": "https://example.com",
+          "target": "_blank",
+          "rel": "noopener noreferrer nofollow",
+          "class": null
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "type": "bulletList",
+     "content": [
+      {
+       "type": "listItem",
+       "content": [
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "eins"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "type": "orderedList",
+     "attrs": {
+      "start": 1,
+      "type": null
+     },
+     "content": [
+      {
+       "type": "listItem",
+       "content": [
+        {
+         "type": "paragraph"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "type": "blockquote",
+     "content": [
+      {
+       "type": "paragraph",
+       "content": [
+        {
+         "type": "text",
+         "text": "Zitat",
+         "marks": [
+          {
+           "type": "italic"
+          },
+          {
+           "type": "highlight"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "id": "10000000-0000-0000-0000-000000000007",
+  "type": "vocab_table",
+  "interactive": false,
+  "title": "Haushalt",
+  "topicId": null,
+  "rows": []
+ },
+ {
+  "id": "10000000-0000-0000-0000-000000000008",
+  "type": "grammar_box",
+  "interactive": false,
+  "variant": "OVERVIEW",
+  "title": "Perfekt",
+  "content": {
+   "type": "doc",
+   "content": [
+    {
+     "type": "paragraph",
+     "content": [
+      {
+       "type": "text",
+       "text": "sein oder haben"
+      }
+     ]
+    }
+   ]
+  },
+  "table": {
+   "headers": [
+    "Verb",
+    "Hilfsverb"
+   ],
+   "rows": [
+    [
+     "bleiben",
+     "sein"
+    ]
+   ]
+  },
+  "examples": [
+   "Ich bin geblieben."
+  ]
+ },
+ {
+  "id": "10000000-0000-0000-0000-000000000009",
+  "type": "gap_fill",
+  "interactive": true,
+  "instructions": "Ergänze.",
+  "wordBox": [
+   "musst",
+   "kümmern"
+  ],
+  "items": [
+   {
+    "id": "10000000-0000-0000-0000-000000000010",
+    "text": "Darum ___ du dich ___.",
+    "hint": null,
+    "solution": {
+     "answers": [
+      [
+       "musst"
+      ],
+      [
+       "kümmern"
+      ]
+     ]
+    }
+   }
+  ]
+ },
+ {
+  "id": "10000000-0000-0000-0000-000000000011",
+  "type": "multiple_choice",
+  "interactive": true,
+  "items": [
+   {
+    "id": "10000000-0000-0000-0000-000000000012",
+    "question": "Ich ___ geblieben.",
+    "options": [
+     {
+      "id": "10000000-0000-0000-0000-000000000001",
+      "text": "habe"
+     },
+     {
+      "id": "10000000-0000-0000-0000-000000000002",
+      "text": "bin"
+     }
+    ],
+    "solution": {
+     "correctOptionIds": [
+      "10000000-0000-0000-0000-000000000002"
+     ]
+    }
+   }
+  ]
+ },
+ {
+  "id": "10000000-0000-0000-0000-000000000013",
+  "type": "error_correction",
+  "interactive": true,
+  "items": [
+   {
+    "id": "10000000-0000-0000-0000-000000000014",
+    "sentence": "Darum muss du dicht kümmern",
+    "solution": {
+     "corrected": "Darum musst du dich kümmern",
+     "explanation": "du musst; sich kümmern"
+    }
+   }
+  ]
+ },
+ {
+  "id": "10000000-0000-0000-0000-000000000015",
+  "type": "free_sentences",
+  "interactive": true,
+  "instructions": "Bilde Sätze.",
+  "items": [
+   {
+    "id": "10000000-0000-0000-0000-000000000016",
+    "prompt": "Blumen gießen",
+    "solution": {
+     "sampleAnswer": "Soll ich heute die Blumen gießen?"
+    }
+   }
+  ]
+ },
+ {
+  "id": "10000000-0000-0000-0000-000000000017",
+  "type": "writing_task",
+  "interactive": true,
+  "instructions": "Schreib eine Nachricht.",
+  "instructionsTranslation": {
+   "ru": "Напиши сообщение."
+  },
+  "items": [
+   {
+    "id": "10000000-0000-0000-0000-000000000018",
+    "prompt": "Informelle Nachricht an eine Freundin",
+    "register": "INFORMAL",
+    "points": [
+     "Grund",
+     "Termin"
+    ],
+    "minWords": 40,
+    "maxWords": 80,
+    "solution": {
+     "sampleAnswer": "Liebe Anna, ..."
+    }
+   }
+  ]
+ },
+ {
+  "id": "10000000-0000-0000-0000-000000000019",
+  "type": "reading",
+  "interactive": true,
+  "title": "Im Haushalt",
+  "text": {
+   "type": "doc",
+   "content": [
+    {
+     "type": "paragraph",
+     "content": [
+      {
+       "type": "text",
+       "text": "Peter macht den Abwasch."
+      }
+     ]
+    }
+   ]
+  },
+  "questions": [
+   {
+    "id": "10000000-0000-0000-0000-000000000020",
+    "kind": "OPEN",
+    "question": "Was macht Peter?",
+    "solution": {
+     "sampleAnswer": "Den Abwasch."
+    }
+   },
+   {
+    "id": "10000000-0000-0000-0000-000000000021",
+    "kind": "TRUE_FALSE",
+    "question": "Peter kocht.",
+    "solution": {
+     "isTrue": false
+    }
+   },
+   {
+    "id": "10000000-0000-0000-0000-000000000022",
+    "kind": "CHOICE",
+    "question": "Wer?",
+    "options": [
+     {
+      "id": "10000000-0000-0000-0000-000000000003",
+      "text": "Peter"
+     },
+     {
+      "id": "10000000-0000-0000-0000-000000000004",
+      "text": "Anna"
+     }
+    ],
+    "solution": {
+     "correctOptionIds": [
+      "10000000-0000-0000-0000-000000000003"
+     ]
+    }
+   }
+  ]
+ },
+ {
+  "id": "10000000-0000-0000-0000-000000000023",
+  "type": "media",
+  "interactive": true,
+  "kind": "VIDEO",
+  "url": "https://example.com/video.mp4",
+  "task": {
+   "type": "doc",
+   "content": [
+    {
+     "type": "paragraph",
+     "content": [
+      {
+       "type": "text",
+       "text": "Schau das Video."
+      }
+     ]
+    }
+   ]
+  },
+  "questions": [
+   {
+    "id": "10000000-0000-0000-0000-000000000024",
+    "kind": "OPEN",
+    "question": "Worum geht es?"
+   }
+  ]
+ },
+ {
+  "id": "10000000-0000-0000-0000-000000000025",
+  "type": "exam_part",
+  "interactive": true,
+  "exam": "telc B1",
+  "part": "Lesen Teil 2",
+  "instructions": "Lies den Text.",
+  "timeMinutes": 20,
+  "content": {
+   "type": "doc",
+   "content": [
+    {
+     "type": "paragraph",
+     "content": [
+      {
+       "type": "text",
+       "text": "Text"
+      }
+     ]
+    }
+   ]
+  },
+  "questions": [
+   {
+    "id": "10000000-0000-0000-0000-000000000026",
+    "kind": "TRUE_FALSE",
+    "question": "Richtig?",
+    "solution": {
+     "isTrue": true
+    }
+   }
+  ]
+ },
+ {
+  "id": "10000000-0000-0000-0000-000000000027",
+  "type": "free_form",
+  "interactive": false,
+  "instructions": null,
+  "content": {
+   "type": "doc",
+   "content": [
+    {
+     "type": "paragraph",
+     "content": [
+      {
+       "type": "text",
+       "text": "Sprechfragen"
+      }
+     ]
+    }
+   ]
+  },
+  "items": [
+   {
+    "id": "10000000-0000-0000-0000-000000000028",
+    "prompt": "Was machst du im Haushalt?"
+   }
+  ]
+ }
+]

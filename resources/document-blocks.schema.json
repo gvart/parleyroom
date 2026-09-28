@@ -1,0 +1,562 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://api.rosehub.eu/api/v1/documents/schema",
+  "title": "Parleyroom document blocks",
+  "description": "An ordered list of typed blocks. Every block and every answerable item has a stable uuid. Everything under a `solution` key is the answer key and is never shown to students. Gaps in gap_fill text are written as ___ (three underscores).",
+  "type": "array",
+  "maxItems": 200,
+  "items": { "$ref": "#/$defs/block" },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "shortText": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "optionalText": { "type": ["string", "null"], "maxLength": 5000 },
+    "stringList": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/shortText" } },
+
+    "block": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "type": {
+          "enum": [
+            "heading", "rich_text", "vocab_table", "grammar_box", "gap_fill", "multiple_choice",
+            "error_correction", "free_sentences", "writing_task", "reading", "media", "exam_part", "free_form"
+          ]
+        },
+        "interactive": { "type": "boolean" }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "heading" } } }, "then": { "$ref": "#/$defs/heading" } },
+        { "if": { "properties": { "type": { "const": "rich_text" } } }, "then": { "$ref": "#/$defs/rich_text" } },
+        { "if": { "properties": { "type": { "const": "vocab_table" } } }, "then": { "$ref": "#/$defs/vocab_table" } },
+        { "if": { "properties": { "type": { "const": "grammar_box" } } }, "then": { "$ref": "#/$defs/grammar_box" } },
+        { "if": { "properties": { "type": { "const": "gap_fill" } } }, "then": { "$ref": "#/$defs/gap_fill" } },
+        { "if": { "properties": { "type": { "const": "multiple_choice" } } }, "then": { "$ref": "#/$defs/multiple_choice" } },
+        { "if": { "properties": { "type": { "const": "error_correction" } } }, "then": { "$ref": "#/$defs/error_correction" } },
+        { "if": { "properties": { "type": { "const": "free_sentences" } } }, "then": { "$ref": "#/$defs/free_sentences" } },
+        { "if": { "properties": { "type": { "const": "writing_task" } } }, "then": { "$ref": "#/$defs/writing_task" } },
+        { "if": { "properties": { "type": { "const": "reading" } } }, "then": { "$ref": "#/$defs/reading" } },
+        { "if": { "properties": { "type": { "const": "media" } } }, "then": { "$ref": "#/$defs/media" } },
+        { "if": { "properties": { "type": { "const": "exam_part" } } }, "then": { "$ref": "#/$defs/exam_part" } },
+        { "if": { "properties": { "type": { "const": "free_form" } } }, "then": { "$ref": "#/$defs/free_form" } }
+      ]
+    },
+
+    "heading": {
+      "type": "object",
+      "required": ["text", "level"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "level": { "type": "integer", "minimum": 1, "maximum": 3 }
+      },
+      "additionalProperties": false
+    },
+
+    "rich_text": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "content": { "$ref": "#/$defs/richText" }
+      },
+      "additionalProperties": false
+    },
+
+    "vocab_table": {
+      "type": "object",
+      "required": ["rows"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "title": { "type": ["string", "null"], "maxLength": 255 },
+        "topicId": { "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] },
+        "rows": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "required": ["id", "vocabEntryId"],
+            "properties": {
+              "id": { "$ref": "#/$defs/uuid" },
+              "vocabEntryId": { "$ref": "#/$defs/uuid" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "grammar_box": {
+      "type": "object",
+      "required": ["variant"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "variant": { "enum": ["TIP", "OVERVIEW"] },
+        "title": { "type": ["string", "null"], "maxLength": 255 },
+        "content": { "oneOf": [{ "$ref": "#/$defs/richText" }, { "type": "null" }] },
+        "table": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["headers", "rows"],
+              "properties": {
+                "headers": { "type": "array", "maxItems": 12, "items": { "type": "string", "maxLength": 500 } },
+                "rows": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": { "type": "array", "maxItems": 12, "items": { "type": "string", "maxLength": 2000 } }
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "examples": { "$ref": "#/$defs/stringList" }
+      },
+      "additionalProperties": false
+    },
+
+    "gap_fill": {
+      "type": "object",
+      "required": ["items"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "instructions": { "$ref": "#/$defs/optionalText" },
+        "wordBox": { "oneOf": [{ "$ref": "#/$defs/stringList" }, { "type": "null" }] },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "required": ["id", "text"],
+            "properties": {
+              "id": { "$ref": "#/$defs/uuid" },
+              "text": { "type": "string", "minLength": 1, "maxLength": 10000, "pattern": "___" },
+              "hint": { "$ref": "#/$defs/optionalText" },
+              "solution": {
+                "type": "object",
+                "required": ["answers"],
+                "properties": {
+                  "answers": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/shortText" } }
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "option": {
+      "type": "object",
+      "required": ["id", "text"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "text": { "$ref": "#/$defs/shortText" }
+      },
+      "additionalProperties": false
+    },
+
+    "multiple_choice": {
+      "type": "object",
+      "required": ["items"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "instructions": { "$ref": "#/$defs/optionalText" },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "required": ["id", "question", "options"],
+            "properties": {
+              "id": { "$ref": "#/$defs/uuid" },
+              "question": { "$ref": "#/$defs/shortText" },
+              "multiple": { "type": "boolean" },
+              "options": { "type": "array", "minItems": 2, "maxItems": 12, "items": { "$ref": "#/$defs/option" } },
+              "solution": {
+                "type": "object",
+                "required": ["correctOptionIds"],
+                "properties": {
+                  "correctOptionIds": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/uuid" } }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "error_correction": {
+      "type": "object",
+      "required": ["items"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "instructions": { "$ref": "#/$defs/optionalText" },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "required": ["id", "sentence"],
+            "properties": {
+              "id": { "$ref": "#/$defs/uuid" },
+              "sentence": { "$ref": "#/$defs/shortText" },
+              "solution": {
+                "type": "object",
+                "required": ["corrected"],
+                "properties": {
+                  "corrected": { "$ref": "#/$defs/shortText" },
+                  "explanation": { "$ref": "#/$defs/optionalText" }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "promptItem": {
+      "type": "object",
+      "required": ["id", "prompt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "prompt": { "$ref": "#/$defs/shortText" },
+        "solution": {
+          "type": "object",
+          "required": ["sampleAnswer"],
+          "properties": { "sampleAnswer": { "type": "string", "minLength": 1, "maxLength": 10000 } },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "free_sentences": {
+      "type": "object",
+      "required": ["items"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "instructions": { "$ref": "#/$defs/optionalText" },
+        "items": { "type": "array", "minItems": 1, "maxItems": 200, "items": { "$ref": "#/$defs/promptItem" } }
+      },
+      "additionalProperties": false
+    },
+
+    "writing_task": {
+      "type": "object",
+      "required": ["items"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "instructions": { "$ref": "#/$defs/optionalText" },
+        "instructionsTranslation": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "properties": { "ru": { "$ref": "#/$defs/optionalText" }, "en": { "$ref": "#/$defs/optionalText" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "required": ["id", "prompt"],
+            "properties": {
+              "id": { "$ref": "#/$defs/uuid" },
+              "prompt": { "type": "string", "minLength": 1, "maxLength": 5000 },
+              "register": { "enum": ["INFORMAL", "FORMAL", null] },
+              "points": { "$ref": "#/$defs/stringList" },
+              "minWords": { "type": ["integer", "null"], "minimum": 1, "maximum": 5000 },
+              "maxWords": { "type": ["integer", "null"], "minimum": 1, "maximum": 5000 },
+              "solution": {
+                "type": "object",
+                "required": ["sampleAnswer"],
+                "properties": { "sampleAnswer": { "type": "string", "minLength": 1, "maxLength": 20000 } },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "question": {
+      "type": "object",
+      "required": ["id", "kind", "question"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "kind": { "enum": ["OPEN", "TRUE_FALSE", "CHOICE"] },
+        "question": { "$ref": "#/$defs/shortText" },
+        "options": { "type": "array", "maxItems": 12, "items": { "$ref": "#/$defs/option" } },
+        "solution": { "type": "object" }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "CHOICE" } } },
+          "then": {
+            "required": ["options"],
+            "properties": {
+              "options": { "minItems": 2 },
+              "solution": {
+                "required": ["correctOptionIds"],
+                "properties": { "correctOptionIds": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/uuid" } } },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "TRUE_FALSE" } } },
+          "then": {
+            "not": { "required": ["options"] },
+            "properties": {
+              "solution": {
+                "required": ["isTrue"],
+                "properties": { "isTrue": { "type": "boolean" } },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "OPEN" } } },
+          "then": {
+            "not": { "required": ["options"] },
+            "properties": {
+              "solution": {
+                "required": ["sampleAnswer"],
+                "properties": { "sampleAnswer": { "type": "string", "minLength": 1, "maxLength": 10000 } },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "questions": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/question" } },
+
+    "reading": {
+      "type": "object",
+      "required": ["text", "questions"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "title": { "type": ["string", "null"], "maxLength": 255 },
+        "text": { "$ref": "#/$defs/richText" },
+        "questions": { "$ref": "#/$defs/questions" }
+      },
+      "additionalProperties": false
+    },
+
+    "media": {
+      "type": "object",
+      "required": ["kind", "questions"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "kind": { "enum": ["AUDIO", "VIDEO"] },
+        "url": { "type": "string", "maxLength": 2000, "pattern": "^https://" },
+        "materialId": { "$ref": "#/$defs/uuid" },
+        "task": { "oneOf": [{ "$ref": "#/$defs/richText" }, { "type": "null" }] },
+        "questions": { "$ref": "#/$defs/questions" }
+      },
+      "oneOf": [
+        { "required": ["url"], "not": { "required": ["materialId"] } },
+        { "required": ["materialId"], "not": { "required": ["url"] } }
+      ],
+      "additionalProperties": false
+    },
+
+    "exam_part": {
+      "type": "object",
+      "required": ["exam", "part", "questions"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "exam": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "part": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "instructions": { "$ref": "#/$defs/optionalText" },
+        "timeMinutes": { "type": ["integer", "null"], "minimum": 1, "maximum": 600 },
+        "content": { "oneOf": [{ "$ref": "#/$defs/richText" }, { "type": "null" }] },
+        "questions": { "$ref": "#/$defs/questions" }
+      },
+      "additionalProperties": false
+    },
+
+    "free_form": {
+      "type": "object",
+      "required": ["content", "items"],
+      "properties": {
+        "id": true, "type": true, "interactive": true,
+        "instructions": { "$ref": "#/$defs/optionalText" },
+        "content": { "$ref": "#/$defs/richText" },
+        "items": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/promptItem" } }
+      },
+      "additionalProperties": false
+    },
+
+    "richText": {
+      "description": "TipTap / ProseMirror JSON, strict subset.",
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "doc" },
+        "content": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/rtBlockNode" } }
+      },
+      "additionalProperties": false
+    },
+    "rtBlockNode": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["paragraph", "heading", "bulletList", "orderedList", "blockquote"] }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "paragraph" } } }, "then": { "$ref": "#/$defs/rtParagraph" } },
+        { "if": { "properties": { "type": { "const": "heading" } } }, "then": { "$ref": "#/$defs/rtHeading" } },
+        { "if": { "properties": { "type": { "const": "bulletList" } } }, "then": { "$ref": "#/$defs/rtBulletList" } },
+        { "if": { "properties": { "type": { "const": "orderedList" } } }, "then": { "$ref": "#/$defs/rtOrderedList" } },
+        { "if": { "properties": { "type": { "const": "blockquote" } } }, "then": { "$ref": "#/$defs/rtBlockquote" } }
+      ]
+    },
+    "rtInlineContent": { "type": "array", "maxItems": 2000, "items": { "$ref": "#/$defs/rtInlineNode" } },
+    "rtParagraph": {
+      "properties": { "type": true, "content": { "$ref": "#/$defs/rtInlineContent" } },
+      "additionalProperties": false
+    },
+    "rtHeading": {
+      "required": ["attrs"],
+      "properties": {
+        "type": true,
+        "attrs": {
+          "type": "object",
+          "required": ["level"],
+          "properties": { "level": { "type": "integer", "minimum": 1, "maximum": 3 } },
+          "additionalProperties": false
+        },
+        "content": { "$ref": "#/$defs/rtInlineContent" }
+      },
+      "additionalProperties": false
+    },
+    "rtListItem": {
+      "type": "object",
+      "required": ["type", "content"],
+      "properties": {
+        "type": { "const": "listItem" },
+        "content": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rtBlockNode" } }
+      },
+      "additionalProperties": false
+    },
+    "rtBulletList": {
+      "required": ["content"],
+      "properties": {
+        "type": true,
+        "content": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rtListItem" } }
+      },
+      "additionalProperties": false
+    },
+    "rtOrderedList": {
+      "required": ["content"],
+      "properties": {
+        "type": true,
+        "attrs": {
+          "type": "object",
+          "properties": {
+            "start": { "type": "integer", "minimum": 0 },
+            "type": { "type": ["string", "null"], "enum": ["1", "a", "A", "i", "I", null] }
+          },
+          "additionalProperties": false
+        },
+        "content": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rtListItem" } }
+      },
+      "additionalProperties": false
+    },
+    "rtBlockquote": {
+      "required": ["content"],
+      "properties": {
+        "type": true,
+        "content": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rtBlockNode" } }
+      },
+      "additionalProperties": false
+    },
+    "rtInlineNode": {
+      "type": "object",
+      "required": ["type"],
+      "properties": { "type": { "enum": ["text", "hardBreak"] } },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "text" } } },
+          "then": {
+            "required": ["text"],
+            "properties": {
+              "type": true,
+              "text": { "type": "string", "minLength": 1, "maxLength": 20000 },
+              "marks": { "type": "array", "maxItems": 6, "items": { "$ref": "#/$defs/rtMark" } }
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "hardBreak" } } },
+          "then": { "properties": { "type": true }, "additionalProperties": false }
+        }
+      ]
+    },
+    "rtMark": {
+      "type": "object",
+      "required": ["type"],
+      "properties": { "type": { "enum": ["bold", "italic", "underline", "strike", "highlight", "link"] } },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "link" } } },
+          "then": {
+            "required": ["attrs"],
+            "properties": {
+              "type": true,
+              "attrs": {
+                "type": "object",
+                "required": ["href"],
+                "properties": {
+                  "href": { "type": "string", "maxLength": 2000, "pattern": "^(https?://|mailto:)" },
+                  "target": { "type": ["string", "null"], "enum": ["_blank", null] },
+                  "rel": { "type": ["string", "null"], "maxLength": 100 },
+                  "class": { "type": "null" },
+                  "title": { "type": ["string", "null"], "maxLength": 255 }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "else": { "properties": { "type": true }, "additionalProperties": false }
+        }
+      ]
+    }
+  }
+}
