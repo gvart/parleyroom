@@ -267,6 +267,19 @@ data class MissingFieldsResponse(val count: Int, val entryIds: List<String>)
 @Serializable
 data class AttendeeRef(val id: String, val firstName: String, val lastName: String)
 
+/** Grammar the AI is told to target (P8): names at the context level, lists capped, counts not. */
+@Serializable
+data class GrammarGaps(
+    val needsWork: List<String>,
+    val notCovered: List<String>,
+    val needsWorkCount: Int,
+    val notCoveredCount: Int,
+) {
+    companion object {
+        val NONE = GrammarGaps(emptyList(), emptyList(), 0, 0)
+    }
+}
+
 @Serializable
 data class ContextSummary(
     val level: LanguageLevel? = null,
@@ -275,6 +288,7 @@ data class ContextSummary(
     val lessonOverrideActive: Boolean,
     val knownWordCount: Int,
     val coveredGrammar: List<GrammarTopicRef>,
+    val grammarGaps: GrammarGaps,
     val libraryTopicCount: Int,
     val libraryGrammarTopicCount: Int,
     val attendees: List<AttendeeRef>,

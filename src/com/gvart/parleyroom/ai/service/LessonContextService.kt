@@ -3,6 +3,7 @@ package com.gvart.parleyroom.ai.service
 import com.gvart.parleyroom.ai.transfer.AttendeeRef
 import com.gvart.parleyroom.ai.transfer.ContextSummary
 import com.gvart.parleyroom.ai.transfer.DisplaySource
+import com.gvart.parleyroom.ai.transfer.GrammarGaps
 import com.gvart.parleyroom.ai.transfer.NachbereitungMode
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.LessonType
@@ -14,6 +15,8 @@ import com.gvart.parleyroom.lesson.data.LessonGrammarTopicTable
 import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
+import com.gvart.parleyroom.progress.data.GrammarProgressStatus
+import com.gvart.parleyroom.progress.service.ProgressCalculator
 import com.gvart.parleyroom.topic.data.GrammarTopicTable
 import com.gvart.parleyroom.topic.data.TopicTable
 import com.gvart.parleyroom.topic.transfer.GrammarTopicRef
@@ -55,6 +58,7 @@ data class LessonContext(
     val knownWordCount: Int,
     val knownWords: List<String>,
     val coveredGrammar: List<GrammarTopicRef>,
+    val grammarGaps: GrammarGaps,
     val topicPaths: List<String>,
     val grammarTopics: List<GrammarTopicRef>,
     val prefillNotes: String?,
@@ -69,6 +73,7 @@ data class LessonContext(
         lessonOverrideActive = displaySource == DisplaySource.LESSON,
         knownWordCount = knownWordCount,
         coveredGrammar = coveredGrammar,
+        grammarGaps = grammarGaps,
         libraryTopicCount = topicPaths.size,
         libraryGrammarTopicCount = grammarTopics.size,
         attendees = attendees,
@@ -93,6 +98,15 @@ data class LessonContext(
         appendLine("Grammar topics already covered:")
         appendLine(coveredGrammar.joinToString(", ") { refText(it) }.ifEmpty { "(none yet)" })
         appendLine()
+        appendLine(
+            if (mode == NachbereitungMode.CLUB) "Grammar the group still needs to work on (weak homework results for at least half of the participants):"
+            else "Grammar the student still needs to work on (weak homework results):"
+        )
+        appendLine(grammarGaps.needsWork.joinToString(", ").ifEmpty { "(none known)" })
+        appendLine()
+        appendLine("Grammar of level ${level ?: "unknown"} not covered yet${if (mode == NachbereitungMode.CLUB) " (for at least half of the participants)" else ""}:")
+        appendLine(grammarGaps.notCovered.joinToString(", ").ifEmpty { "(none known)" })
+        appendLine()
         appendLine("Library topics (reuse these exact names for topicName and suggestedTopics when they fit):")
         appendLine(topicPaths.joinToString("\n").ifEmpty { "(empty library)" })
         appendLine()
@@ -104,7 +118,7 @@ data class LessonContext(
 }
 
 /** Builds [LessonContext]. Must run in a transaction. */
-class LessonContextService {
+class LessonContextService(private val progress: ProgressCalculator) {
 
     fun requireLessonTeacher(lessonId: UUID, principal: UserPrincipal): ResultRow {
         val lesson = LessonTable.findByIdOrThrow(lessonId, "Lesson")
@@ -161,6 +175,7 @@ class LessonContextService {
             knownWordCount = known.first,
             knownWords = known.second,
             coveredGrammar = coveredGrammar(earlierLessons),
+            grammarGaps = grammarGaps(teacherId, level, attendeeIds),
             topicPaths = topicPaths(teacherId),
             grammarTopics = GrammarTopicTable.selectAll()
                 .where { GrammarTopicTable.teacherId eq teacherId }
@@ -250,6 +265,23 @@ class LessonContextService {
             .map { GrammarTopicRef(it[GrammarTopicTable.id].value.toString(), it[GrammarTopicTable.name], it[GrammarTopicTable.level]) }
     }
 
+    /**
+     * Effective progress status (P8) of the teacher's grammar topics at [level]: a topic is a gap when
+     * at least half of the attendees (1:1: the student) have that status. Checklist order, lists capped.
+     */
+    private fun grammarGaps(teacherId: UUID, level: LanguageLevel?, attendeeIds: List<UUID>): GrammarGaps {
+        if (level == null || attendeeIds.isEmpty()) return GrammarGaps.NONE
+        val topics = progress.grammarTopics(teacherId, listOf(level))
+        val evaluations = progress.grammar(teacherId, attendeeIds, topics)
+        val quorum = (attendeeIds.size + 1) / 2
+        fun gaps(status: GrammarProgressStatus) = topics.indices
+            .filter { i -> attendeeIds.count { evaluations.getValue(it)[i].effective == status } >= quorum }
+            .map { topics[it].name }
+        val needsWork = gaps(GrammarProgressStatus.NEEDS_WORK)
+        val notCovered = gaps(GrammarProgressStatus.NOT_COVERED)
+        return GrammarGaps(needsWork.take(MAX_GAPS), notCovered.take(MAX_GAPS), needsWork.size, notCovered.size)
+    }
+
     /** The teacher's topic tree as "Alltag > Haushalt" paths, sorted. */
     fun topicPaths(teacherId: UUID): List<String> {
         val topics = TopicTable.selectAll().where { TopicTable.teacherId eq teacherId }
@@ -264,5 +296,6 @@ class LessonContextService {
     companion object {
         const val MAX_KNOWN_WORDS = 300
         const val MAX_LIBRARY_ITEMS = 300
+        const val MAX_GAPS = 30
     }
 }
