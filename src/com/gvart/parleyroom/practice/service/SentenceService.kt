@@ -59,13 +59,18 @@ class SentenceService(
             if (sentence.length > MAX_SENTENCE)
                 throw BadRequestException("The sentence is longer than $MAX_SENTENCE characters", code = "SENTENCE_TOO_LONG", pointer = "/sentence")
             if (ai.gateway == null) throw notConfigured()
+            val now = OffsetDateTime.now()
+            val startOfDay = PracticeTime.startOfDay(principal.id, now)
             val today = StudentVocabSentenceTable.selectAll()
-                .where {
-                    (StudentVocabSentenceTable.studentId eq principal.id) and
-                            (StudentVocabSentenceTable.createdAt greaterEq PracticeTime.startOfDay(principal.id, OffsetDateTime.now()))
-                }.count()
+                .where { (StudentVocabSentenceTable.studentId eq principal.id) and (StudentVocabSentenceTable.createdAt greaterEq startOfDay) }
+                .count()
+            // The daily cap has its own code; AI_RATE_LIMITED stays for provider throttling.
             if (today >= config.sentencesPerDay)
-                throw TooManyRequestsException("At most ${config.sentencesPerDay} sentences per day", code = "AI_RATE_LIMITED")
+                throw TooManyRequestsException(
+                    "At most ${config.sentencesPerDay} sentences per day",
+                    code = "PRACTICE_SENTENCE_LIMIT",
+                    resetsAt = PracticeTime.endOfDay(principal.id, now),
+                )
             buildRequest(row, sentence, principal)
         }
         val gateway = ai.gateway ?: throw notConfigured()

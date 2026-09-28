@@ -25,9 +25,15 @@ object PracticeAccess {
 object PracticeTime {
 
     /** Start of the student's current day in their timezone ("today" for budgets, stats and limits). */
-    fun startOfDay(studentId: UUID, now: OffsetDateTime): OffsetDateTime {
-        val zone = runCatching { ZoneId.of(UserTable.findByIdOrThrow(studentId, "User")[UserTable.timezone]) }
-            .getOrDefault(ZoneOffset.UTC)
-        return now.atZoneSameInstant(zone).toLocalDate().atStartOfDay(zone).toOffsetDateTime()
+    fun startOfDay(studentId: UUID, now: OffsetDateTime): OffsetDateTime =
+        now.atZoneSameInstant(zone(studentId)).toLocalDate().atStartOfDay(zone(studentId)).toOffsetDateTime()
+
+    /** Start of the student's next day (their local midnight, DST-aware). */
+    fun endOfDay(studentId: UUID, now: OffsetDateTime): OffsetDateTime {
+        val zone = zone(studentId)
+        return now.atZoneSameInstant(zone).toLocalDate().plusDays(1).atStartOfDay(zone).toOffsetDateTime()
     }
+
+    private fun zone(studentId: UUID): ZoneId =
+        runCatching { ZoneId.of(UserTable.findByIdOrThrow(studentId, "User")[UserTable.timezone]) }.getOrDefault(ZoneOffset.UTC)
 }

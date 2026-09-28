@@ -1,9 +1,11 @@
 package com.gvart.parleyroom.common.transfer
 
+import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import java.time.OffsetDateTime
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
@@ -23,6 +25,10 @@ data class ProblemDetail(
     /** What is still tagged with a topic that cannot be deleted without `force`. */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val usage: TagUsage? = null,
+    /** When a daily limit lifts again (e.g. PRACTICE_SENTENCE_LIMIT). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val resetsAt: OffsetDateTime? = null,
 ) {
     companion object {
         fun of(httpStatus: HttpStatusCode, detail: String? = null, code: String? = null, pointer: String? = null): ProblemDetail {
