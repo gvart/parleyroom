@@ -8,6 +8,7 @@ import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.storage.StorageService
+import com.gvart.parleyroom.homework.data.AssignmentItemTable
 import com.gvart.parleyroom.homework.data.AssignmentTable
 import com.gvart.parleyroom.homework.data.AutoResult
 import com.gvart.parleyroom.homework.data.HomeworkAnswerTable
@@ -33,6 +34,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greaterEq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.inSubQuery
 import org.jetbrains.exposed.v1.core.lessEq
 import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -57,6 +59,8 @@ class HomeworkService(
     data class ListFilter(
         val studentId: UUID? = null,
         val assignmentId: UUID? = null,
+        /** Source document of a DOCUMENT item (the snapshot keeps it). */
+        val documentId: UUID? = null,
         val lessonId: UUID? = null,
         val statuses: List<HomeworkStatus> = emptyList(),
         val dueBefore: LocalDate? = null,
@@ -76,6 +80,12 @@ class HomeworkService(
             query.andWhere { HomeworkTable.studentId eq id }
         }
         filter.assignmentId?.let { id -> query.andWhere { HomeworkTable.assignmentId eq id } }
+        filter.documentId?.let { id ->
+            query.andWhere {
+                HomeworkTable.assignmentId inSubQuery AssignmentItemTable.select(AssignmentItemTable.assignmentId)
+                    .where { AssignmentItemTable.documentId eq id }
+            }
+        }
         filter.lessonId?.let { id -> query.andWhere { AssignmentTable.lessonId eq id } }
         if (filter.statuses.isNotEmpty()) query.andWhere { HomeworkTable.status inList filter.statuses }
         filter.dueBefore?.let { date -> query.andWhere { AssignmentTable.dueDate lessEq date } }

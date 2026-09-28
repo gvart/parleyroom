@@ -491,6 +491,22 @@ class HomeworkIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    fun `homework can be listed by source document`() = testApp {
+        val client = createJsonClient(this)
+        val teacher = getTeacherToken(client)
+        val withDocument = assignDocument(client, teacher)
+        HomeworkFixtures.assignTextTask(client, teacher, STUDENT_ID)
+        val documentId = withDocument.items.first().documentId
+
+        val forTeacher = send(client, "GET", "/api/v1/homework?documentId=$documentId", teacher).body<HomeworkPageResponse>()
+        assertEquals(listOf(withDocument.id), forTeacher.homework.map { it.assignmentId })
+        val forStudent = send(client, "GET", "/api/v1/homework?documentId=$documentId", getStudentToken(client)).body<HomeworkPageResponse>()
+        assertEquals(listOf(withDocument.id), forStudent.homework.map { it.assignmentId })
+        val forOther = send(client, "GET", "/api/v1/homework?documentId=$documentId", getStudent2Token(client)).body<HomeworkPageResponse>()
+        assertTrue(forOther.homework.isEmpty())
+    }
+
+    @Test
     fun `teacher removes one student's homework`() = testApp {
         val client = createJsonClient(this)
         val teacher = getTeacherToken(client)

@@ -158,7 +158,10 @@ class HomeworkUploadIntegrationTest : IntegrationTest() {
         assertEquals("HOMEWORK_ANSWER_INVALID", bogus.code())
 
         saveAnswer(client, student, id, item, """{ "uploadIds": ["${uploaded.id}"] }""")
-        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/homework/$id/uploads/${uploaded.id}") { bearerAuth(student) }.status)
+        val otherItem = assignment.items[1].id
+        assertEquals(HttpStatusCode.NotFound, client.delete("/api/v1/homework/$id/items/$otherItem/uploads/${uploaded.id}") { bearerAuth(student) }.status)
+        assertEquals(HttpStatusCode.Forbidden, client.delete("/api/v1/homework/$id/items/$item/uploads/${uploaded.id}") { bearerAuth(teacher) }.status)
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/homework/$id/items/$item/uploads/${uploaded.id}") { bearerAuth(student) }.status)
         val view = client.get("/api/v1/homework/$id") { bearerAuth(student) }.body<HomeworkResponse>()
         assertEquals("""{"uploadIds":[]}""", view.units.first().answer.toString())
         assertEquals(0, view.answeredUnits)

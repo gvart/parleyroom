@@ -75,13 +75,15 @@ class HomeworkUploadService(
         toResponse(HomeworkUploadTable.selectAll().where { HomeworkUploadTable.id eq uploadId }.single())
     }
 
-    fun delete(homeworkId: UUID, uploadId: UUID, principal: UserPrincipal) {
+    /** Student, while OPEN (e.g. to re-record). The upload must belong to [assignmentItemId]. */
+    fun delete(homeworkId: UUID, assignmentItemId: UUID, uploadId: UUID, principal: UserPrincipal) {
         val key = transaction {
             val row = views.requireOwnHomework(homeworkId, principal)
             if (row[HomeworkTable.status] != HomeworkStatus.OPEN)
                 throw ConflictException("Homework is ${row[HomeworkTable.status]} and cannot be changed", code = "SUBMISSION_LOCKED")
             val upload = findUpload(homeworkId, uploadId)
             val itemId = upload[HomeworkUploadTable.assignmentItemId].value
+            if (itemId != assignmentItemId) throw uploadNotFound()
             HomeworkAnswerTable.selectAll()
                 .where {
                     (HomeworkAnswerTable.homeworkId eq homeworkId) and

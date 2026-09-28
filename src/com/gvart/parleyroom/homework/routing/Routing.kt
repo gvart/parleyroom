@@ -131,6 +131,7 @@ fun Application.configureHomeworkRouting() {
                     val filter = HomeworkService.ListFilter(
                         studentId = call.getQueryUUID("studentId"),
                         assignmentId = call.getQueryUUID("assignmentId"),
+                        documentId = call.getQueryUUID("documentId"),
                         lessonId = call.getQueryUUID("lessonId"),
                         statuses = params["status"]?.split(',')?.filter(String::isNotBlank)?.map { value ->
                             enumOrBad<HomeworkStatus>(value.trim(), "status")
@@ -146,6 +147,7 @@ fun Application.configureHomeworkRouting() {
                     parameters {
                         query("studentId") { required = false }
                         query("assignmentId") { required = false }
+                        query("documentId") { description = "Homework with a DOCUMENT item made from this document"; required = false }
                         query("lessonId") { required = false }
                         query("status") { description = "Comma list of OPEN, SUBMITTED, REVIEWED, DONE"; required = false }
                         query("dueBefore") { description = "YYYY-MM-DD, inclusive"; required = false }
@@ -268,8 +270,8 @@ fun Application.configureHomeworkRouting() {
                         }
                     }
 
-                    delete("/uploads/{uploadId}") {
-                        uploadService.delete(call.getPathUUID(), call.getPathUUID("uploadId"), call.requirePrincipal())
+                    delete("/items/{itemId}/uploads/{uploadId}") {
+                        uploadService.delete(call.getPathUUID(), call.getPathUUID("itemId"), call.getPathUUID("uploadId"), call.requirePrincipal())
                         call.respond(HttpStatusCode.NoContent)
                     }.describe {
                         summary = "Delete an upload"

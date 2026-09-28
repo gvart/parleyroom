@@ -326,7 +326,8 @@ SUBMITTED|REVIEWED --review RETURNED--> OPEN (rework, then submit again)
 - `lastOutcome: REVIEWED | RETURNED | DONE | null` = the teacher's latest review outcome. After a
   return the status is `OPEN` again with `lastOutcome = RETURNED`, `returnedAt` and the return
   `feedback`, so the portal can show "zur Überarbeitung zurückgegeben". It stays until the next
-  review outcome.
+  review outcome. `returnedAt` is never cleared (it survives the resubmit), so "returned, not yet
+  resubmitted" = `status == OPEN && lastOutcome == RETURNED`.
 - Any write in the wrong state → 409 `SUBMISSION_LOCKED` (student answer/upload/submit when not
   OPEN) or 409 `HOMEWORK_INVALID_STATE` (review actions).
 
@@ -372,19 +373,20 @@ not listed are untouched. Only units that exist in the assignment (400
 ### Endpoints — student (and teacher read)
 
 ```
-GET    /api/v1/homework?studentId=&assignmentId=&lessonId=&status=OPEN,SUBMITTED&dueBefore=&dueAfter=&sort=due|submitted|created&page=&pageSize=
+GET    /api/v1/homework?studentId=&assignmentId=&documentId=&lessonId=&status=OPEN,SUBMITTED&dueBefore=&dueAfter=&sort=due|submitted|created&page=&pageSize=
        -> { homework: [HomeworkSummary], total, page, pageSize }
 GET    /api/v1/homework/{id}               -> Homework
 GET    /api/v1/homework/counts             -> teacher/admin: { toReview, overdue, openTotal } · student: { open, dueSoon, returned }
 PUT    /api/v1/homework/{id}/answers       Body: { answers: [{ assignmentItemId, blockId?, itemId?, answer: {…} | null }] } -> AnswersSaved
 POST   /api/v1/homework/{id}/submit        (no body) -> Homework
 POST   /api/v1/homework/{id}/items/{assignmentItemId}/uploads   multipart `file` -> 201 HomeworkUpload
-DELETE /api/v1/homework/{id}/uploads/{uploadId}                 -> 204
+DELETE /api/v1/homework/{id}/items/{assignmentItemId}/uploads/{uploadId}  -> 204 (re-record: own upload, OPEN only)
 GET    /api/v1/homework/{id}/uploads/{uploadId}/file            -> bytes (inline, stored Content-Type)
 ```
 Roles: `GET` = the student, the assignment's teacher, admin (others: 404 `HOMEWORK_NOT_FOUND`).
 List: students → own; teachers → homework of their assignments (`studentId` filter must be linked);
-admins → all. `status` is a comma list. Sort: `due` = dueDate asc nulls last (default for
+admins → all. `documentId` = homework with a DOCUMENT item made from that document (the
+snapshot keeps the source id). `status` is a comma list. Sort: `due` = dueDate asc nulls last (default for
 students), `submitted` = submittedAt asc (the teacher's "Hausaufgaben zu korrigieren" queue =
 `status=SUBMITTED&sort=submitted`), `created` = desc (default for teachers).
 Answers / submit / uploads: the assigned student only (teacher/admin 403, other students 404). `PUT …/answers` is a
@@ -412,7 +414,8 @@ Content type = the part's `Content-Type` without parameters (`audio/webm;codecs=
 Stored at `homework/{homeworkId}/{uploadId}/{safeName}`; streamed back through the API (authed
 `GET …/file`) to the student and — once submitted — the teacher / admin. Deleted with the homework/assignment. The browser records
 audio with `MediaRecorder` and uploads the blob like a file.
-`HomeworkUpload = { id, assignmentItemId, fileName, contentType, size, downloadUrl, createdAt }`.
+`HomeworkUpload = { id, assignmentItemId, fileName, contentType, size, downloadUrl, createdAt }`;
+`downloadUrl` is an API path like the material one (`/api/v1/homework/{id}/uploads/{uploadId}/file`).
 
 ### Materials access
 
