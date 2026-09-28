@@ -15,8 +15,7 @@ import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.lesson.transfer.CompleteLessonRequest
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
-import com.gvart.parleyroom.vocabulary.data.VocabCategory
-import com.gvart.parleyroom.vocabulary.data.VocabularyWordTable
+import com.gvart.parleyroom.vocabulary.seedStudentVocab
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
@@ -99,15 +98,7 @@ class StreakIntegrationTest : IntegrationTest() {
     fun `reviewing a word today starts a streak`() = testApp {
         val client = createJsonClient(this)
         val token = getStudentToken(client)
-        val wordId = transaction {
-            VocabularyWordTable.insertAndGetId {
-                it[studentId] = studentUuid
-                it[german] = "Hund"
-                it[english] = "Dog"
-                it[category] = VocabCategory.NOUN
-                it[addedAt] = OffsetDateTime.now()
-            }.value
-        }
+        val wordId = seedStudentVocab(studentUuid, lemma = "Hund")
 
         val review = client.post("/api/v1/vocabulary/$wordId/review") { bearerAuth(token) }
         assertEquals(HttpStatusCode.OK, review.status)

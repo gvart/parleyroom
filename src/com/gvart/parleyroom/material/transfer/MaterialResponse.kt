@@ -19,6 +19,8 @@ data class MaterialResponse(
     val contentType: String? = null,
     val fileSize: Long? = null,
     val downloadUrl: String? = null,
+    val topicIds: List<String> = emptyList(),
+    val grammarTopicIds: List<String> = emptyList(),
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
 )

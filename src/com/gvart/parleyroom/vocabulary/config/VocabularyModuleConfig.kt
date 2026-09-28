@@ -1,6 +1,8 @@
 package com.gvart.parleyroom.vocabulary.config
 
 import com.gvart.parleyroom.vocabulary.routing.configureVocabularyRouting
+import com.gvart.parleyroom.vocabulary.service.VocabEntryService
+import com.gvart.parleyroom.vocabulary.service.VocabSettingsService
 import com.gvart.parleyroom.vocabulary.service.VocabularyReviewReminderService
 import com.gvart.parleyroom.vocabulary.service.VocabularyService
 import io.ktor.server.application.Application
@@ -19,6 +21,8 @@ import kotlin.time.Duration
 fun Application.configureVocabularyModule() {
     dependencies {
         provide(VocabularyService::class)
+        provide(VocabEntryService::class)
+        provide(VocabSettingsService::class)
         provide(VocabularyReviewReminderService::class)
     }
 

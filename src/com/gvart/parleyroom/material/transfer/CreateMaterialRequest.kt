@@ -14,6 +14,8 @@ data class CreateMaterialRequest(
     val level: LanguageLevel? = null,
     val skill: MaterialSkill? = null,
     val url: String? = null,
+    val topicIds: List<String> = emptyList(),
+    val grammarTopicIds: List<String> = emptyList(),
 ) {
     fun validate(): ValidationResult {
         val errors = buildList {

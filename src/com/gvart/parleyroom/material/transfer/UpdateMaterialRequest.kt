@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 /**
  * PATCH body: only non-null fields are applied. To clear a tag or move to root,
  * use the dedicated sub-resource endpoints (e.g. `DELETE /materials/{id}/folder`).
+ * `topicIds` / `grammarTopicIds` replace the current tags when present (empty list clears).
  */
 @Serializable
 data class UpdateMaterialRequest(
@@ -14,4 +15,6 @@ data class UpdateMaterialRequest(
     val folderId: String? = null,
     val level: LanguageLevel? = null,
     val skill: MaterialSkill? = null,
+    val topicIds: List<String>? = null,
+    val grammarTopicIds: List<String>? = null,
 )

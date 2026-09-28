@@ -4,6 +4,9 @@ import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
 import com.gvart.parleyroom.lesson.data.LessonStatus
+import com.gvart.parleyroom.topic.transfer.GrammarTopicRef
+import com.gvart.parleyroom.topic.transfer.TopicRef
+import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
 import kotlinx.serialization.Serializable
 import java.time.OffsetDateTime
 
@@ -21,6 +24,7 @@ data class LessonResponse(
     val topic: String,
     val level: LanguageLevel? = null,
     val maxParticipants: Int? = null,
+    val groupId: String? = null,
     val students: List<LessonStudentResponse> = emptyList(),
     @Serializable(with = OffsetDateTimeSerializer::class)
     val startedAt: OffsetDateTime? = null,
@@ -32,6 +36,15 @@ data class LessonResponse(
     val teacherWorkingOn: String? = null,
     val studentReflection: String? = null,
     val studentHardToday: String? = null,
+    /** Teacher-only: null for students. */
+    val rawNotes: String? = null,
+    /** Teacher-only: null for students. */
+    val promptUsed: String? = null,
+    val topics: List<TopicRef> = emptyList(),
+    val grammarTopics: List<GrammarTopicRef> = emptyList(),
+    val vocab: List<LessonVocabRef> = emptyList(),
+    val correctedSentences: List<CorrectedSentenceResponse> = emptyList(),
+    val vocabDisplayOverride: VocabDisplaySetting? = null,
     val createdBy: String,
     val updatedBy: String? = null,
     @Serializable(with = OffsetDateTimeSerializer::class)

@@ -95,7 +95,7 @@ class LessonService(
             .offset(page.offset)
             .toList()
 
-        val lessons = support.toResponses(rows).let { responses ->
+        val lessons = support.toResponses(rows, principal).let { responses ->
             if (principal.role != UserRole.STUDENT) responses
             else responses.map { r -> scrubForStudent(r, principal.id) }
         }
@@ -135,6 +135,10 @@ class LessonService(
                 teacherWorkingOn = null,
                 studentReflection = null,
                 studentHardToday = null,
+                topics = emptyList(),
+                grammarTopics = emptyList(),
+                vocab = emptyList(),
+                correctedSentences = emptyList(),
             )
         } else {
             // Group club — show title/topic/spots (joinable) but hide private docs.
@@ -146,6 +150,7 @@ class LessonService(
                 teacherWorkingOn = null,
                 studentReflection = null,
                 studentHardToday = null,
+                correctedSentences = emptyList(),
             )
         }
     }
@@ -153,7 +158,7 @@ class LessonService(
     fun getLesson(lessonId: UUID, principal: UserPrincipal): LessonResponse = transaction {
         val lesson = support.findLesson(lessonId)
         support.requireLessonParticipant(lessonId, lesson, principal)
-        support.toResponse(lesson)
+        support.toResponse(lesson, principal)
     }
 
     /**

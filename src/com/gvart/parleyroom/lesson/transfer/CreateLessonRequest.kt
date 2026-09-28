@@ -19,6 +19,7 @@ data class CreateLessonRequest(
     val topic: String,
     val level: LanguageLevel? = null,
     val maxParticipants: Int? = null,
+    val groupId: String? = null,
 ) {
     fun validate(): ValidationResult {
         val errors = buildList {
@@ -30,6 +31,7 @@ data class CreateLessonRequest(
             if (scheduledAt.isBefore(OffsetDateTime.now())) add("Scheduled time must be in the future")
             if (topic.isBlank()) add("Topic can't be empty")
             if (durationMinutes <= 0) add("Duration must be positive")
+            if (groupId != null && type == LessonType.ONE_ON_ONE) add("Only club lessons can belong to a group")
             maxParticipants?.let {
                 if (it <= 0) add("maxParticipants must be positive")
                 if (studentIds.size > it) add("studentIds exceeds maxParticipants")

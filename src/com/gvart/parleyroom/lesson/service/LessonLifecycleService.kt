@@ -4,10 +4,12 @@ import com.gvart.parleyroom.activity.data.ActivityKind
 import com.gvart.parleyroom.activity.service.LearningActivityRecorder
 import com.gvart.parleyroom.availability.service.AvailabilityValidator
 import com.gvart.parleyroom.common.data.LessonType
+import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
+import com.gvart.parleyroom.group.data.GroupTable
 import com.gvart.parleyroom.lesson.data.LessonDocumentTable
 import com.gvart.parleyroom.lesson.data.LessonEventTable
 import com.gvart.parleyroom.lesson.data.LessonEventType
@@ -114,6 +116,12 @@ class LessonLifecycleService(
 
         support.checkTeacherOverlap(teacherId, scheduledAt, request.durationMinutes, bufferMinutes = bufferMinutes)
 
+        val groupId = request.groupId?.let(UUID::fromString)?.also { id ->
+            val group = GroupTable.findByIdOrThrow(id, "Group")
+            if (group[GroupTable.teacherId].value != teacherId)
+                throw ForbiddenException("Group belongs to another teacher")
+        }
+
         val lessonId = LessonTable.insertAndGetId {
             it[LessonTable.title] = request.title
             it[LessonTable.type] = request.type
@@ -124,6 +132,7 @@ class LessonLifecycleService(
             it[LessonTable.topic] = request.topic
             it[LessonTable.level] = request.level
             it[LessonTable.maxParticipants] = request.maxParticipants
+            it[LessonTable.groupId] = groupId
             it[LessonTable.createdBy] = principal.id
         }
 
@@ -163,7 +172,7 @@ class LessonLifecycleService(
         LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
             .single()
-            .let(support::toResponse)
+            .let { support.toResponse(it, principal) }
     }
 
     fun acceptLesson(lessonId: UUID, principal: UserPrincipal): LessonResponse = transaction {
@@ -201,7 +210,7 @@ class LessonLifecycleService(
         LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
             .single()
-            .let(support::toResponse)
+            .let { support.toResponse(it, principal) }
     }
 
     fun cancelLesson(lessonId: UUID, request: CancelLessonRequest, principal: UserPrincipal): LessonResponse {
@@ -264,7 +273,7 @@ class LessonLifecycleService(
         val response = LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
             .single()
-            .let(support::toResponse)
+            .let { support.toResponse(it, principal) }
         response to currentStatus
     }
 
