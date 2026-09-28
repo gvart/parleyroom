@@ -1,0 +1,29 @@
+src/com/gvart/parleyroom/common/transfer/ProblemDetail.kt
+  s_2b5907717bc9a2::t_aa2bf5b3fbae41 3,8,28-31
+src/com/gvart/parleyroom/common/transfer/exception/TooManyRequestsException.kt
+  s_2b5907717bc9a2::t_ec9b582e75f4b7 3-10
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_2b5907717bc9a2::t_ead81a432fbd96 253-254
+src/com/gvart/parleyroom/practice/service/PracticeSupport.kt
+  s_2b5907717bc9a2::t_c75a4ae914a139 28-34,36-38
+src/com/gvart/parleyroom/practice/service/SentenceService.kt
+  s_2b5907717bc9a2::t_850146d706b31d 62-63,65-67,69-73
+test/com/gvart/parleyroom/practice/SentenceIntegrationTest.kt
+  s_2b5907717bc9a2::t_767818bbb06056 17,33-35,187-188,193-196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "dc436969e0b052ea72c4bfe7cdeba45315411114",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
