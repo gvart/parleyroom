@@ -94,8 +94,8 @@ object DocumentBlockValidator {
                                 pointer = "$path/id",
                             )
                     }
-                    // Rich text and solutions never carry ids.
-                    value.forEach { (key, child) -> if (key != "content" && key != "solution") visit(child, "$path/$key") }
+                    // Solutions only reference ids (correctOptionIds), they never define one.
+                    value.forEach { (key, child) -> if (key != "solution") visit(child, "$path/$key") }
                 }
                 is JsonArray -> value.forEachIndexed { i, child -> visit(child, "$path/$i") }
                 else -> Unit

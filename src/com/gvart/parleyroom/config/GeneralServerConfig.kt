@@ -9,6 +9,9 @@ import com.gvart.parleyroom.availability.transfer.CreateAvailabilityExceptionReq
 import com.gvart.parleyroom.availability.transfer.ReplaceWeeklyAvailabilityRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
+import com.gvart.parleyroom.document.transfer.CreateDocumentRequest
+import com.gvart.parleyroom.document.transfer.DocumentInput
+import com.gvart.parleyroom.document.transfer.DuplicateDocumentRequest
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
@@ -186,6 +189,9 @@ fun Application.generalConfig() {
         validate<GrammarTopicRequest> { it.validate() }
         validate<GroupRequest> { it.validate() }
         validate<UpdateLessonContentRequest> { it.validate() }
+        validate<CreateDocumentRequest> { it.validate() }
+        validate<DocumentInput> { it.validate() }
+        validate<DuplicateDocumentRequest> { it.validate() }
     }
 
 
