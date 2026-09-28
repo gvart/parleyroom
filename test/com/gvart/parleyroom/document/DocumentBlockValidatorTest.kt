@@ -37,10 +37,14 @@ class DocumentBlockValidatorTest {
     )
 
     @Test
-    fun `gap count must match the answers`() = assertInvalid(
-        """[{"id":"$ID1","type":"gap_fill","items":[{"id":"$ID2","text":"Ich ___ nach Hause.","solution":{"answers":[["gehe"],["x"]]}}]}]""",
-        "DOCUMENT_INVALID_BLOCK", "/blocks/0/items/0/solution/answers",
-    )
+    fun `more answer groups than gaps is saved and reported as incomplete`() {
+        val json = """[{"id":"$ID1","type":"gap_fill","items":[{"id":"$ID2","text":"Ich ___ nach Hause.","solution":{"answers":[["gehe"],["x"]]}}]}]"""
+        DocumentBlockValidator.validate(blocks(json))
+        assertEquals(
+            listOf("/blocks/0/items/0/solution/answers"),
+            DocumentBlockValidator.completenessIssues(blocks(json)).map { it.pointer },
+        )
+    }
 
     @Test
     fun `correct option must reference an option`() = assertInvalid(
@@ -113,10 +117,14 @@ class DocumentBlockValidatorTest {
     }
 
     @Test
-    fun `single choice with two correct options is rejected even while editing`() = assertInvalid(
-        """[{"id":"$ID1","type":"multiple_choice","items":[{"id":"$ID2","question":"?","options":[{"id":"$ID3","text":"a"},{"id":"$ID4","text":"b"}],"solution":{"correctOptionIds":["$ID3","$ID4"]}}]}]""",
-        "DOCUMENT_INVALID_BLOCK", "/blocks/0/items/0/solution/correctOptionIds",
-    )
+    fun `single choice with two correct options is saved and reported as incomplete`() {
+        val json = """[{"id":"$ID1","type":"multiple_choice","items":[{"id":"$ID2","question":"?","multiple":false,"options":[{"id":"$ID3","text":"a"},{"id":"$ID4","text":"b"}],"solution":{"correctOptionIds":["$ID3","$ID4"]}}]}]"""
+        DocumentBlockValidator.validate(blocks(json))
+        assertEquals(
+            listOf("/blocks/0/items/0/solution/correctOptionIds"),
+            DocumentBlockValidator.completenessIssues(blocks(json)).map { it.pointer },
+        )
+    }
 
     @Test
     fun `choice question solution shape follows its kind`() = assertInvalid(

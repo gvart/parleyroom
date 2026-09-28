@@ -403,9 +403,10 @@ editing:
 - empty strings in every text field (heading text, question, option text, sentence, prompt, exam,
   part, writing points, answers);
 - empty lists (`items`, `questions`, `options`, `rows`, `correctOptionIds`, answer lists);
-- `gap_fill`: `solution.answers` may have **fewer** groups than gaps (more is 400);
+- `gap_fill`: `solution.answers` may have fewer or more groups than gaps (e.g. a `___` was just deleted);
 - `media` with neither `url` nor `materialId` (null / `""` / absent) — but never both;
-- single-choice MC items with 0 or 1 correct option (more than one needs `multiple: true`).
+- MC items with any number of correct options, also when `multiple` is false (e.g. just switched from multiple).
+Only `url` + `materialId` both set on one media block is still rejected.
 `correctOptionIds` must always reference options of the same item.
 
 A **strict "complete" profile** (all required texts non-empty, ≥ 1 item per exercise, every gap

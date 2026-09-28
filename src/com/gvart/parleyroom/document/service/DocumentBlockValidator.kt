@@ -18,10 +18,11 @@ import java.util.UUID
 /**
  * Validates document blocks. [validate] is the structural check run on every save: the
  * published JSON Schema (`resources/document-blocks.schema.json`) plus the rules a schema
- * cannot express (unique ids, gap counts, option references). It accepts half-finished
- * blocks (empty texts and lists) because the editor autosaves while typing. Library
- * references (vocab entries, materials) are returned for the caller to check against the
- * owner's library. [completenessIssues] is the strict profile for finished content (AI output).
+ * cannot express (unique ids, option references). It accepts half-finished blocks (empty
+ * texts and lists, answer keys that no longer match the text) because the editor autosaves
+ * while typing. Library references (vocab entries, materials) are returned for the caller
+ * to check against the owner's library. [completenessIssues] is the strict profile for
+ * finished content (AI output).
  */
 object DocumentBlockValidator {
 
@@ -65,8 +66,9 @@ object DocumentBlockValidator {
             val pointer = "/blocks/$index"
             collectIds(block, pointer, seenIds)
             when (block.string("type")) {
-                "gap_fill" -> checkGapFill(block, pointer)
-                "multiple_choice" -> checkMultipleChoice(block, pointer)
+                "multiple_choice" -> block.array("items").forEachIndexed { i, item ->
+                    checkCorrectOptions(item.jsonObject, "$pointer/items/$i")
+                }
                 "reading", "exam_part" -> checkQuestions(block, pointer)
                 "media" -> {
                     checkQuestions(block, pointer)
@@ -106,16 +108,6 @@ object DocumentBlockValidator {
         visit(block, pointer)
     }
 
-    private fun checkGapFill(block: JsonObject, pointer: String) {
-        block.array("items").forEachIndexed { i, element ->
-            val item = element.jsonObject
-            val answers = item.solution()?.array("answers") ?: return@forEachIndexed
-            val gaps = countGaps(item.string("text")!!)
-            if (answers.size > gaps)
-                throw invalid("$pointer/items/$i/solution/answers", "text has $gaps gap(s) but ${answers.size} answer group(s)")
-        }
-    }
-
     private fun countGaps(text: String): Int {
         var count = 0
         var index = text.indexOf(GAP)
@@ -129,32 +121,20 @@ object DocumentBlockValidator {
         return count
     }
 
-    private fun checkMultipleChoice(block: JsonObject, pointer: String) {
-        block.array("items").forEachIndexed { i, element ->
-            val item = element.jsonObject
-            val itemPointer = "$pointer/items/$i"
-            val correct = checkCorrectOptions(item, itemPointer) ?: return@forEachIndexed
-            val multiple = (item["multiple"] as? JsonPrimitive)?.content == "true"
-            if (!multiple && correct.size > 1)
-                throw invalid("$itemPointer/solution/correctOptionIds", "single-choice item has more than one correct option")
-        }
-    }
-
     private fun checkQuestions(block: JsonObject, pointer: String) {
         block.array("questions").forEachIndexed { i, element ->
             checkCorrectOptions(element.jsonObject, "$pointer/questions/$i")
         }
     }
 
-    /** Correct option ids must reference the item's own options. Returns them, or null without a solution. */
-    private fun checkCorrectOptions(item: JsonObject, pointer: String): List<String>? {
+    /** Correct option ids must reference the item's own options. */
+    private fun checkCorrectOptions(item: JsonObject, pointer: String) {
         val correct = item.solution()?.get("correctOptionIds")?.jsonArray?.map { it.jsonPrimitive.content.lowercase() }
-            ?: return null
+            ?: return
         val optionIds = item["options"]?.jsonArray?.map { it.jsonObject.string("id")!!.lowercase() }.orEmpty().toSet()
         correct.forEachIndexed { j, id ->
             if (id !in optionIds) throw invalid("$pointer/solution/correctOptionIds/$j", "unknown option id $id")
         }
-        return correct
     }
 
     data class Issue(val pointer: String, val message: String)

@@ -214,7 +214,12 @@ class DocumentIntegrationTest : IntegrationTest() {
         val id = createDocument(client, token, blocks = "[]").body<DocumentResponse>().id
         val draft = """[{"id":"${UUID.randomUUID()}","type":"free_sentences","purpose":"SPEAKING","interactive":true,
             "items":[{"id":"${UUID.randomUUID()}","prompt":""}]},
-            {"id":"${UUID.randomUUID()}","type":"media","kind":"AUDIO","url":null,"questions":[]}]"""
+            {"id":"${UUID.randomUUID()}","type":"media","kind":"AUDIO","url":null,"questions":[]},
+            {"id":"${UUID.randomUUID()}","type":"gap_fill","items":[{"id":"${UUID.randomUUID()}","text":"Ich gehe",
+                "solution":{"answers":[["gehe"]]}}]},
+            {"id":"${UUID.randomUUID()}","type":"multiple_choice","items":[{"id":"${UUID.randomUUID()}","question":"?","multiple":false,
+                "options":[{"id":"$OPTION_A","text":"a"},{"id":"$OPTION_B","text":"b"}],
+                "solution":{"correctOptionIds":["$OPTION_A","$OPTION_B"]}}]}]"""
         val response = putDocument(client, token, id, "Entwurf", blocks = draft)
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
         assertEquals("SPEAKING", response.body<DocumentResponse>().blocks[0].jsonObject["purpose"]!!.jsonPrimitive.content)
@@ -319,6 +324,11 @@ class DocumentIntegrationTest : IntegrationTest() {
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/documents/$id") { bearerAuth(token) }.status)
         val gone = client.get("/api/v1/documents/$id") { bearerAuth(token) }
         assertEquals("DOCUMENT_NOT_FOUND", gone.body<ProblemDetail>().code)
+    }
+
+    private companion object {
+        val OPTION_A: UUID = UUID.randomUUID()
+        val OPTION_B: UUID = UUID.randomUUID()
     }
 
     private fun ids(blocks: JsonArray): Set<String> {
