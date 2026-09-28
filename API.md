@@ -12,6 +12,7 @@ PATCH  /api/v1/topics/{id}               Body: { name?, parentId?, moveToRoot?: 
 DELETE /api/v1/topics/{id}?force=true    409 TOPIC_HAS_CHILDREN if it has sub-topics (also with force);
                                          409 TOPIC_HAS_CONTENT if anything is tagged with it, unless force=true
 POST   /api/v1/topics/{id}/merge         Body: { targetId } -> 200 Topic (the target)   merge {id} INTO targetId
+POST   /api/v1/topics/{id}/merge?dryRun=true   same body -> 200 MergePreview, nothing is changed
 ```
 Topic: `{ id, teacherId, parentId?, name, levels: [Level], createdAt }`. Sibling names are
 unique case-insensitively (409 `TOPIC_DUPLICATE`); moving under a descendant is 400 `TOPIC_CYCLE`.
@@ -23,6 +24,7 @@ GET    /api/v1/grammar-topics/{id}
 PUT    /api/v1/grammar-topics/{id}       full replace, same body
 DELETE /api/v1/grammar-topics/{id}?force=true   409 GRAMMAR_TOPIC_HAS_CONTENT if tagged anywhere, unless force=true
 POST   /api/v1/grammar-topics/{id}/merge Body: { targetId } -> 200 GrammarTopic (the target)
+POST   /api/v1/grammar-topics/{id}/merge?dryRun=true   same body -> 200 MergePreview, nothing is changed
 PUT    /api/v1/grammar-topics/order      Body: { level: A1..C2 | null, ids: [uuid] } -> [GrammarTopic] of that level, in order
 ```
 GrammarTopic: `{ id, teacherId, name, level?, category?, explanation?, examples, position, createdAt }`.
@@ -45,9 +47,16 @@ topic: documents, materials, lessons). Deleting never deletes content:
 3. A's children move under B. A child whose name clashes (case-insensitive) with a child of B is
    **merged recursively** into that child (so `Alltag > Haushalt` merged into `Wohnen` joins `Wohnen > Haushalt`).
 4. `B.levels = B.levels ∪ A.levels`; B keeps its name and parent.
-5. `vocab_table.topicId` in A's owner's documents is rewritten to B (metadata-only: no version
-   snapshot, `revision` unchanged).
+5. `vocab_table.topicId` in A's owner's documents is rewritten to B. Each rewritten document gets
+   `revision + 1` and a new `updatedAt` (no version snapshot), so an open editor's next autosave
+   gets 409 `DOCUMENT_CONFLICT` and reloads instead of writing the old id back.
 6. A is deleted. Response: B.
+
+`MergePreview` (`dryRun=true`, same validation and errors as the real merge) = what would move
+from A to B: `{ words, documents, materials, lessons, children, childClashes }` — tag rows that
+would be re-pointed (rows that already exist on B are not counted), `children` = A's direct
+sub-topics, `childClashes` = how many of them would be merged recursively. Grammar: `words`,
+`children`, `childClashes` are 0.
 
 Grammar merge (`POST /grammar-topics/{A}/merge { targetId: B }`): same checks (404
 `GRAMMAR_TOPIC_NOT_FOUND`, 400 `GRAMMAR_TOPIC_MERGE_INVALID` for A = B); document / material /
@@ -81,9 +90,10 @@ LibrarySummary {
              topics,                             // topics whose `levels` contain it (null: topics with no levels)
              grammarTopics }],                   // by grammar topic level
   totals: { words, documents, materials, topics, grammarTopics },
-  topics: [{ topicId, words, documents, materials, lessons, coveredStudents }]   // every topic of the teacher,
-                                                  // counts of DIRECT tags only (the client rolls up subtrees)
-}
+  topics: [{ topicId,
+              words, documents, materials, lessons, coveredStudents,     // DIRECT tags on this topic only
+              subtree: { words, documents, materials } }]                // this topic + all descendants, distinct items
+}                                                                         // (an item tagged twice in the subtree counts once)
 TopicLibrary {
   topic: Topic,
   path: [TopicRef],                   // ancestors, root first (excludes the topic)
@@ -655,6 +665,12 @@ Anna reviews / refines → one transactional **publish**. Everything here is **t
 (the lesson's teacher; admins may read jobs). Students never see jobs or drafts.
 
 ### Configuration
+
+```
+GET /api/v1/ai/status -> { available: bool }    teacher only (students / admins 403)
+```
+`available` is false when no provider is configured; the portal then hides AI buttons (generate,
+fill-missing, suggest-tags).
 
 ```
 ai.provider  = anthropic | fake          AI_PROVIDER        (default anthropic)
