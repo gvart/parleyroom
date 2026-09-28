@@ -1,0 +1,29 @@
+test/com/gvart/parleyroom/document/DocumentBlockTypeFilterIntegrationTest.kt
+  s_2b5907717bc9a2::t_8dccc53cb57df4 1-53
+src/com/gvart/parleyroom/document/routing/Routing.kt
+  s_2b5907717bc9a2::t_fee1e3bc306816 63,70
+src/com/gvart/parleyroom/document/service/DocumentBlockValidator.kt
+  s_2b5907717bc9a2::t_deb0596ad16c1d 29-34
+src/com/gvart/parleyroom/document/service/DocumentService.kt
+  s_2b5907717bc9a2::t_73bb68ac1763e0 52,77,100-104
+src/com/gvart/parleyroom/document/service/DocumentSupport.kt
+  s_2b5907717bc9a2::t_553993db73a5d8 28,31,132
+src/com/gvart/parleyroom/document/transfer/DocumentDtos.kt
+  s_2b5907717bc9a2::t_0b630f835204c3 114-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "b7ceb9198d22c410387448c7ba2bced2b3a394a5",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
