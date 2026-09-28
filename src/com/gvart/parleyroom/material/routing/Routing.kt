@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.material.routing
 
 
+import com.gvart.parleyroom.ai.service.SuggestTagsService
 import com.gvart.parleyroom.common.routing.getPathUUID
 import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.data.LanguageLevel
@@ -154,7 +155,12 @@ fun Application.configureMaterialRouting() {
                         }
                     }
 
-                    val result = materialService.createMaterial(input, principal)
+                    val created = materialService.createMaterial(input, principal)
+                    val result = if (meta.suggestTags) {
+                        // Resolved per request: the AI module is configured after the material module.
+                        val suggestTags: SuggestTagsService = call.application.dependencies.resolve()
+                        created.copy(suggestTagsJobId = suggestTags.tryStart(UUID.fromString(created.id), principal))
+                    } else created
                     call.respond(HttpStatusCode.Created, result)
                 }.describe {
                     summary = "Create material"

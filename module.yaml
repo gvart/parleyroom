@@ -67,6 +67,7 @@ dependencies:
   - $libs.koog.anthropic
   - $libs.koog.http.client.ktor
   - $libs.json.schema.validator
+  - $libs.pdfbox
 
 test-dependencies:
   - $ktor.server.testHost

@@ -58,6 +58,7 @@ object GenerationJobs {
             kind = row[GenerationJobTable.kind],
             status = row[GenerationJobTable.status],
             lessonId = row[GenerationJobTable.lessonId]?.value?.toString(),
+            materialId = row[GenerationJobTable.materialId]?.value?.toString(),
             parentJobId = row[GenerationJobTable.parentJobId]?.value?.toString(),
             documentId = row[GenerationJobTable.documentId]?.value?.toString(),
             input = input(row),

@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.ai.service
 
 import com.gvart.parleyroom.common.data.LanguageLevel
+import com.gvart.parleyroom.material.data.MaterialSkill
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.document.service.DocumentBlockValidator
 import com.gvart.parleyroom.lesson.transfer.CorrectedSentenceInput
@@ -82,6 +83,15 @@ data class AiFilledEntry(
     val explanationDe: String? = null,
 )
 
+/** SUGGEST_TAGS model output. */
+@Serializable
+data class AiSuggestTagsOutput(
+    val level: LanguageLevel? = null,
+    val skill: MaterialSkill? = null,
+    val topics: List<AiTopic> = emptyList(),
+    val grammarTopics: List<AiGrammarTopic> = emptyList(),
+)
+
 data class Issue(val pointer: String, val message: String)
 
 /** A validation failure of model output; the issues are fed back to the model on retry. */
@@ -104,6 +114,7 @@ data class ValidatedOutput(
 object AiOutputParser {
 
     const val MAX_VOCAB = 150
+    const val MAX_SUGGESTED_TAGS = 5
     private const val MAX_ISSUES = 30
 
     val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
@@ -161,6 +172,26 @@ object AiOutputParser {
         }
         if (issues.isNotEmpty()) throw AiOutputInvalid(issues.take(MAX_ISSUES))
         return output
+    }
+
+    fun parseSuggestTags(text: String): AiSuggestTagsOutput {
+        val output = decode<AiSuggestTagsOutput>(text)
+        val issues = mutableListOf<Issue>()
+        if (output.topics.size > MAX_SUGGESTED_TAGS) issues += Issue("/topics", "at most $MAX_SUGGESTED_TAGS topics")
+        if (output.grammarTopics.size > MAX_SUGGESTED_TAGS) issues += Issue("/grammarTopics", "at most $MAX_SUGGESTED_TAGS grammar topics")
+        output.topics.forEachIndexed { i, topic ->
+            if (topic.name.isBlank() || topic.name.length > 255) issues += Issue("/topics/$i/name", "name must be 1..255 characters")
+            if (topic.parentName != null && topic.parentName.length > 255) issues += Issue("/topics/$i/parentName", "at most 255 characters")
+        }
+        output.grammarTopics.forEachIndexed { i, grammar ->
+            if (grammar.name.isBlank() || grammar.name.length > 255) issues += Issue("/grammarTopics/$i/name", "name must be 1..255 characters")
+        }
+        if (issues.isNotEmpty()) throw AiOutputInvalid(issues.take(MAX_ISSUES))
+        return output.copy(
+            topics = output.topics.map { it.copy(name = it.name.trim(), parentName = it.parentName?.trim()?.ifEmpty { null }) }
+                .distinctBy { it.name.lowercase() },
+            grammarTopics = output.grammarTopics.map { it.copy(name = it.name.trim()) }.distinctBy { it.name.lowercase() },
+        )
     }
 
     private inline fun <reified T> decode(text: String): T {

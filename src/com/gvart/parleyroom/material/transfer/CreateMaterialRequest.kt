@@ -16,6 +16,8 @@ data class CreateMaterialRequest(
     val url: String? = null,
     val topicIds: List<String> = emptyList(),
     val grammarTopicIds: List<String> = emptyList(),
+    /** Start an AI SUGGEST_TAGS job after the upload (see MaterialResponse.suggestTagsJobId). */
+    val suggestTags: Boolean = false,
 ) {
     fun validate(): ValidationResult {
         val errors = buildList {
