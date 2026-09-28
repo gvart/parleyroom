@@ -51,7 +51,6 @@ import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
-import java.time.OffsetDateTime
 import java.util.UUID
 
 /** The Nachbereitung panel: state, generate, refine and review. Publish lives in [NachbereitungPublishService]. */
@@ -195,7 +194,6 @@ class NachbereitungService(
                 it[title] = output.title
                 it[DocumentTable.blocks] = blocks
                 it[revision] = DocumentTable.revision + 1
-                it[updatedAt] = OffsetDateTime.now()
             }
             val result = review(ctx, output).copy(documentId = documentId.toString(), publishedEntries = kept)
             JobSuccess(GenerationJobs.json.encodeToJsonElement(result), completion.attempts, completion.usage, documentId)

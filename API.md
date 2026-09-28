@@ -861,9 +861,6 @@ onTrack = percent ≥ expectedPercent − 10          (10-point tolerance; past 
 Listing goals runs a fixed number of grouped queries per distinct teacher in the result (no per-goal
 queries).
 
-**Admin stats**: `GET /api/v1/admin/stats` keeps the field `domain.learningGoals`; it now counts
-`ACTIVE` goals of the new `goals` table.
-
 ### Tables (V14)
 
 `learning_goals` + enums `GOAL_SET_BY` / `GOAL_STATUS` dropped. `goals` (student_id, teacher_id,

@@ -11,6 +11,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
+import org.jetbrains.exposed.v1.datetime.CurrentTimestampWithTimeZone
 import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 import org.jetbrains.exposed.v1.json.jsonb
 
@@ -25,8 +26,9 @@ object DocumentTable : UUIDTable("documents") {
     val blocks = jsonb<JsonArray>("blocks", Json.Default)
     val createdFromLessonId = reference("created_from_lesson_id", LessonTable).nullable()
     val revision = integer("revision").default(1)
-    val createdAt = timestampWithTimeZone("created_at")
-    val updatedAt = timestampWithTimeZone("updated_at")
+    // Database clock only: the update trigger sets updated_at with now(), so inserts must too.
+    val createdAt = timestampWithTimeZone("created_at").defaultExpression(CurrentTimestampWithTimeZone)
+    val updatedAt = timestampWithTimeZone("updated_at").defaultExpression(CurrentTimestampWithTimeZone)
 }
 
 object DocumentTopicTable : Table("document_topics") {

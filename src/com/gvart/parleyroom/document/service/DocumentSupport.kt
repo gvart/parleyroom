@@ -39,7 +39,6 @@ import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
-import java.time.OffsetDateTime
 import java.util.UUID
 
 /** Access rules and response rendering for documents. Must be called inside a transaction. */
@@ -81,7 +80,6 @@ class DocumentSupport {
     fun bumpRevision(documentId: UUID) {
         DocumentTable.update({ DocumentTable.id eq documentId }) {
             it[revision] = DocumentTable.revision + 1
-            it[updatedAt] = OffsetDateTime.now()
         }
     }
 

@@ -95,13 +95,15 @@ class LessonDocumentLinkIntegrationTest : IntegrationTest() {
         val before = getLesson(client, lesson.id, studentToken).documents.single().updatedAt
 
         val heading = """[{"id":"${UUID.randomUUID()}","type":"heading","text":"Neu","level":2}]"""
-        client.put("/api/v1/documents/$documentId") {
+        val put = client.put("/api/v1/documents/$documentId") {
             bearerAuth(token)
             setBody(TextContent("""{"title":"Live","audience":"STUDENT","blocks":$heading,"revision":1}""", ContentType.Application.Json))
         }
+        assertEquals(HttpStatusCode.OK, put.status)
 
+        // Insert and update both take updated_at from the database clock, so the later write is strictly newer.
         val after = getLesson(client, lesson.id, studentToken).documents.single()
-        assertTrue(after.updatedAt.isAfter(before))
+        assertTrue(after.updatedAt.isAfter(before), "updatedAt $before -> ${after.updatedAt}")
         assertEquals(2, after.revision)
         val live = client.get("/api/v1/documents/$documentId") { bearerAuth(studentToken) }.body<DocumentResponse>()
         assertEquals("Neu", live.blocks.single().toString().substringAfter("\"text\":\"").substringBefore("\""))
