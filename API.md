@@ -252,7 +252,7 @@ when the student has several teachers (defaults to the earliest).
 
 **Scheduler.** FSRS-6 with the official default parameters, desired retention 0.9, learning steps
 1 min / 10 min, relearning step 10 min, max interval 36500 days, **no fuzz** (deterministic). It is a
-Kotlin port of `py-fsrs` v6.3.2 (`vocabulary/practice/Fsrs.kt`), unit-tested against py-fsrs
+Kotlin port of `py-fsrs` v6.3.2 (`practice/service/Fsrs.kt`), unit-tested against py-fsrs
 reference values. The only JVM library (`io.github.open-spaced-repetition:fsrs` 1.0.0, 07/2025) ships
 outdated defaults and pulls in Jackson + a shared seeded `Random`, so it is not used.
 
@@ -307,8 +307,20 @@ GET /api/v1/practice/queue?mode=DE_TO_MEANING&topicId=&lessonId=&level=&limit=20
 
 PracticeCard:
 ```json
-{ "mode": "ARTICLE", "isNew": true, "word": { /* StudentVocab, display-filtered, see mode table */ } }
+{
+  "mode": "DE_TO_MEANING", "isNew": true,
+  "word": { /* StudentVocab, display-filtered, see mode table */ },
+  "intervals": {
+    "AGAIN": { "dueAt": "ISO8601", "seconds": 60 },
+    "HARD":  { "dueAt": "ISO8601", "seconds": 330 },
+    "GOOD":  { "dueAt": "ISO8601", "seconds": 600 },
+    "EASY":  { "dueAt": "ISO8601", "seconds": 691200 }
+  }
+}
 ```
+`intervals` previews the next due date if the card were rated now with each rating, for button
+labels ("1 Min / 6 Min / 10 Min / 8 Tage"). The client formats `seconds` in the UI language (no
+server label). `ARTICLE` cards only have `AGAIN` and `GOOD`.
 
 #### Review (flashcards)
 
@@ -347,7 +359,7 @@ GET /api/v1/practice/stats?studentId=      student (own; param ignored), teacher
   "newLimit": 15, "newIntroducedToday": 10,
   "reviewedToday": 23,    // distinct words reviewed today
   "sentencesToday": 2, "sentenceLimit": 30,
-  "aiAvailable": true,    // show "write your own sentence"
+  "aiAvailable": true,    // students read it here to show "write your own sentence"
   "streak": { "current": 4, "longest": 9, "todayDone": true, "week": [...] }   // = /users/{id}/streak
 }
 ```
@@ -367,7 +379,7 @@ Sentence:
 ```json
 {
   "id": "uuid", "studentVocabId": "uuid", "studentId": "uuid", "entryId": "uuid",
-  "lemma": "kümmern", "article": null, "wordType": "VERB",
+  "word": { "lemma": "kümmern", "article": null, "wordType": "VERB" },
   "sentence": "Ich kümmere mich um die Blumen.",
   "feedback": {
     "isCorrect": true,
@@ -393,13 +405,19 @@ Sentence:
   count toward the limit.
 - Every successful sentence + feedback is stored (`student_vocab_sentences`) and counts as a
   `VOCAB_SENTENCE` learning activity for the streak.
-- **Privacy**: the model only receives the sentence, the target word (lemma, article, word type),
-  the level and the translation language code. No names, emails or ids. The system prompt is
+- **Privacy**: the model only receives the sentence, the target word (lemma, article, word type,
+  government), the level and the translation language code. No names, emails, ids,
+  translations or topics. The system prompt is
   `resources/ai/sentence-feedback-system.md` (editable).
-- Fake provider: `usesWord` = the lemma stem (lemma minus a trailing `-en`/`-n`, case-insensitive)
-  occurs in the sentence; `isCorrect` = starts with a capital letter and ends with `.`, `!` or `?`;
-  `corrected` capitalises and adds a `.`; explanation / translation are fixed strings. The
-  `[fake:*]` markers work in the sentence.
+- Fake provider (deterministic): `usesWord` = the lemma stem (lemma minus a trailing `-en`/`-n`,
+  case-insensitive) occurs in the sentence; `isCorrect` = `usesWord` and no `[fake:wrong]` marker.
+  Correct → `corrected` = the sentence, explanation `"Richtig, gut gemacht!"`. Wrong → `corrected` =
+  the sentence without markers, first letter capitalised, `.` appended if missing; explanation
+  `"Benutze das Wort „<lemma>“ im Satz."` (word missing) or `"Achte auf Großschreibung und
+  Satzzeichen."`. `explanationTranslation` = `"(<lang>) <explanation>"`. The usual markers work
+  in the sentence: `[fake:error]` → 503 `AI_PROVIDER_ERROR`, `[fake:rate-limit]` → 429
+  `AI_RATE_LIMITED`, `[fake:invalid]` → 503 `AI_OUTPUT_INVALID`, `[fake:invalid-once]` → retry
+  succeeds, `[fake:delay=<ms>]` (→ 503 `AI_TIMEOUT` beyond `practice.sentence_timeout`).
 
 Config: `practice.new_cards_per_day = 15` (`PRACTICE_NEW_CARDS_PER_DAY`),
 `practice.learned_stability_days = 21`, `practice.sentences_per_day = 30`
