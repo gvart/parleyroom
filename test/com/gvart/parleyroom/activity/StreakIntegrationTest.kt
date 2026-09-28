@@ -9,7 +9,6 @@ import com.gvart.parleyroom.homework.HomeworkFixtures
 import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
-import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.vocabulary.seedStudentVocab
 import io.ktor.client.HttpClient
@@ -269,87 +268,6 @@ class StreakIntegrationTest : IntegrationTest() {
     }
 
     // -- Authorization --
-
-    @Test
-    fun `student can read own streak by id`() = testApp {
-        val client = createJsonClient(this)
-        val token = getStudentToken(client)
-        activityOn(today())
-
-        val response = client.get("/api/v1/users/$STUDENT_ID/streak") { bearerAuth(token) }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-        assertEquals(1, response.body<StreakResponse>().current)
-    }
-
-    @Test
-    fun `teacher can read streak of their student`() = testApp {
-        val client = createJsonClient(this)
-        val token = getTeacherToken(client)
-        activityOn(today())
-
-        val response = client.get("/api/v1/users/$STUDENT_ID/streak") { bearerAuth(token) }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-        assertEquals(1, response.body<StreakResponse>().current)
-    }
-
-    @Test
-    fun `admin can read any user's streak`() = testApp {
-        val client = createJsonClient(this)
-        val token = getAdminToken(client)
-
-        val response = client.get("/api/v1/users/$STUDENT_2_ID/streak") { bearerAuth(token) }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-    }
-
-    @Test
-    fun `unrelated teacher cannot read student's streak`() = testApp {
-        val client = createJsonClient(this)
-        getAdminToken(client) // boots the app so the fixture below survives reseeding
-        val passwordHash = transaction {
-            UserTable.selectAll().where { UserTable.id eq studentUuid }.single()[UserTable.passwordHash]
-        }
-        transaction {
-            UserTable.insert {
-                it[email] = "teacher2@test.com"
-                it[firstName] = "Other"
-                it[lastName] = "Teacher"
-                it[role] = UserRole.TEACHER
-                it[UserTable.passwordHash] = passwordHash
-                it[initials] = "OT"
-                it[createdAt] = OffsetDateTime.now()
-                it[updatedAt] = OffsetDateTime.now()
-            }
-        }
-
-        val response = client.get("/api/v1/users/$STUDENT_ID/streak") {
-            bearerAuth(getToken(client, "teacher2@test.com"))
-        }
-
-        assertEquals(HttpStatusCode.Forbidden, response.status)
-    }
-
-    @Test
-    fun `student cannot read another student's streak`() = testApp {
-        val client = createJsonClient(this)
-        val token = getStudentToken(client)
-
-        val response = client.get("/api/v1/users/$STUDENT_2_ID/streak") { bearerAuth(token) }
-
-        assertEquals(HttpStatusCode.Forbidden, response.status)
-    }
-
-    @Test
-    fun `unknown user returns not found for admin`() = testApp {
-        val client = createJsonClient(this)
-        val token = getAdminToken(client)
-
-        val response = client.get("/api/v1/users/${UUID.randomUUID()}/streak") { bearerAuth(token) }
-
-        assertEquals(HttpStatusCode.NotFound, response.status)
-    }
 
     @Test
     fun `streak requires authentication`() = testApp {

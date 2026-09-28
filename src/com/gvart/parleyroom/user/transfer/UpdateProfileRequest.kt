@@ -10,6 +10,7 @@ data class UpdateProfileRequest(
     val firstName: String? = null,
     val lastName: String? = null,
     val locale: String? = null,
+    /** Not settable here (teachers: PUT /students/{id}/level, admins: PATCH /admin/users/{id}); always rejected. */
     val level: LanguageLevel? = null,
     val timezone: String? = null,
     val bookingBufferMinutes: Int? = null,
@@ -20,6 +21,7 @@ data class UpdateProfileRequest(
             val noField = firstName == null && lastName == null && locale == null && level == null
                     && timezone == null && bookingBufferMinutes == null && bookingMinNoticeHours == null
             if (noField) add("At least one field must be provided")
+            if (level != null) add("level can't be changed here; it is set by the teacher")
             if (firstName != null && firstName.trim().isEmpty()) add("First name can't be blank")
             if (lastName != null && lastName.trim().isEmpty()) add("Last name can't be blank")
             if (timezone != null) {

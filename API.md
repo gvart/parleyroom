@@ -365,7 +365,7 @@ GET /api/v1/practice/stats?studentId=      student (own; param ignored), teacher
   "reviewedToday": 23,    // distinct words reviewed today
   "sentencesToday": 2, "sentenceLimit": 30,
   "aiAvailable": true,    // students read it here to show "write your own sentence"
-  "streak": { "current": 4, "longest": 9, "todayDone": true, "week": [...] }   // = /users/{id}/streak
+  "streak": { "current": 4, "longest": 9, "todayDone": true, "week": [...] }   // = /users/me/streak for the student
 }
 ```
 Teachers/admins must pass `studentId` (400 `VALIDATION_FAILED` otherwise).
@@ -785,7 +785,7 @@ ProgressSummary {
   grammar: GrammarCounts,                        // over all checklist levels
   topics: { total, covered, percent? },          // percent null when total = 0
   vocab: { total, learned, percent? },           // all S's words of T's library (not level-filtered)
-  streak: { current, longest, todayDone }        // the student's learning streak (same as /users/{id}/streak)
+  streak: { current, longest, todayDone }        // the student's learning streak (same as the student's /users/me/streak)
 }
 ```
 
@@ -1721,5 +1721,9 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 
 `UserResponse.locale` is the user's interface language (`en` | `de`, default `en`).
 Set it with `PATCH /api/v1/users/me { "locale": "de" }` (admins: `PATCH /api/v1/admin/users/{id}`).
-Unsupported values return 400 `UNSUPPORTED_LOCALE`. The supported list lives in
+Unsupported values return 400 `UNSUPPORTED_LOCALE`.
+
+`PATCH /api/v1/users/me` does **not** change `level`: sending it returns 400 `VALIDATION_FAILED`
+("level can't be changed here; it is set by the teacher") and nothing is updated. Teachers set a
+student's level with `PUT /api/v1/students/{studentId}/level`, admins with `PATCH /api/v1/admin/users/{id}`. The supported list lives in
 `user/data/SupportedLocale.kt`; adding a language is a one-line change there.
