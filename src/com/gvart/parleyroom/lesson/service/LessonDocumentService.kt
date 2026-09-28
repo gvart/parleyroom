@@ -26,7 +26,7 @@ class LessonDocumentService(
 
     /**
      * Lazy-creates the lesson_documents row if it does not yet exist.
-     * Called from startLesson and from sync, so notes and shared document can be
+     * Called from startLesson and from sync, so notes can be
      * written in the CONFIRMED phase (before the call starts).
      */
     fun ensureDocument(lessonId: UUID): UUID = transaction {
@@ -113,7 +113,6 @@ class LessonDocumentService(
     private fun assertRoleCanWrite(field: LessonDocumentField, principal: UserPrincipal) {
         val role = principal.role
         val allowed = when (field) {
-            LessonDocumentField.SHARED_DOCUMENT,
             LessonDocumentField.TEACHER_NOTES,
             LessonDocumentField.TEACHER_WENT_WELL,
             LessonDocumentField.TEACHER_WORKING_ON -> role == UserRole.TEACHER || role == UserRole.ADMIN
@@ -126,7 +125,6 @@ class LessonDocumentService(
 
     private fun applyField(builder: UpdateBuilder<*>, field: LessonDocumentField, value: String?) {
         when (field) {
-            LessonDocumentField.SHARED_DOCUMENT -> builder[LessonDocumentTable.sharedDocument] = value
             LessonDocumentField.TEACHER_NOTES -> builder[LessonDocumentTable.teacherNotes] = value
             LessonDocumentField.STUDENT_NOTES -> builder[LessonDocumentTable.studentNotes] = value
             LessonDocumentField.TEACHER_WENT_WELL -> builder[LessonDocumentTable.teacherWentWell] = value
