@@ -20,6 +20,9 @@ data class ProblemDetail(
     /** The resource's current revision, on an optimistic-concurrency conflict. */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val currentRevision: Int? = null,
+    /** What is still tagged with a topic that cannot be deleted without `force`. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val usage: TagUsage? = null,
 ) {
     companion object {
         fun of(httpStatus: HttpStatusCode, detail: String? = null, code: String? = null, pointer: String? = null): ProblemDetail {

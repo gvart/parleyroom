@@ -79,3 +79,10 @@ object LibraryAccess {
             }
     }
 }
+
+/** A uuid from a request body; a malformed one is treated as an unknown id (404 [notFoundCode]). */
+fun parseUuid(raw: String, notFoundCode: String): UUID = try {
+    UUID.fromString(raw)
+} catch (_: IllegalArgumentException) {
+    throw NotFoundException("Not found", code = notFoundCode)
+}
