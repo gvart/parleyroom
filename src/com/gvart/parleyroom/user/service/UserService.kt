@@ -96,7 +96,6 @@ class UserService(
             if (request.lastName != null) it[lastName] = newLastName
             if (nameChanged) it[initials] = "${newFirstName[0]}${newLastName[0]}"
             if (request.locale != null) it[locale] = request.locale
-            if (request.level != null) it[level] = request.level
             if (request.timezone != null) it[timezone] = request.timezone
             if (request.bookingBufferMinutes != null) it[bookingBufferMinutes] = request.bookingBufferMinutes
             if (request.bookingMinNoticeHours != null) it[bookingMinNoticeHours] = request.bookingMinNoticeHours

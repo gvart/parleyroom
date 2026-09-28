@@ -206,19 +206,25 @@ class UserIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `PATCH me updates language level`() = testApp {
+    fun `student PATCH me with level is rejected and level unchanged`() = testApp {
         val client = createJsonClient(this)
         val token = getStudentToken(client)
+        val before = client.get("/api/v1/users/me") { bearerAuth(token) }.body<UserResponse>()
+        val newLevel = if (before.level == LanguageLevel.C1) LanguageLevel.A1 else LanguageLevel.C1
 
         val response = client.patch("/api/v1/users/me") {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
-            setBody(UpdateProfileRequest(level = LanguageLevel.C1))
+            setBody(UpdateProfileRequest(firstName = "Zoe", level = newLevel))
         }
 
-        assertEquals(HttpStatusCode.OK, response.status)
-        val body = response.body<UserResponse>()
-        assertEquals(LanguageLevel.C1, body.level)
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val problem = response.body<ProblemDetail>()
+        assertEquals("VALIDATION_FAILED", problem.code)
+        assertTrue(problem.detail!!.contains("level"))
+        val after = client.get("/api/v1/users/me") { bearerAuth(token) }.body<UserResponse>()
+        assertEquals(before.level, after.level)
+        assertEquals(before.firstName, after.firstName)
     }
 
     @Test
