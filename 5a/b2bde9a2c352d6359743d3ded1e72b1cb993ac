@@ -1,0 +1,24 @@
+test/com/gvart/parleyroom/document/DocumentStudentAccessIntegrationTest.kt
+  s_2b5907717bc9a2::t_a38b12bd7b6096 14-15,34,207-231
+  s_2b5907717bc9a2::t_74b6e46ec5aec1 232
+src/com/gvart/parleyroom/material/service/MaterialAccessResolver.kt
+  s_2b5907717bc9a2::t_2a264ae41fae64 3,32-33,157,159
+src/com/gvart/parleyroom/document/service/DocumentAccess.kt
+  s_2b5907717bc9a2::t_2a264ae41fae64 1-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "5ab2bde9a2c352d6359743d3ded1e72b1cb993ac",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
