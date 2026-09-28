@@ -1,0 +1,21 @@
+src/com/gvart/parleyroom/document/data/DocumentTable.kt
+  s_2b5907717bc9a2::t_93a06fd36388c1 14,29-31
+test/com/gvart/parleyroom/document/LessonDocumentLinkIntegrationTest.kt
+  s_2b5907717bc9a2::t_2d62440f7c7819 98,102,104,106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "afaff63ab072b740d0bdf5c3cb17056da05b3c48",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "unknown"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
