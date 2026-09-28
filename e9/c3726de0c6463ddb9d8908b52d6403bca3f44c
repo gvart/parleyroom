@@ -1,0 +1,49 @@
+test/com/gvart/parleyroom/document/DocumentIntegrationTest.kt
+  s_2b5907717bc9a2::t_75c795dd7b25df 66-80,182-222,242-243
+src/com/gvart/parleyroom/document/service/DocumentSupport.kt
+  s_2b5907717bc9a2::t_2a264ae41fae64 76
+  s_2b5907717bc9a2::t_fd0bcd255a6a10 36,39-40,78-83,103,128
+  s_2b5907717bc9a2::t_4fcf0e5d12d58f 77
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_2b5907717bc9a2::t_9849c2782aff50 229-233
+  s_2b5907717bc9a2::t_a51f520c14f81c 13,193
+src/com/gvart/parleyroom/document/service/DocumentService.kt
+  s_2b5907717bc9a2::t_fd0bcd255a6a10 5,7-8,20-21,27-28,50,141-142,144-145,148,153,156-157,208-209,222-255,395-399
+  s_2b5907717bc9a2::t_4851b683129d30 400
+src/com/gvart/parleyroom/lesson/service/LessonSupport.kt
+  s_2b5907717bc9a2::t_fd0bcd255a6a10 261,268
+src/com/gvart/parleyroom/document/service/DocumentVersionService.kt
+  s_2b5907717bc9a2::t_fd0bcd255a6a10 46,61-62,76
+src/com/gvart/parleyroom/document/routing/Routing.kt
+  s_2b5907717bc9a2::t_a51f520c14f81c 17,22,101,105-107,109,113,201-209
+src/com/gvart/parleyroom/common/transfer/ProblemDetail.kt
+  s_2b5907717bc9a2::t_9849c2782aff50 4-5,8,18,20-22
+src/com/gvart/parleyroom/common/transfer/exception/ConflictException.kt
+  s_2b5907717bc9a2::t_9849c2782aff50 3
+src/com/gvart/parleyroom/document/transfer/DocumentDtos.kt
+  s_2b5907717bc9a2::t_a51f520c14f81c 15,17-23
+  s_2b5907717bc9a2::t_9849c2782aff50 25-27,34,37-38,90,112,157,169-170,181
+  s_2b5907717bc9a2::t_badd2001866269 24
+test/com/gvart/parleyroom/document/LessonDocumentLinkIntegrationTest.kt
+  s_2b5907717bc9a2::t_75c795dd7b25df 7,73-80,100,103-105
+resources/db/migration/V8__documents.sql
+  s_2b5907717bc9a2::t_9849c2782aff50 17-18
+src/com/gvart/parleyroom/document/data/DocumentTable.kt
+  s_2b5907717bc9a2::t_9849c2782aff50 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "e9c3726de0c6463ddb9d8908b52d6403bca3f44c",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
