@@ -1,6 +1,14 @@
 package com.gvart.parleyroom.ai
 
 import com.gvart.parleyroom.IntegrationTest
+import com.gvart.parleyroom.ai.config.AiConfig
+import com.gvart.parleyroom.ai.service.GenerationJobRunner
+import com.gvart.parleyroom.topic.transfer.CreateTopicRequest
+import com.gvart.parleyroom.topic.transfer.GrammarTopicRequest
+import com.gvart.parleyroom.vocabulary.seedStudentVocab
+import kotlinx.coroutines.delay
+import java.time.OffsetDateTime
+import kotlin.time.Duration
 import com.gvart.parleyroom.ai.data.GenerationJobKind
 import com.gvart.parleyroom.ai.data.GenerationJobStatus
 import com.gvart.parleyroom.ai.llm.FakeLlmGateway
@@ -138,22 +146,22 @@ class NachbereitungIntegrationTest : IntegrationTest() {
         transaction {
             UserTable.update({ UserTable.id eq STUDENT }) { it[firstName] = "Olga"; it[lastName] = "Petrowa"; it[level] = LanguageLevel.A2 }
         }
-        val earlier = seedLesson(scheduledAt = java.time.OffsetDateTime.now().minusDays(7))
+        val earlier = seedLesson(scheduledAt = OffsetDateTime.now().minusDays(7))
         val lessonId = seedLesson()
         // Some library + history so every context section is filled.
         val topic = client.post("/api/v1/topics") {
             contentType(ContentType.Application.Json); bearerAuth(token)
-            setBody(com.gvart.parleyroom.topic.transfer.CreateTopicRequest(name = "Haushalt"))
+            setBody(CreateTopicRequest(name = "Haushalt"))
         }.body<JsonObject>()["id"]!!.jsonPrimitive.content
         val grammar = client.post("/api/v1/grammar-topics") {
             contentType(ContentType.Application.Json); bearerAuth(token)
-            setBody(com.gvart.parleyroom.topic.transfer.GrammarTopicRequest(name = "Reflexive Verben", level = LanguageLevel.A2))
+            setBody(GrammarTopicRequest(name = "Reflexive Verben", level = LanguageLevel.A2))
         }.body<JsonObject>()["id"]!!.jsonPrimitive.content
         client.patch("/api/v1/lessons/$earlier/content", token, buildJsonObject {
             put("grammarTopicIds", JsonArray(listOf(JsonPrimitive(grammar))))
             put("topicIds", JsonArray(listOf(JsonPrimitive(topic))))
         })
-        com.gvart.parleyroom.vocabulary.seedStudentVocab(STUDENT, lemma = "Tisch")
+        seedStudentVocab(STUDENT, lemma = "Tisch")
 
         FakeLlmGateway.received.clear()
         val job = client.generateAndWait(token, lessonId)
@@ -254,7 +262,7 @@ class NachbereitungIntegrationTest : IntegrationTest() {
 
         val first = client.startGenerate(token, lessonId, "[fake:delay=1500]").body<GenerationJobResponse>()
         val second = client.startGenerate(token, lessonId, "[fake:delay=100]").body<GenerationJobResponse>()
-        kotlinx.coroutines.delay(500)
+        delay(500)
         assertEquals(GenerationJobStatus.RUNNING, client.get("/api/v1/ai/jobs/${first.id}") { bearerAuth(token) }.body<GenerationJobResponse>().status)
         assertEquals(GenerationJobStatus.QUEUED, client.get("/api/v1/ai/jobs/${second.id}") { bearerAuth(token) }.body<GenerationJobResponse>().status)
         assertEquals(GenerationJobStatus.SUCCEEDED, client.awaitJob(token, second.id).status)
@@ -267,8 +275,8 @@ class NachbereitungIntegrationTest : IntegrationTest() {
         val job = client.startGenerate(token, seedLesson(), "[fake:delay=3000]").body<GenerationJobResponse>()
 
         // Simulates the next boot: a fresh runner fails what the previous process left behind.
-        val runner = com.gvart.parleyroom.ai.service.GenerationJobRunner(
-            com.gvart.parleyroom.ai.config.AiConfig("fake", "fake", "", 2, 3, kotlin.time.Duration.parse("30s")),
+        val runner = GenerationJobRunner(
+            AiConfig("fake", "fake", "", 2, 3, Duration.parse("30s")),
         )
         assertEquals(1, runner.failInterruptedJobs())
         val failed = client.get("/api/v1/ai/jobs/${job.id}") { bearerAuth(token) }.body<GenerationJobResponse>()
@@ -429,6 +437,39 @@ class NachbereitungIntegrationTest : IntegrationTest() {
                 JsonArray(edited.blocks), edited.revision))
         }
         assertEquals(HttpStatusCode.Conflict, stale.status)
+    }
+
+    @Test
+    fun `refine after publish keeps the published words and republishing adds no duplicates`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val lessonId = seedLesson()
+        val job = client.generateAndWait(token, lessonId)
+        val request = publishAll(job)
+        val first = client.publish(token, lessonId, request).body<PublishResponse>()
+
+        val refined = client.awaitJob(token, client.post("/api/v1/ai/jobs/${job.id}/refine") {
+            contentType(ContentType.Application.Json); bearerAuth(token)
+            setBody(RefineRequest("Noch eine Übung."))
+        }.body<GenerationJobResponse>().id)
+        assertEquals(GenerationJobStatus.SUCCEEDED, refined.status)
+        val result = refined.nachbereitung()
+        // Published words are now library words: recognized and already with the student.
+        assertTrue(result.vocab.all { it.matchedEntryId != null && it.alreadyAssigned })
+        val rows = { client: HttpClient -> suspend {
+            client.document(token, result.documentId).body<DocumentResponse>().blocks.map { it.jsonObject }
+                .single { it["type"]!!.jsonPrimitive.content == "vocab_table" }["rows"]!!.jsonArray
+        } }
+        assertEquals(first.vocab.map { it.entryId }.toSet(), rows(client)().map { it.jsonObject["vocabEntryId"]!!.jsonPrimitive.content }.toSet(),
+            "published rows survive the refine")
+
+        val again = client.publish(token, lessonId, PublishRequest(
+            jobId = refined.id,
+            vocab = result.vocab.map { PublishVocabItem(it.key, matchedEntryId = it.matchedEntryId) },
+        )).body<PublishResponse>()
+        assertEquals(0, again.wordsCreated)
+        assertEquals(0, again.wordsAssigned)
+        assertEquals(first.vocab.map { it.entryId }.toSet(), rows(client)().map { it.jsonObject["vocabEntryId"]!!.jsonPrimitive.content }.toSet())
     }
 
     @Test

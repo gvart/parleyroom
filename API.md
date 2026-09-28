@@ -717,7 +717,8 @@ NachbereitungResult {
   vocabTables: [{ blockId: uuid, vocabKeys: ["v1", …] }],     // filled with entry ids at publish
   topics: [{ key: "t1", name, parentName?, existingId: uuid | null }],
   grammarTopics: [{ key: "g1", name, level?, existingId: uuid | null }],
-  correctedSentences: [{ incorrect, correct }]
+  correctedSentences: [{ incorrect, correct }],
+  publishedEntries: { "v1": "entry uuid" }                     // filled by publish
 }
 ReviewVocabItem {
   key: "v1",
@@ -750,7 +751,9 @@ Input to the model: the same context, the previous result's vocab/topics, the **
 blocks (read at run time, converted back to AiBlock form incl. `vocabKeys`, so Anna's manual edits
 are kept) and the instruction. Output schema as above. On success the draft is updated through the
 normal document update path: snapshot (reason `AI_REFINE`), blocks + title replaced, `revision`
-+1 (an open editor gets 409 `DOCUMENT_CONFLICT` on its next autosave and reloads). The new job's
++1 (an open editor gets 409 `DOCUMENT_CONFLICT` on its next autosave and reloads). Words that already had
+vocab_table rows (published, or added by hand) keep their rows; the refined result's
+`publishedEntries` (key → entry id) carries them over. The new job's
 `result` is the full new result (same `documentId`).
 
 ### Publish

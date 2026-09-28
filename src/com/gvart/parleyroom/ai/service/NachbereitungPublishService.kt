@@ -28,9 +28,6 @@ import com.gvart.parleyroom.vocabulary.data.VocabEntryTable
 import com.gvart.parleyroom.vocabulary.service.VocabEntryService
 import com.gvart.parleyroom.vocabulary.transfer.AssignVocabRequest
 import com.gvart.parleyroom.vocabulary.transfer.QuickAddVocabRequest
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.encodeToJsonElement
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
@@ -146,7 +143,7 @@ class NachbereitungPublishService(
                 topicIds = (documentTopics + topicIds).distinct(),
                 grammarTopicIds = (documentGrammar + grammarTopicIds).distinct(),
                 audience = document[DocumentTable.audience],
-                blocks = fillVocabTables(document[DocumentTable.blocks], tables),
+                blocks = AiBlocks.fillRows(document[DocumentTable.blocks], tables),
                 revision = document[DocumentTable.revision],
             ),
             principal,
@@ -207,18 +204,6 @@ class NachbereitungPublishService(
         }
         return done
     }
-
-    /** Appends rows for published entries to each vocab table still in the draft (no duplicates). */
-    private fun fillVocabTables(blocks: JsonArray, tables: Map<String, List<String>>): JsonArray = JsonArray(blocks.map { element ->
-        val block = element as JsonObject
-        val entryIds = tables[(block["id"] as JsonPrimitive).content] ?: return@map block
-        val rows = (block["rows"] as? JsonArray).orEmpty()
-        val present = rows.map { ((it as JsonObject)["vocabEntryId"] as JsonPrimitive).content.lowercase() }.toMutableSet()
-        val added = entryIds.filter { present.add(it.lowercase()) }.map { entryId ->
-            JsonObject(mapOf("id" to JsonPrimitive(UUID.randomUUID().toString()), "vocabEntryId" to JsonPrimitive(entryId)))
-        }
-        JsonObject(block + ("rows" to JsonArray(rows + added)))
-    })
 
     private fun linkedStudents(teacherId: UUID, studentIds: List<UUID>): List<UUID> {
         if (studentIds.isEmpty()) return emptyList()

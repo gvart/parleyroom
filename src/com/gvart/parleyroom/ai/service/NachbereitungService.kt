@@ -187,7 +187,8 @@ class NachbereitungService(
                 ?: throw AiJobFailure("DOCUMENT_NOT_FOUND", "The draft document was deleted")
             Triple(ctx, currentOutput(previous, document), documentId)
         }
-        val request = Prompts.refine(ctx.mode, ctx.toPromptText(), input.notes.orEmpty(), input.prompt.orEmpty(), currentOutput, input.instruction.orEmpty())
+        val (currentText, rowEntries) = currentOutput
+        val request = Prompts.refine(ctx.mode, ctx.toPromptText(), input.notes.orEmpty(), input.prompt.orEmpty(), currentText, input.instruction.orEmpty())
         val completion = GenerationJobs.completeValidated(gateway, Prompts.nachbereitungSystem(ctx.mode), request, MAX_TOKENS, AiOutputParser::parseGeneration)
         val output = completion.value
         return transaction {
@@ -195,22 +196,27 @@ class NachbereitungService(
                 ?: throw AiJobFailure("DOCUMENT_NOT_FOUND", "The draft document was deleted", completion.attempts, completion.usage)
             // The refine result wins over concurrent edits; the snapshot keeps the previous state.
             versions.snapshot(document, DocumentVersionReason.AI_REFINE, principal)
+            // Words that already had rows (published or added by hand) keep them.
+            val keys = output.output.vocab.map { it.key }.toSet()
+            val kept = rowEntries.filterKeys { it in keys }
+            val blocks = AiBlocks.fillRows(output.blocks, output.vocabTables.mapValues { (_, tableKeys) -> tableKeys.mapNotNull(kept::get) })
             DocumentTable.update({ DocumentTable.id eq documentId }) {
                 it[title] = output.title
-                it[blocks] = output.blocks
+                it[DocumentTable.blocks] = blocks
                 it[revision] = DocumentTable.revision + 1
                 it[updatedAt] = OffsetDateTime.now()
             }
-            val result = review(ctx, output).copy(documentId = documentId.toString())
+            val result = review(ctx, output).copy(documentId = documentId.toString(), publishedEntries = kept)
             JobSuccess(GenerationJobs.json.encodeToJsonElement(result), completion.attempts, completion.usage, documentId)
         }
     }
 
     /**
-     * The previous result and the current draft (incl. Anna's manual edits) in the model's format.
-     * vocab_table rows become vocab keys; rows whose entry is not in the result get a new key.
+     * The previous result and the current draft (incl. Anna's manual edits) in the model's format,
+     * plus vocab key -> entry id of every existing vocab_table row. Rows become vocab keys; rows
+     * whose entry is not in the result get a new key.
      */
-    private fun currentOutput(previous: NachbereitungResult, document: ResultRow): String {
+    private fun currentOutput(previous: NachbereitungResult, document: ResultRow): Pair<String, Map<String, String>> {
         val keyByEntryId = mutableMapOf<String, String>()
         previous.vocab.forEach { item -> item.matchedEntryId?.let { keyByEntryId[it] = item.key } }
         previous.publishedEntries.forEach { (key, entryId) -> keyByEntryId[entryId] = key }
@@ -249,7 +255,8 @@ class NachbereitungService(
             }))
             put("correctedSentences", GenerationJobs.json.encodeToJsonElement(previous.correctedSentences))
         }
-        return output.toString()
+        val rowEntries = rowEntryIds.mapNotNull { entryId -> keyByEntryId[entryId]?.let { it to entryId } }.toMap()
+        return output.toString() to rowEntries
     }
 
     private fun aiVocabJson(

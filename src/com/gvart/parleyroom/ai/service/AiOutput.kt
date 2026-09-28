@@ -228,6 +228,18 @@ object AiBlocks {
         })
     }
 
+    /** Appends rows for [tables] (block id -> entry ids) to each vocab table still present (no duplicates). */
+    fun fillRows(blocks: JsonArray, tables: Map<String, List<String>>): JsonArray = JsonArray(blocks.map { element ->
+        val block = element as JsonObject
+        val entryIds = tables[(block["id"] as JsonPrimitive).content] ?: return@map block
+        val rows = (block["rows"] as? JsonArray).orEmpty()
+        val present = rows.map { ((it as JsonObject)["vocabEntryId"] as JsonPrimitive).content.lowercase() }.toMutableSet()
+        val added = entryIds.filter { present.add(it.lowercase()) }.map { entryId ->
+            JsonObject(mapOf("id" to JsonPrimitive(UUID.randomUUID().toString()), "vocabEntryId" to JsonPrimitive(entryId)))
+        }
+        JsonObject(block + ("rows" to JsonArray(rows + added)))
+    })
+
     // Only blocks, items, options, questions and rows carry an "id" key (rich text never does).
     private fun remapIds(element: JsonElement, remap: (String) -> String): JsonElement = when (element) {
         is JsonObject -> JsonObject(element.mapValues { (key, value) ->
