@@ -2,7 +2,6 @@ package com.gvart.parleyroom.activity.routing
 
 import com.gvart.parleyroom.activity.service.StreakService
 import com.gvart.parleyroom.activity.transfer.StreakResponse
-import com.gvart.parleyroom.common.routing.getPathUUID
 import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import io.ktor.http.HttpStatusCode
@@ -37,32 +36,6 @@ fun Application.configureActivityRouting() {
                         }
                         HttpStatusCode.Unauthorized {
                             description = "Missing or invalid authentication token"
-                            schema = jsonSchema<ProblemDetail>()
-                        }
-                    }
-                }
-
-                get("/{id}/streak") {
-                    val principal = call.requirePrincipal()
-                    val id = call.getPathUUID()
-
-                    val result = streakService.getStreak(id, principal)
-                    call.respond(HttpStatusCode.OK, result)
-                }.describe {
-                    summary = "Get a user's learning streak"
-                    description = "Returns the daily learning streak of the given user. Allowed for admins, the user themself, and teachers of that student."
-                    parameters { path("id") { description = "UUID of the user" } }
-                    responses {
-                        HttpStatusCode.OK {
-                            description = "Learning streak"
-                            schema = jsonSchema<StreakResponse>()
-                        }
-                        HttpStatusCode.Forbidden {
-                            description = "Not allowed to read this user's streak"
-                            schema = jsonSchema<ProblemDetail>()
-                        }
-                        HttpStatusCode.NotFound {
-                            description = "User not found"
                             schema = jsonSchema<ProblemDetail>()
                         }
                     }
