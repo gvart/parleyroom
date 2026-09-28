@@ -247,73 +247,216 @@ when the student has several teachers (defaults to the earliest).
 
 ---
 
-## Homework (`/api/v1/homework`)
+## Homework (`/api/v1/assignments`, `/api/v1/homework`)
 
-Teacher-assigned tasks with a submission/review workflow.
+Brief §5.8: students answer **inside the app** (interactive document blocks, text, audio, video,
+files); closed exercises are auto-checked server-side; Anna reviews, comments, returns for rework
+or closes. Replaces the old text-submission homework (table `homework` and its enums are dropped in
+V12; the prod DB is reset).
 
-Status flow: `OPEN -> SUBMITTED -> DONE` or `-> REJECTED -> SUBMITTED -> ...`
+- **Assignment** = what the teacher assigns once: title, instructions, due date, optional lesson,
+  ordered **items**. Teacher-owned; admins read/delete.
+- **Homework** = one per-student instance of an assignment, with its own status, answers, uploads,
+  review. Assigning to a **group** expands to its members **at assign time** (later members are not
+  added; `groupId` is kept for display).
+
+### Items
+
+| kind | input | stored | answerable units |
+|---|---|---|---|
+| `DOCUMENT` | `{ kind, documentId }` | **snapshot** of the document's `title` + `blocks` (with solutions) + `revision` at assign time | every item/question of an **interactive** exercise block (see below) |
+| `MATERIAL` | `{ kind, materialId, task?, responseType? }` | material ref + name snapshot | one, only if `responseType` set |
+| `TASK` | `{ kind, title, task?, responseType }` | as given | one |
+
+`responseType: TEXT | AUDIO | VIDEO | FILE`. `title` ≤ 255, `task` ≤ 5 000 chars (plain text).
+Items get server uuids (`assignmentItemId`), keep their order, and are **immutable** after create
+(change = delete + re-assign). The snapshot means later edits of the document never shift answer
+keys or change the grading of assigned homework; students need no share on the document.
+
+**Answerable units of a DOCUMENT item** (only blocks with `interactive: true`; everything else is
+shown as context, incl. `vocab_table` with the viewer-resolved `vocab` side-list, `media` source):
+
+| block | unit = | answer payload | check |
+|---|---|---|---|
+| `gap_fill` | `items[]` | `{ "gaps": ["musst", "kümmern"] }` (index = gap order; ≤ number of gaps) | **auto** |
+| `multiple_choice` | `items[]` | `{ "optionIds": [uuid] }` (options of that item; ≤ 1 unless `multiple`) | **auto** |
+| `reading` / `media` / `exam_part` | `questions[]` | `TRUE_FALSE`: `{ "isTrue": bool }` · `CHOICE`: `{ "optionIds": [uuid] }` · `OPEN`: `{ "text" }` | auto / auto / review |
+| `error_correction` | `items[]` | `{ "text": "Darum musst du dich kümmern." }` | review |
+| `free_sentences` (purpose ≠ `SPEAKING`) | `items[]` | `{ "text" }` | review |
+| `writing_task`, `free_form` | `items[]` | `{ "text" }` | review |
+
+MATERIAL/TASK units: `{ "text"? }` (the text answer for `TEXT`, an optional note otherwise) +
+uploads for `AUDIO`/`VIDEO`/`FILE`. `text` ≤ 20 000 chars, each gap ≤ 500.
+Unit address: `{ assignmentItemId, blockId?, itemId? }` (`blockId` + `itemId` for DOCUMENT
+units, both absent for MATERIAL/TASK). A DOCUMENT item with no answerable unit → 400
+`HOMEWORK_ITEM_INVALID` (mark the exercises interactive, or use a MATERIAL/TASK item).
+
+### Auto-check (server-side, on submit)
+
+Normalisation of text: Unicode NFC, trim, collapse whitespace runs to one space. Then:
+- **gap_fill**: a gap is `CORRECT` if equal (case-**sensitive**) to one accepted answer of its
+  group; else `CASE_MISMATCH` if equal ignoring case (counts as correct, flagged for the teacher —
+  German noun capitalisation); else `WRONG` (empty = `WRONG`). Unit `correct` = all gaps correct;
+  `score` = correct gaps / gaps. If the answer key does not match the text (gap count ≠ answer
+  groups, or a group is empty) the unit is `PENDING_REVIEW` instead.
+- **multiple_choice / CHOICE**: set equality of `optionIds` with `solution.correctOptionIds`
+  (no partial credit). No key → `PENDING_REVIEW`.
+- **TRUE_FALSE**: `isTrue == solution.isTrue`. No key → `PENDING_REVIEW`.
+- Everything else → `PENDING_REVIEW`. Unanswered closed units count as incorrect; unanswered open
+  units are just `UNANSWERED` (nothing to review).
+
+Per unit `autoResult: CORRECT | INCORRECT | PENDING_REVIEW | UNANSWERED`, `autoScore` 0..1,
+`caseMismatch`. Final verdict `correct` = teacher override ?? auto (null for open units until the
+teacher sets it). Summary: `{ closedCorrect, closedTotal, pendingReview, unanswered }`.
+
+### Status flow
 
 ```
-GET /api/v1/homework?studentId=UUID&status=OPEN|SUBMITTED|IN_REVIEW|DONE|REJECTED
+OPEN      --submit (student)--> SUBMITTED
+SUBMITTED --review REVIEWED---> REVIEWED     SUBMITTED|REVIEWED --review DONE--> DONE (final)
+SUBMITTED|REVIEWED --review RETURNED--> OPEN (rework, then submit again)
 ```
-- **Student** -> own homework
-- **Teacher** -> homework they assigned
-- **Admin** -> all
+- `OPEN`: student edits answers (draft autosave), uploads/deletes files.
+- `submit` (student, OPEN only): runs auto-check, locks answers, `attempt++`, `submittedAt`.
+- teacher `review` action on SUBMITTED or REVIEWED: `outcome` = `REVIEWED` | `RETURNED` (→ `OPEN`,
+  student reworks and resubmits) | `DONE`. DONE is final (no more changes; teacher may still
+  delete the homework).
+- On resubmit, teacher override + comment are cleared for units whose answer changed.
+- Any write in the wrong state → 409 `SUBMISSION_LOCKED` (student answer/upload/submit when not
+  OPEN) or 409 `HOMEWORK_INVALID_STATE` (review actions).
+
+### Visibility (students)
+
+- `solution` keys are stripped from every snapshot and `autoResult` / `autoScore` /
+  `caseMismatch` / `correct` / `summary` are **null** unless status is `REVIEWED` or `DONE`.
+  Before that the student sees items, their own answers and uploads, and "submitted".
+- `feedback` and per-unit `comment` are visible once the teacher has sent them (REVIEWED, DONE, or
+  OPEN after a return). Draft review edits (`PUT …/review`) are **not** visible to the student.
+- Teachers see everything (incl. the student's current drafts); admins read everything.
+
+### Endpoints — teacher
 
 ```
-POST /api/v1/homework
-Body: { studentId, title, category, description?, dueDate? (YYYY-MM-DD), lessonId?, attachmentType?, attachmentUrl?, attachmentName? }
+POST   /api/v1/assignments                 Body: CreateAssignment -> 201 Assignment
+GET    /api/v1/assignments?studentId=&groupId=&lessonId=&page=&pageSize=  -> { assignments: [AssignmentSummary], total, page, pageSize }  createdAt desc
+GET    /api/v1/assignments/{id}            -> Assignment (items with full snapshots + solutions, homework summaries)
+PATCH  /api/v1/assignments/{id}            Body: { title?, instructions?, dueDate?, clearDueDate? } -> Assignment
+DELETE /api/v1/assignments/{id}            -> 204 (owner or admin; deletes all homework + stored uploads)
+DELETE /api/v1/homework/{id}               -> 204 (owner or admin; removes one student's homework)
+PUT    /api/v1/homework/{id}/review        Body: ReviewDraft -> Homework   (autosave, SUBMITTED/REVIEWED only, no status change)
+POST   /api/v1/homework/{id}/review        Body: ReviewDraft + { outcome: REVIEWED|RETURNED|DONE } -> Homework
 ```
-- **Teacher/Admin only** -- students cannot create
-- `category`: WRITING, READING, GRAMMAR, VOCABULARY, LISTENING
-- `attachmentType`: FILE, LINK
-- Teacher must have `teacher_students` relationship with the student
+`CreateAssignment = { title (1..255), instructions? (≤ 10 000), dueDate? (YYYY-MM-DD), lessonId?,
+studentIds?: [], groupIds?: [], items: [ItemInput] (1..20) }`. Recipients = studentIds ∪ members of
+groupIds, deduplicated, ≥ 1 (400 `ASSIGNMENT_NO_STUDENTS`). Students must be linked
+(400 `STUDENT_NOT_LINKED`), groups / lessons / documents / materials must be the teacher's
+(404 `GROUP_NOT_FOUND` / `LESSON_NOT_FOUND` / `DOCUMENT_NOT_FOUND` / `MATERIAL_NOT_FOUND`).
+Bad item → 400 `HOMEWORK_ITEM_INVALID` + `pointer` (`/items/2/responseType`).
+
+`ReviewDraft = { feedback?: string|null (≤ 10 000), units?: [{ assignmentItemId, blockId?, itemId?,
+correct?: bool|null, comment?: string|null (≤ 5 000) }] }` — fields present replace, `null`
+clears; units not listed are untouched. Only units that exist in the assignment (400
+`HOMEWORK_ITEM_INVALID`).
+
+### Endpoints — student (and teacher read)
 
 ```
-GET    /api/v1/homework/{id}
-PUT    /api/v1/homework/{id}    Body: { title?, description?, category?, dueDate? }
-DELETE /api/v1/homework/{id}
+GET    /api/v1/homework?studentId=&assignmentId=&lessonId=&status=OPEN,SUBMITTED&dueBefore=&dueAfter=&sort=due|submitted|created&page=&pageSize=
+       -> { homework: [HomeworkSummary], total, page, pageSize }
+GET    /api/v1/homework/{id}               -> Homework
+PUT    /api/v1/homework/{id}/answers       Body: { answers: [{ assignmentItemId, blockId?, itemId?, answer: {…} | null }] } -> Homework
+POST   /api/v1/homework/{id}/submit        (no body) -> Homework
+POST   /api/v1/homework/{id}/items/{assignmentItemId}/uploads   multipart `file` -> 201 HomeworkUpload
+DELETE /api/v1/homework/{id}/uploads/{uploadId}                 -> 204
+GET    /api/v1/homework/{id}/uploads/{uploadId}/file            -> bytes (inline, stored Content-Type)
 ```
-PUT/DELETE: assigning teacher or admin only.
+Roles: `GET` = the student, the assignment's teacher, admin (others: 404 `HOMEWORK_NOT_FOUND`).
+List: students → own; teachers → homework of their assignments (`studentId` filter must be linked);
+admins → all. `status` is a comma list. Sort: `due` = dueDate asc nulls last (default for
+students), `submitted` = submittedAt asc (the teacher's "Hausaufgaben zu korrigieren" queue =
+`status=SUBMITTED&sort=submitted`), `created` = desc (default for teachers).
+Answers / submit / uploads: the assigned student only (teacher/admin 403). `answers` upserts the
+listed units (partial — the 1.5 s autosave sends only changed units); `answer: null` removes one.
+Payload must match the unit type (400 `HOMEWORK_ANSWER_INVALID` + `pointer`); unknown unit →
+400 `HOMEWORK_ITEM_INVALID`. Submitting with unanswered units is allowed (the portal confirms).
+
+### Uploads
+
+Only for MATERIAL/TASK units with `responseType` AUDIO / VIDEO / FILE, while `OPEN`, ≤ 5 per unit
+(409 `UPLOAD_LIMIT_REACHED`). Size limit = `STORAGE_MAX_FILE_SIZE` (400 `FILE_TOO_LARGE`).
+Content type = the part's `Content-Type` without parameters (`audio/webm;codecs=opus` →
+`audio/webm`), must be in the allowlist, else 400 `UPLOAD_TYPE_NOT_ALLOWED`:
+- AUDIO: `audio/webm`, `audio/ogg`, `audio/mpeg`, `audio/mp4`, `audio/x-m4a`, `audio/aac`, `audio/wav`, `audio/x-wav`
+- VIDEO: `video/webm`, `video/mp4`, `video/quicktime`
+- FILE: `application/pdf`, DOCX, `application/msword`, `image/jpeg`, `image/png`, `image/webp`, `image/heic`, `text/plain`
+
+Stored at `homework/{homeworkId}/{uploadId}/{safeName}`; streamed back through the API with the
+same access as `GET /homework/{id}`. Deleted with the homework/assignment. The browser records
+audio with `MediaRecorder` and uploads the blob like a file.
+`HomeworkUpload = { id, assignmentItemId, fileName, contentType, size, downloadUrl, createdAt }`.
+
+### Materials access
+
+A student may `GET /api/v1/materials/{id}` and `/file` for every material referenced by a
+MATERIAL item or by a `media` block of a DOCUMENT snapshot of their homework (checked at access
+time, like documents).
+
+### Response shapes
 
 ```
-POST /api/v1/homework/{id}/submit
-Body: { submissionText?, submissionUrl? }
+Assignment = { id, teacherId, title, instructions?, dueDate?, lessonId?, groupIds: [], createdAt, updatedAt,
+  items: [AssignmentItem], homework: [HomeworkSummary] }
+AssignmentSummary = Assignment without items/homework + { itemCount, studentCount,
+  statusCounts: { OPEN, SUBMITTED, REVIEWED, DONE } }
+AssignmentItem = { id, position, kind, title, task?, responseType?,
+  documentId?, documentRevision?, blocks?: [Block], vocab?: [DocumentVocabEntry],   // DOCUMENT
+  materialId?, material?: { id, name, type, contentType?, downloadUrl? } }          // MATERIAL (null if deleted)
+HomeworkSummary = { id, assignmentId, title, dueDate?, lessonId?, status, attempt, itemCount,
+  student: { id, firstName, lastName }, teacher: { id, firstName, lastName },
+  answeredUnits, totalUnits, summary?, submittedAt?, reviewedAt?, returnedAt?, doneAt?, createdAt, updatedAt }
+Homework = HomeworkSummary + { instructions?, feedback?, items: [AssignmentItem],  // blocks solution-stripped for students before review
+  units: [Unit], uploads: [HomeworkUpload] }
+Unit = { assignmentItemId, blockId?, itemId?, blockType?, questionKind?, check: AUTO|REVIEW,
+  answer?, answeredAt?, autoResult?, autoScore?, caseMismatch?, gapResults?: [CORRECT|CASE_MISMATCH|WRONG],
+  teacherCorrect?, correct?, comment? }
 ```
-- **Assigned student only**
-- Only works when status is OPEN or REJECTED (re-submit after rejection)
-- Sets status -> SUBMITTED
+`units` lists **every** answerable unit in item/document order (answered or not), so the portal
+renders progress without re-deriving it. `summary = { closedCorrect, closedTotal, pendingReview, unanswered }`.
 
-```
-POST /api/v1/homework/{id}/review
-Body: { status: "DONE"|"REJECTED", teacherFeedback? }
-```
-- **Assigning teacher or admin only**
-- Only works when status is SUBMITTED or IN_REVIEW
-- REJECTED homework can be re-submitted by the student
+### Notifications
 
-### Response shape
-```json
-{
-  "id": "uuid",
-  "lessonId": "uuid | null",
-  "studentId": "uuid",
-  "teacherId": "uuid",
-  "title": "Write an essay",
-  "description": "string | null",
-  "category": "WRITING",
-  "dueDate": "2026-04-15 | null",
-  "status": "OPEN | SUBMITTED | IN_REVIEW | DONE | REJECTED",
-  "submissionText": "string | null",
-  "submissionUrl": "string | null",
-  "teacherFeedback": "string | null",
-  "attachmentType": "FILE | LINK | null",
-  "attachmentUrl": "string | null",
-  "attachmentName": "string | null",
-  "createdAt": "ISO8601",
-  "updatedAt": "ISO8601"
-}
-```
+New `NotificationType`s (`referenceId` = homework id; wording lives in the portal):
+`HOMEWORK_ASSIGNED` (→ each student, actor teacher), `HOMEWORK_SUBMITTED` (→ teacher, actor student),
+`HOMEWORK_REVIEWED` (→ student, on outcome REVIEWED or DONE), `HOMEWORK_RETURNED` (→ student).
+The learning streak still records `HOMEWORK_SUBMITTED` activity on submit.
+
+### Tables (V12)
+
+`assignments` (teacher_id, lesson_id? SET NULL, title, instructions, due_date DATE),
+`assignment_groups` (assignment_id, group_id CASCADE), `assignment_items` (assignment_id CASCADE,
+position, kind, title, task, response_type, document_id? SET NULL, document_revision, blocks JSONB,
+material_id? SET NULL), `homework` (assignment_id CASCADE, student_id, status, attempt, feedback,
+review_draft_feedback, summary cols, submitted/reviewed/returned/done_at; unique (assignment, student)),
+`homework_answers` (homework_id CASCADE, assignment_item_id CASCADE, block_id?, item_id?, answer JSONB,
+auto_result, auto_score, case_mismatch, gap_results JSONB, teacher_correct, comment + draft columns,
+answered_at; partial unique indexes for doc / non-doc units), `homework_uploads` (homework_id CASCADE,
+assignment_item_id, storage_key, file_name, content_type, size).
+
+### Error codes
+
+| Code | Status | Notes |
+|---|---|---|
+| `ASSIGNMENT_NOT_FOUND` | 404 | |
+| `ASSIGNMENT_NO_STUDENTS` | 400 | no recipients after expanding groups |
+| `HOMEWORK_NOT_FOUND` | 404 | also for students/teachers without access |
+| `HOMEWORK_ITEM_INVALID` | 400 | bad item input or unknown unit; `pointer` |
+| `HOMEWORK_ANSWER_INVALID` | 400 | answer payload does not fit the unit; `pointer` |
+| `HOMEWORK_INVALID_STATE` | 409 | review action in the wrong status |
+| `SUBMISSION_LOCKED` | 409 | student write while not OPEN |
+| `UPLOAD_TYPE_NOT_ALLOWED` | 400 | content type not allowed for the unit's responseType (or TEXT unit) |
+| `UPLOAD_LIMIT_REACHED` | 409 | > 5 uploads on one unit |
+| `HOMEWORK_UPLOAD_NOT_FOUND` | 404 | |
+| `FILE_TOO_LARGE` | 400 | shared with materials |
 
 ---
 
@@ -1158,7 +1301,8 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 | Lessons | `LESSON_NOT_FOUND`, `LESSON_INVALID_STATE`, `LESSON_FULL`, `LESSON_NOT_JOINABLE`, `LESSON_ALREADY_STARTED`, `LESSON_NOT_STARTED`, `ALREADY_PARTICIPANT`, `STUDENT_NOT_IN_LESSON`, `JOIN_REQUEST_ALREADY_PENDING`, `JOIN_REQUEST_NOT_FOUND`, `RESCHEDULE_ALREADY_PENDING`, `RESCHEDULE_NOT_FOUND`, `VIDEO_ROOM_NOT_READY` |
 | Availability | `AVAILABILITY_SLOT_BLOCKED`, `AVAILABILITY_MIN_NOTICE`, `AVAILABILITY_OVERLAP`, `AVAILABILITY_BUFFER_CONFLICT`, `AVAILABILITY_EXCEPTION_NOT_FOUND` |
 | Materials | `MATERIAL_NOT_FOUND`, `MATERIAL_FILE_NOT_FOUND`, `FOLDER_NOT_FOUND`, `TARGET_FOLDER_NOT_FOUND`, `FOLDER_NOT_EMPTY`, `FOLDER_NAME_TAKEN`, `FOLDER_CYCLE`, `FILE_TOO_LARGE` |
-| Homework / goals | `HOMEWORK_NOT_FOUND`, `HOMEWORK_INVALID_STATE`, `GOAL_NOT_FOUND`, `GOAL_NOT_ACTIVE` |
+| Homework | `ASSIGNMENT_NOT_FOUND`, `ASSIGNMENT_NO_STUDENTS`, `HOMEWORK_NOT_FOUND`, `HOMEWORK_ITEM_INVALID` (+ `pointer`), `HOMEWORK_ANSWER_INVALID` (+ `pointer`), `HOMEWORK_INVALID_STATE` (409), `SUBMISSION_LOCKED` (409), `UPLOAD_TYPE_NOT_ALLOWED`, `UPLOAD_LIMIT_REACHED` (409), `HOMEWORK_UPLOAD_NOT_FOUND` |
+| Goals | `GOAL_NOT_FOUND`, `GOAL_NOT_ACTIVE` |
 | Vocabulary | `VOCABULARY_WORD_NOT_FOUND`, `VOCAB_ENTRY_NOT_FOUND`, `VOCAB_ENTRY_DUPLICATE`, `VOCAB_LANGUAGE_UNSUPPORTED`, `VOCAB_DISPLAY_FIELD_UNSUPPORTED`, `TEACHER_STUDENT_NOT_FOUND` |
 | Documents | `DOCUMENT_NOT_FOUND`, `DOCUMENT_INVALID_BLOCK` (+ `pointer`), `DOCUMENT_DUPLICATE_ID` (+ `pointer`), `DOCUMENT_TOO_LARGE`, `DOCUMENT_CONFLICT` (409, + `currentRevision`), `DOCUMENT_VERSION_NOT_FOUND` |
 | AI / Nachbereitung | `AI_NOT_CONFIGURED` (503), `AI_RATE_LIMITED` (429), `AI_JOB_NOT_FOUND`, `AI_JOB_NOT_READY`, `AI_JOB_LESSON_MISMATCH`, `NACHBEREITUNG_NO_ATTENDEES`, `PROMPT_TEMPLATE_NOT_FOUND`, `PROMPT_TEMPLATE_DUPLICATE`; job-only: `AI_OUTPUT_INVALID`, `AI_PROVIDER_ERROR`, `AI_TIMEOUT`, `AI_INTERRUPTED` |
