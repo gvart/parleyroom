@@ -17,6 +17,7 @@ import com.gvart.parleyroom.practice.transfer.ArticleCheckResponse
 import com.gvart.parleyroom.practice.transfer.PracticeQueueResponse
 import com.gvart.parleyroom.practice.transfer.PracticeStatsResponse
 import com.gvart.parleyroom.practice.transfer.ReviewRequest
+import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.vocabulary.data.NounArticle
 import com.gvart.parleyroom.vocabulary.data.StudentVocabStatus
 import com.gvart.parleyroom.vocabulary.data.StudentVocabTable
@@ -35,8 +36,10 @@ import io.ktor.http.contentType
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import java.time.Duration
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -228,6 +231,36 @@ class PracticeIntegrationTest : IntegrationTest() {
         assertEquals(1, after.newCount)
         assertEquals(newMid.toString(), after.cards.last().word.id)
         assertFalse(after.cards.any { it.word.id == newOld.toString() }) // learning step: due in 10 minutes
+    }
+
+    @Test
+    fun `review cards due later today are served now, learning steps wait, and dueNow agrees`() = testApp {
+        val client = createJsonClient(this)
+        val token = getStudentToken(client)
+        // A zone where it is about 09:00 now, so 23:00 today is still ahead.
+        val utcHour = OffsetDateTime.now(ZoneOffset.UTC).hour
+        val zone = ZoneOffset.ofHours((9 - utcHour).let { if (it < -12) it + 24 else it })
+        transaction { UserTable.update({ UserTable.id eq STUDENT }) { it[timezone] = zone.id } }
+        val now = OffsetDateTime.now(zone)
+        val tonight = now.toLocalDate().atTime(23, 0).atZone(zone).toOffsetDateTime()
+        val tomorrow = now.toLocalDate().plusDays(1).atTime(0, 30).atZone(zone).toOffsetDateTime()
+
+        val laterToday = PracticeFixtures.word("Apfel", state = FsrsState.REVIEW, due = tonight)
+        PracticeFixtures.word("Birne", state = FsrsState.REVIEW, due = tomorrow)
+        PracticeFixtures.word("Kirsche", state = FsrsState.LEARNING, due = now.plusMinutes(10))
+        val relearnDue = PracticeFixtures.word("Dattel", state = FsrsState.RELEARNING, due = now.minusMinutes(1))
+
+        val queue = client.queue(token)
+        assertEquals(listOf(relearnDue, laterToday).map(UUID::toString), queue.cards.map { it.word.id })
+        assertEquals(2, queue.dueCount)
+
+        val stats = client.get("/api/v1/practice/stats") { bearerAuth(token) }.body<PracticeStatsResponse>()
+        assertEquals(queue.dueCount, stats.dueNow)
+        assertEquals(3, stats.dueToday) // plus the learning card due in 10 minutes
+
+        // Reviewing the card early is graded normally and moves it past today.
+        client.review(token, laterToday, Rating.GOOD)
+        assertFalse(client.queue(token).cards.any { it.word.id == laterToday.toString() })
     }
 
     @Test
