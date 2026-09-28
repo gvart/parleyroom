@@ -1,0 +1,27 @@
+module.yaml
+  s_2b5907717bc9a2::t_f70bde26abd176 69
+src/com/gvart/parleyroom/common/transfer/ProblemDetail.kt
+  s_2b5907717bc9a2::t_0e664139eb3297 14-15,18,24
+libs.versions.toml
+  s_2b5907717bc9a2::t_f70bde26abd176 8,24
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_2b5907717bc9a2::t_0e664139eb3297 219
+src/com/gvart/parleyroom/common/transfer/exception/BadRequestException.kt
+  s_2b5907717bc9a2::t_0e664139eb3297 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "d5742d0e571d448761e51a9af1b6eb957f42459a",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
