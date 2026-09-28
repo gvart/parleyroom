@@ -363,9 +363,10 @@ groupIds, deduplicated, ≥ 1 (400 `ASSIGNMENT_NO_STUDENTS`). Students must be l
 (404 `GROUP_NOT_FOUND` / `LESSON_NOT_FOUND` / `DOCUMENT_NOT_FOUND` / `MATERIAL_NOT_FOUND`).
 Bad item → 400 `HOMEWORK_ITEM_INVALID` + `pointer` (`/items/2/responseType`).
 
-`ReviewDraft = { feedback?: string|null (≤ 10 000), units?: [{ assignmentItemId, blockId?, itemId?,
-correct?: bool|null, comment?: string|null (≤ 5 000) }] }` — fields present replace, `null`
-clears; units not listed are untouched. Only units that exist in the assignment (400
+`ReviewDraft = { feedback: string|null (≤ 10 000), units?: [{ assignmentItemId, blockId?, itemId?,
+correct: bool|null, comment: string|null (≤ 5 000) }] }` — `feedback` always replaces; for every
+listed unit `correct` (teacher override, `null` = use the auto result) and `comment` replace; units
+not listed are untouched. Only units that exist in the assignment (400
 `HOMEWORK_ITEM_INVALID`).
 
 ### Endpoints — student (and teacher read)
@@ -386,7 +387,7 @@ List: students → own; teachers → homework of their assignments (`studentId` 
 admins → all. `status` is a comma list. Sort: `due` = dueDate asc nulls last (default for
 students), `submitted` = submittedAt asc (the teacher's "Hausaufgaben zu korrigieren" queue =
 `status=SUBMITTED&sort=submitted`), `created` = desc (default for teachers).
-Answers / submit / uploads: the assigned student only (teacher/admin 403). `PUT …/answers` is a
+Answers / submit / uploads: the assigned student only (teacher/admin 403, other students 404). `PUT …/answers` is a
 **partial, idempotent merge**: only the listed units change (the 1.5 s autosave sends only changed
 units; sending the same body twice is a no-op), `answer: null` removes one. It never submits.
 `AnswersSaved = { updatedAt, lastSavedAt, answeredUnits, totalUnits }`.
@@ -401,6 +402,7 @@ Payload must match the unit type (400 `HOMEWORK_ANSWER_INVALID` + `pointer`); un
 Only for MATERIAL/TASK units with `responseType` AUDIO / VIDEO / FILE, while `OPEN`, ≤ 5 per unit
 (409 `UPLOAD_LIMIT_REACHED`). The response carries the upload `id`; the client then lists it in the
 unit's answer (`uploadIds`). Deleting an upload also removes it from the answer. Size limit = `STORAGE_MAX_FILE_SIZE` (400 `FILE_TOO_LARGE`).
+Upload is `multipart/form-data` with one `file` part (filename + `Content-Type` required).
 Content type = the part's `Content-Type` without parameters (`audio/webm;codecs=opus` →
 `audio/webm`), must be in the allowlist, else 400 `UPLOAD_TYPE_NOT_ALLOWED`:
 - AUDIO: `audio/webm`, `audio/ogg`, `audio/mpeg`, `audio/mp4`, `audio/x-m4a`, `audio/aac`, `audio/wav`, `audio/x-wav`
@@ -449,15 +451,16 @@ The learning streak still records `HOMEWORK_SUBMITTED` activity on submit.
 
 ### Tables (V12)
 
-`assignments` (teacher_id, lesson_id? SET NULL, title, instructions, due_date DATE),
-`assignment_groups` (assignment_id, group_id CASCADE), `assignment_items` (assignment_id CASCADE,
-position, kind, title, task, response_type, document_id? SET NULL, document_revision, blocks JSONB,
-material_id? SET NULL), `homework` (assignment_id CASCADE, student_id, status, attempt, feedback,
-review_draft_feedback, summary cols, submitted/reviewed/returned/done_at; unique (assignment, student)),
-`homework_answers` (homework_id CASCADE, assignment_item_id CASCADE, block_id?, item_id?, answer JSONB,
-auto_result, auto_score, case_mismatch, gap_results JSONB, teacher_correct, comment + draft columns,
-answered_at; partial unique indexes for doc / non-doc units), `homework_uploads` (homework_id CASCADE,
-assignment_item_id, storage_key, file_name, content_type, size).
+`assignments` (teacher_id, lesson_id? SET NULL, title, instructions, due_date DATE, item_count,
+total_units), `assignment_groups` (assignment_id, group_id CASCADE), `assignment_items`
+(assignment_id CASCADE, position, kind, title, task, response_type, document_id? SET NULL,
+document_revision, blocks JSONB, material_id? SET NULL), `homework` (assignment_id CASCADE,
+student_id, status, last_outcome, attempt, feedback, summary counts, last_saved_at,
+submitted/reviewed/returned/done_at; unique (assignment, student)), `homework_answers`
+(homework_id CASCADE, assignment_item_id CASCADE, block_id?, item_ref?, answer JSONB, answered_at
+(set only for non-empty answers), submitted_answer JSONB, auto_result, auto_score, case_mismatch,
+gap_results JSONB, teacher_correct, comment; partial unique indexes for document / item units),
+`homework_uploads` (homework_id CASCADE, assignment_item_id, storage_key, file_name, content_type, size).
 
 ### Error codes
 
