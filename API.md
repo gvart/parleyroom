@@ -665,65 +665,197 @@ gap_results JSONB, teacher_correct, comment; partial unique indexes for document
 
 ---
 
-## Learning Goals (`/api/v1/goals`)
+## Student progress (`/api/v1/students/{studentId}/progress`)
 
-Progress-tracked learning goals set by students or teachers.
+Brief §5.6: the **Progress** tab in student detail — grammar checklist for the student's level
+(covered / practiced / needs work), topics covered vs. not, a few numbers. Everything is
+**derived** from lessons, homework and vocabulary at request time (nothing is cached); the only
+stored input is the teacher's **manual override** per student × grammar topic. The student gets the
+same view read-only. A progress request runs a fixed number of grouped queries (independent of
+the number of topics, lessons or homework).
 
-Status flow: `ACTIVE -> COMPLETED` or `-> ABANDONED`
-
-```
-GET /api/v1/goals?studentId=UUID&status=ACTIVE|COMPLETED|ABANDONED
-```
-- **Student** -> own goals
-- **Teacher** -> goals they created for their students
-- **Admin** -> all
-
-```
-POST /api/v1/goals
-Body: { studentId, description, targetDate? (YYYY-MM-DD) }
-```
-- **Student** -> creates for themselves, `setBy` = STUDENT
-- **Teacher** -> creates for their students, `setBy` = TEACHER, `teacherId` auto-set
-- **Admin** -> creates for anyone, `setBy` = TEACHER
+Progress is always **per teacher library**: the checklist is the teacher's grammar topics, the
+topics are the teacher's topic tree, and only that teacher's lessons / homework / words count.
 
 ```
-GET    /api/v1/goals/{id}
-PUT    /api/v1/goals/{id}         Body: { description?, targetDate? }
-DELETE /api/v1/goals/{id}
+GET    /api/v1/students/{studentId}/progress?teacherId=&level=&includeLower=true   -> StudentProgress
+PUT    /api/v1/students/{studentId}/progress/grammar/{grammarTopicId}/override
+       Body: { status: NOT_COVERED|COVERED|PRACTICED|NEEDS_WORK, note?: string (≤ 2 000) } -> GrammarProgressItem
+DELETE /api/v1/students/{studentId}/progress/grammar/{grammarTopicId}/override     -> GrammarProgressItem (derived again)
 ```
-Anyone with access to the student. PUT only works on ACTIVE goals.
+Roles: `GET` = a linked teacher (`teacherId` ignored: always the caller), the student themself,
+admin; others 403 `FORBIDDEN`. Students/admins pass `teacherId` when the student has several
+teachers (default: the earliest, like vocab-settings); no teacher → 404 `TEACHER_STUDENT_NOT_FOUND`.
+Override `PUT`/`DELETE` = a linked teacher only (students/admins 403); the grammar topic must be the
+caller's (404 `GRAMMAR_TOPIC_NOT_FOUND`); a bad `status` / too long `note` → 400
+`GRAMMAR_OVERRIDE_INVALID` (+ `pointer`). `DELETE` without an override is a no-op (200).
+
+**Level**: `level` query param, else the student's `level`. `includeLower=true` adds every lower
+level (A1 … level). Grammar topics **without** a level are never on the checklist. No level at all
+→ `level: null`, empty `grammar` / `topics`, `checklistEmpty: true`.
+
+### Grammar status (derived)
+
+For each grammar topic G on the checklist (teacher T, student S):
+
+| status | rule (first that matches wins, top to bottom) |
+|---|---|
+| `NEEDS_WORK` | `scored.total ≥ minScoredItems` (3) **and** `scored.correct / scored.total < needsWorkBelow` (0.60) |
+| `PRACTICED` | S has **submitted** (`attempt ≥ 1`, any status) homework of T with an item whose source is tagged with G |
+| `COVERED` | S is a `CONFIRMED` participant of a lesson of T tagged with G that is not `CANCELLED` / `REQUEST` and has `scheduledAt ≤ now` (the P5 "covered by" rule) |
+| `NOT_COVERED` | none of the above |
+
+- **Item source tagged with G**: a `DOCUMENT` item whose source document (`assignment_items.document_id`)
+  has G in `document_grammar_topics`, or a `MATERIAL` item whose material has G in
+  `material_grammar_topics`. Tags are read **live** (re-tagging a document changes past homework's
+  attribution; a deleted source document/material drops that evidence — the snapshot keeps no tags).
+  `TASK` items have no tags. Blocks copied into another document carry no provenance, so they count for
+  the new document's tags only.
+- **Scored units** (`scored`): answerable units (`homework_answers` rows) of those items in S's homework
+  with status `REVIEWED` or `DONE` (i.e. results the student can see too) and a final verdict
+  `correct = teacher_correct ?? auto_result` (`CORRECT` → 1, `INCORRECT` → 0; `PENDING_REVIEW` /
+  `UNANSWERED` without teacher verdict are not scored). A unit of a document tagged with several
+  grammar topics counts for each of them. Only the latest attempt counts (answers are overwritten on
+  resubmit).
+- `needsWorkBelow` / `minScoredItems` come from config (`progress.needs_work_below = 0.6`
+  `PROGRESS_NEEDS_WORK_BELOW`, `progress.min_scored_items = 3` `PROGRESS_MIN_SCORED_ITEMS`) and are
+  echoed in the response.
+
+**Override**: stored per (student, grammar topic) with the setting teacher; the **effective** `status`
+= `override.status ?? derivedStatus`. Both are returned, so the UI can show "derived: practiced,
+set by you: covered". Deleting the grammar topic (also `force=true`) deletes its overrides; a grammar
+**merge** A → B moves A's overrides to B unless S already has one on B (B's wins).
+
+### Topics
+
+The teacher's topics **relevant to the level(s)**: topics whose `levels` contain one of the checklist
+levels, plus topics with no levels. Covered = the P5 "covered by" rule for S (direct tags only):
+`LESSON` (attended lesson tagged with it, same rule as above) and/or `VOCAB` (S has a word of T's
+library tagged with it). Word counts: S's `student_vocab` rows for entries of T tagged with the topic
+(`total`) and those with status `LEARNED` (`learned`).
+
+### Shapes
 
 ```
-PUT /api/v1/goals/{id}/progress
-Body: { progress: 0-100 }
-```
-Updates progress percentage. Only on ACTIVE goals. Validated 0-100.
-
-```
-POST /api/v1/goals/{id}/complete
-```
-Sets status -> COMPLETED, progress -> 100. Only on ACTIVE goals.
-
-```
-POST /api/v1/goals/{id}/abandon
-```
-Sets status -> ABANDONED. Only on ACTIVE goals.
-
-### Response shape
-```json
-{
-  "id": "uuid",
-  "studentId": "uuid",
-  "teacherId": "uuid | null",
-  "description": "Pass B1 exam",
-  "progress": 50,
-  "setBy": "TEACHER | STUDENT",
-  "targetDate": "2026-06-01 | null",
-  "status": "ACTIVE | COMPLETED | ABANDONED",
-  "createdAt": "ISO8601",
-  "updatedAt": "ISO8601"
+StudentProgress {
+  studentId, teacherId,
+  level: A1..C2 | null,              // the level used (query > student level)
+  levels: [Level],                   // checklist levels, ascending (one unless includeLower)
+  checklistEmpty: bool,              // no grammar topic on the checklist -> no fake 0 %
+  thresholds: { needsWorkBelow: 0.6, minScoredItems: 3 },
+  grammar: [{ level, items: [GrammarProgressItem] }],   // levels ascending, items by position then name
+  topics: [TopicProgressItem],                          // path asc
+  summary: ProgressSummary
+}
+GrammarProgressItem {
+  grammarTopic: { id, name, level, category?, position },
+  status: NOT_COVERED | COVERED | PRACTICED | NEEDS_WORK,   // effective
+  derivedStatus: …same enum,
+  override: { status, note?, teacherId, updatedAt } | null, // note is null for students
+  evidence: {
+    lessonCount, lastLessonAt?,                  // attended lessons tagged with it
+    homeworkCount, lastPracticedAt?,             // submitted homework with a tagged item; max submittedAt
+    scored: { correct, total }, correctRate?     // correct / total, null when total = 0
+  }
+}
+TopicProgressItem {
+  topic: { id, parentId?, name, levels, path },  // path = "Alltag > Haushalt"
+  covered: bool, via: [LESSON | VOCAB], lastAt?,
+  words: { total, learned }
+}
+ProgressSummary {
+  grammar: { total, notCovered, covered, practiced, needsWork,       // by effective status, exclusive
+             percent: { notCovered, covered, practiced, needsWork, reached } | null },
+                                   // integer % of total; reached = 100 − notCovered share; null if checklistEmpty
+  topics: { total, covered, percent? },          // percent null when total = 0
+  vocab: { total, learned, percent? },           // all S's words of T's library (not level-filtered)
+  streak: { current, longest, todayDone }        // the student's learning streak (same as /users/{id}/streak)
 }
 ```
+
+## Goals (`/api/v1/goals`)
+
+Brief §5.9 / decision 10: **auto-tracked** goals replace the old manual-percentage goals (table
+`learning_goals`, `PUT …/progress`, `/complete`, `/abandon` are removed; the prod DB is reset). The
+teacher sets a goal for a student; progress is **computed** from the progress data above, never
+typed in.
+
+```
+GET    /api/v1/goals?studentId=&status=ACTIVE,ACHIEVED   -> [Goal]   ACTIVE first, then targetDate asc nulls last, createdAt desc
+POST   /api/v1/goals            Body: GoalInput -> 201 Goal                     teacher only
+GET    /api/v1/goals/{id}       -> Goal
+PATCH  /api/v1/goals/{id}       Body: GoalPatch -> Goal                          the goal's teacher only
+DELETE /api/v1/goals/{id}       -> 204                                           the goal's teacher or admin
+```
+Roles: list/get — students see their own goals (from every teacher), teachers the goals they created
+(`studentId` filter must be linked, else 403), admins all. Others get 404 `GOAL_NOT_FOUND`. Students
+cannot create, edit or delete (403). The student must be linked to the teacher (403 `FORBIDDEN`).
+
+```
+GoalInput = { studentId, type: EXAM | LEVEL, examName?: string (1..100), targetLevel: A1..C2,
+              targetDate?: YYYY-MM-DD, note?: string (≤ 2 000) }
+GoalPatch = { examName?, targetLevel?, targetDate?, clearTargetDate?: bool, note?, clearNote?: bool,
+              status?: ACTIVE | ACHIEVED | ARCHIVED }
+```
+Rules (400 `GOAL_INVALID` + `pointer`): `EXAM` needs `examName` and `targetDate`; `LEVEL` must not
+have `examName`, `targetDate` optional; on create `targetDate` must not be before today (the
+teacher's timezone). `type` cannot change. Status is set by the teacher (any transition, also back to
+`ACTIVE`); `statusChangedAt` records the last change.
+
+```
+Goal {
+  id, studentId, teacherId, type, examName?, targetLevel, targetDate?, note?,
+  status: ACTIVE | ACHIEVED | ARCHIVED, statusChangedAt?, createdAt, updatedAt,
+  progress: GoalProgress
+}
+GoalProgress {
+  percent: 0..100 | null,            // null when checklistEmpty
+  checklistEmpty: bool,
+  grammar: { total, practiced, covered, needsWork, notCovered },   // target level only, effective statuses
+  topics: { total, covered },        // teacher topics whose levels contain the target level
+  daysLeft: int | null,              // targetDate − today (student's timezone); negative when past
+  expectedPercent: 0..100 | null,
+  onTrack: bool | null               // null unless ACTIVE + targetDate + percent
+}
+```
+**Progress formula** (computed on every read, against the goal teacher's library, target level only —
+lower levels are not included):
+```
+credit(PRACTICED) = 1,  credit(COVERED) = credit(NEEDS_WORK) = 0.5,  credit(NOT_COVERED) = 0
+grammarScore = Σ credit(effective status of G) / |G|        G = teacher's grammar topics with level = targetLevel
+topicsScore  = covered topics / |T|                         T = teacher's topics whose levels contain targetLevel
+percent      = round(100 × (0.8 × grammarScore + 0.2 × topicsScore))     (|T| = 0 → round(100 × grammarScore))
+|G| = 0      → percent = null, checklistEmpty = true (no fake 0 %)
+```
+NEEDS_WORK earns half credit: it was practiced, but the results are weak. Overrides count (effective status).
+
+**On track** (only `ACTIVE` goals with `targetDate` and a `percent`), dates in the student's timezone:
+```
+start = createdAt date;  span = max(1, targetDate − start) days;  elapsed = clamp(today − start, 0, span)
+expectedPercent = round(100 × elapsed / span)
+onTrack = percent ≥ expectedPercent − 10          (10-point tolerance; past the date: expected = 100)
+```
+Listing goals runs a fixed number of grouped queries per distinct teacher in the result (no per-goal
+queries).
+
+### Tables (V14)
+
+`learning_goals` + enums `GOAL_SET_BY` / `GOAL_STATUS` dropped. `goals` (student_id, teacher_id,
+type `GOAL_TYPE`, exam_name?, target_level, target_date?, note?, status `GOAL_STATUS`
+(ACTIVE/ACHIEVED/ARCHIVED), status_changed_at?, created/updated_at; CHECK exam ⇒ exam_name + target_date),
+`grammar_progress_overrides` (PK student_id + grammar_topic_id, grammar topic `ON DELETE CASCADE`,
+teacher_id, status `GRAMMAR_PROGRESS_STATUS`, note?, updated_at). Index
+`assignment_items (document_id)` for the homework → document tag join.
+
+### Error codes
+
+| Code | Status | Notes |
+|---|---|---|
+| `GOAL_NOT_FOUND` | 404 | also for goals the caller cannot see |
+| `GOAL_INVALID` | 400 | type-specific field rules, past `targetDate`; `pointer` |
+| `GRAMMAR_OVERRIDE_INVALID` | 400 | unknown `status`, `note` too long; `pointer` |
+| `GRAMMAR_TOPIC_NOT_FOUND` | 404 | override on another teacher's grammar topic |
+| `TEACHER_STUDENT_NOT_FOUND` | 404 | progress of a student without (that) teacher |
 
 ---
 
@@ -1096,6 +1228,11 @@ ContextSummary {
   lessonOverrideActive: bool,          // = displaySource == LESSON
   knownWordCount,                      // words the context sends (1:1: the student's words from this teacher)
   coveredGrammar: [{ id, name, level }],
+  grammarGaps: {                       // P8: what the model is told to target (same lists as the prompt)
+    needsWork: [{ id, name, level }],
+    notCovered: [{ id, name, level }],
+    checklistEmpty: bool               // no grammar topic at the context level (or no level)
+  },
   libraryTopicCount, libraryGrammarTopicCount,
   attendees: [{ id, firstName, lastName }],   // who publish targets (1:1: the student; club: confirmed attendees)
   attendeeCount
@@ -1124,7 +1261,16 @@ the prompt:
 | display setting | lesson override > teacher–student setting > level default | lesson override > level default |
 | known words | lemmas (+article) of the student's words from this teacher, newest 300 | lemmas linked to earlier lessons of the same group (or, without a group, the attendees' common words), newest 300 |
 | covered grammar | grammar topics of the teacher's earlier lessons the student attended (CONFIRMED) | grammar topics of earlier lessons of the group |
+| grammar gaps (P8) | the student's **effective** progress status (see Student progress) for the teacher's grammar topics **of the context level**: names with `NEEDS_WORK` and names with `NOT_COVERED` | per topic, the effective status of every confirmed attendee; a topic is listed when `NEEDS_WORK` for ≥ ⌈n/2⌉ attendees (resp. `NOT_COVERED` for ≥ ⌈n/2⌉) |
 | library | the teacher's topic tree as paths (`Alltag > Haushalt`, ≤ 300) and grammar topic names with level (≤ 300) | same |
+
+**Grammar gaps** (brief §2 "homework targets what the student is missing", §5.1): computed at request
+time over the whole history (the current lesson counts if it is already tagged and held), in
+checklist order (position, name), each list capped at 30 names; no level → no gaps. The prompt gets two
+lines under "Grammar the student(s) still need to work on (weak homework results)" and "Grammar of
+level X not covered yet"; the system prompt asks the model to prefer these when Anna's
+instructions leave room (her instructions always win). Only names go to the model — no counts per
+student, no names/ids.
 
 **Privacy**: the model never receives student/teacher names, e-mails or any id (uuids are never
 sent; topics/grammar are sent by name and mapped back server-side). Notes and prompt are sent as
@@ -1507,7 +1653,7 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 | Availability | `AVAILABILITY_SLOT_BLOCKED`, `AVAILABILITY_MIN_NOTICE`, `AVAILABILITY_OVERLAP`, `AVAILABILITY_BUFFER_CONFLICT`, `AVAILABILITY_EXCEPTION_NOT_FOUND` |
 | Materials | `MATERIAL_NOT_FOUND`, `MATERIAL_FILE_NOT_FOUND`, `FOLDER_NOT_FOUND`, `TARGET_FOLDER_NOT_FOUND`, `FOLDER_NOT_EMPTY`, `FOLDER_NAME_TAKEN`, `FOLDER_CYCLE`, `FILE_TOO_LARGE` |
 | Homework | `ASSIGNMENT_NOT_FOUND`, `ASSIGNMENT_NO_STUDENTS`, `HOMEWORK_NOT_FOUND`, `HOMEWORK_ITEM_INVALID` (+ `pointer`), `HOMEWORK_ANSWER_INVALID` (+ `pointer`), `HOMEWORK_INVALID_STATE` (409), `SUBMISSION_LOCKED` (409), `UPLOAD_TYPE_NOT_ALLOWED`, `UPLOAD_LIMIT_REACHED` (409), `HOMEWORK_UPLOAD_NOT_FOUND` |
-| Goals | `GOAL_NOT_FOUND`, `GOAL_NOT_ACTIVE` |
+| Progress / goals | `GOAL_NOT_FOUND`, `GOAL_INVALID` (+ `pointer`), `GRAMMAR_OVERRIDE_INVALID` (+ `pointer`) |
 | Vocabulary | `VOCABULARY_WORD_NOT_FOUND`, `VOCAB_ENTRY_NOT_FOUND`, `VOCAB_ENTRY_DUPLICATE`, `VOCAB_LANGUAGE_UNSUPPORTED`, `VOCAB_DISPLAY_FIELD_UNSUPPORTED`, `TEACHER_STUDENT_NOT_FOUND`; practice: `PRACTICE_STUDENT_ONLY` (403), `PRACTICE_MODE_INVALID`, `NOT_A_NOUN`, `SENTENCE_EMPTY`, `SENTENCE_TOO_LONG` |
 | Documents | `DOCUMENT_NOT_FOUND`, `DOCUMENT_INVALID_BLOCK` (+ `pointer`), `DOCUMENT_DUPLICATE_ID` (+ `pointer`), `DOCUMENT_TOO_LARGE`, `DOCUMENT_CONFLICT` (409, + `currentRevision`), `DOCUMENT_VERSION_NOT_FOUND` |
 | AI / Nachbereitung | `AI_NOT_CONFIGURED` (503), `AI_RATE_LIMITED` (429), `AI_JOB_NOT_FOUND`, `AI_JOB_NOT_READY`, `AI_JOB_LESSON_MISMATCH`, `NACHBEREITUNG_NO_ATTENDEES`, `PROMPT_TEMPLATE_NOT_FOUND`, `PROMPT_TEMPLATE_DUPLICATE`; job-only: `AI_OUTPUT_INVALID`, `AI_PROVIDER_ERROR`, `AI_TIMEOUT`, `AI_INTERRUPTED` |
