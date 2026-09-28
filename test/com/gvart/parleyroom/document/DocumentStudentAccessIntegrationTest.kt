@@ -11,6 +11,8 @@ import com.gvart.parleyroom.group.transfer.GroupRequest
 import com.gvart.parleyroom.group.transfer.GroupResponse
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
+import com.gvart.parleyroom.material.data.MaterialTable
+import com.gvart.parleyroom.material.data.MaterialType
 import com.gvart.parleyroom.vocabulary.data.StudentVocabTable
 import com.gvart.parleyroom.vocabulary.seedStudentVocab
 import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
@@ -29,6 +31,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.content.TextContent
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.time.OffsetDateTime
@@ -200,5 +203,31 @@ class DocumentStudentAccessIntegrationTest : IntegrationTest() {
         val shown = studentGet(client, id, studentToken).body<DocumentResponse>().vocab.single()
         assertEquals(mapOf("en" to "house"), shown.translations)
         assertEquals(listOf("en"), shown.display!!.fields)
+    }
+
+    @Test
+    fun `students can open materials referenced by a document they can read`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val materialId = transaction {
+            MaterialTable.insertAndGetId {
+                it[teacherId] = UUID.fromString(TEACHER_ID)
+                it[name] = "Hörtext"
+                it[type] = MaterialType.LINK
+                it[url] = "https://example.com/audio.mp3"
+                it[createdAt] = OffsetDateTime.now()
+            }.value
+        }
+        val blocks = """[{"id":"${UUID.randomUUID()}","type":"media","kind":"AUDIO","materialId":"$materialId","questions":[]}]"""
+        val id = post(client, "/api/v1/documents", teacherToken, """{"title":"Hören","audience":"STUDENT","blocks":$blocks}""")
+            .body<DocumentResponse>().id
+        val studentToken = getStudentToken(client)
+        suspend fun materialStatus() = client.get("/api/v1/materials/$materialId") { bearerAuth(studentToken) }.status
+
+        assertEquals(HttpStatusCode.Forbidden, materialStatus())
+        post(client, "/api/v1/documents/$id/share", teacherToken, """{"studentIds":["$STUDENT_ID"]}""")
+        assertEquals(HttpStatusCode.OK, materialStatus())
+        post(client, "/api/v1/documents/$id/unshare", teacherToken, """{"studentIds":["$STUDENT_ID"]}""")
+        assertEquals(HttpStatusCode.Forbidden, materialStatus())
     }
 }
