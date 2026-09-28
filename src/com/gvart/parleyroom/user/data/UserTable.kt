@@ -16,7 +16,6 @@ object UserTable : UUIDTable("users") {
     val avatarUrl = text("avatar_url").nullable()
     val initials = varchar("initials", 4)
     val level = pgEnum<LanguageLevel>("level", "LANGUAGE_LEVEL").nullable()
-    val points = integer("points").default(0)
     val status = pgEnum<UserStatus>("status", "USER_STATUS").default(UserStatus.ACTIVE)
     val locale = varchar("locale", 5).default("en")
     val timezone = varchar("timezone", 64).default("Europe/Berlin")

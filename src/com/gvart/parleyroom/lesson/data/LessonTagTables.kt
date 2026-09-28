@@ -19,9 +19,9 @@ object LessonGrammarTopicTable : Table("lesson_grammar_topics") {
     override val primaryKey = PrimaryKey(lessonId, grammarTopicId)
 }
 
-/** Corrected sentences of a lesson, stored against its lesson document. */
+/** Corrected sentences of a lesson. */
 object LessonCorrectionTable : UUIDTable("lesson_corrections") {
-    val lessonDocumentId = reference("lesson_document_id", LessonDocumentTable)
+    val lessonId = reference("lesson_id", LessonTable)
     val incorrect = text("incorrect")
     val correct = text("correct")
     val orderIndex = integer("order_index").default(0)

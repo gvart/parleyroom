@@ -9,7 +9,6 @@ import com.gvart.parleyroom.vocabulary.data.StudentVocabStatus
 import com.gvart.parleyroom.vocabulary.data.WordType
 import com.gvart.parleyroom.vocabulary.transfer.QuickAddVocabRequest
 import com.gvart.parleyroom.vocabulary.transfer.StudentVocabPageResponse
-import com.gvart.parleyroom.vocabulary.transfer.UpdateStudentVocabRequest
 import com.gvart.parleyroom.vocabulary.transfer.VocabEntryInput
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -81,30 +80,6 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
     }
 
     // ---------- Vocabulary ----------
-
-    @Test
-    fun `student2 cannot GET another student's vocabulary word`() = testApp {
-        val client = createJsonClient(this)
-        val wordId = createVocabularyAsTeacher(client)
-
-        val response = client.get("/api/v1/vocabulary/$wordId") {
-            bearerAuth(getStudent2Token(client))
-        }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
-    }
-
-    @Test
-    fun `student2 cannot UPDATE another student's vocabulary word`() = testApp {
-        val client = createJsonClient(this)
-        val wordId = createVocabularyAsTeacher(client)
-
-        val response = client.put("/api/v1/vocabulary/$wordId") {
-            bearerAuth(getStudent2Token(client))
-            contentType(ContentType.Application.Json)
-            setBody(UpdateStudentVocabRequest(status = StudentVocabStatus.LEARNED))
-        }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
-    }
 
     @Test
     fun `student2 cannot DELETE another student's vocabulary word`() = testApp {

@@ -3,17 +3,14 @@ package com.gvart.parleyroom.lesson
 import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.lesson.data.LessonStatus
-import com.gvart.parleyroom.lesson.transfer.CompleteLessonRequest
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
-import com.gvart.parleyroom.lesson.transfer.LessonDocumentResponse
 import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.PublicCalendarResponse
 import java.util.UUID
-import com.gvart.parleyroom.lesson.transfer.ReflectLessonRequest
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.lesson.transfer.StartLessonResponse
-import com.gvart.parleyroom.lesson.transfer.SyncLessonDocumentRequest
+import com.gvart.parleyroom.lesson.transfer.UpdateLessonContentRequest
 import com.gvart.parleyroom.video.transfer.VideoAccess
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -21,6 +18,7 @@ import com.gvart.parleyroom.lesson.transfer.CancelLessonRequest
 import com.gvart.parleyroom.lesson.transfer.PendingRescheduleResponse
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -80,8 +78,7 @@ class LessonIntegrationTest : IntegrationTest() {
         assertEquals(STUDENT_ID, lesson.students[0].id)
         assertEquals("CONFIRMED", lesson.students[0].status)
         assertNull(lesson.startedAt)
-        assertNull(lesson.teacherNotes)
-        assertNull(lesson.studentNotes)
+        assertNull(lesson.rawNotes)
     }
 
     @Test
@@ -900,7 +897,6 @@ class LessonIntegrationTest : IntegrationTest() {
 
         assertEquals(HttpStatusCode.OK, response.status)
         val start = response.body<StartLessonResponse>()
-        assertEquals(lesson.id, start.document.lessonId)
         assertEquals("lesson-${lesson.id}", start.videoRoom.roomName)
         assertTrue(start.videoRoom.accessToken.isNotBlank())
     }
@@ -955,118 +951,60 @@ class LessonIntegrationTest : IntegrationTest() {
         assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 
-    // -- Sync --
+    // -- Notes (lessons.rawNotes, autosaved via PATCH /content) --
 
-    @Test
-    fun `teacher can sync teacher notes`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
-
-        val response = client.put("/api/v1/lessons/${lesson.id}/sync") {
+    private suspend fun saveNotes(client: HttpClient, token: String, lessonId: String, notes: String): HttpResponse =
+        client.patch("/api/v1/lessons/$lessonId/content") {
             contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(SyncLessonDocumentRequest(notes = "Great progress today"))
+            bearerAuth(token)
+            setBody(UpdateLessonContentRequest(rawNotes = notes))
         }
 
-        assertEquals(HttpStatusCode.OK, response.status)
-        val doc = response.body<LessonDocumentResponse>()
-        assertEquals("Great progress today", doc.teacherNotes)
+    @Test
+    fun `teacher autosaves the lesson notes in every lesson status`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+
+        assertEquals("Prep", saveNotes(client, teacherToken, lesson.id, "Prep").body<LessonResponse>().rawNotes)
+
+        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
+        assertEquals("Prep\ndie Gießkanne", saveNotes(client, teacherToken, lesson.id, "Prep\ndie Gießkanne").body<LessonResponse>().rawNotes)
+
+        client.post("/api/v1/lessons/${lesson.id}/complete") { bearerAuth(teacherToken) }
+        assertEquals("After", saveNotes(client, teacherToken, lesson.id, "After").body<LessonResponse>().rawNotes)
+
+        val fetched = client.get("/api/v1/lessons/${lesson.id}") { bearerAuth(teacherToken) }.body<LessonResponse>()
+        assertEquals("After", fetched.rawNotes)
     }
 
     @Test
-    fun `student can sync student notes`() = testApp {
+    fun `students can neither read nor write the lesson notes`() = testApp {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
         val studentToken = getStudentToken(client)
-
         val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
+        saveNotes(client, teacherToken, lesson.id, "Private")
 
-        val response = client.put("/api/v1/lessons/${lesson.id}/sync") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(studentToken)
-            setBody(SyncLessonDocumentRequest(notes = "Learned new vocabulary"))
-        }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-        val doc = response.body<LessonDocumentResponse>()
-        assertEquals("Learned new vocabulary", doc.studentNotes)
+        assertEquals(HttpStatusCode.Forbidden, saveNotes(client, studentToken, lesson.id, "Hack").status)
+        val seen = client.get("/api/v1/lessons/${lesson.id}") { bearerAuth(studentToken) }.body<LessonResponse>()
+        assertNull(seen.rawNotes)
     }
 
     @Test
-    fun `teacher can sync notes before lesson is started`() = testApp {
+    fun `sync and reflect endpoints are gone`() = testApp {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
-
         val lesson = createLesson(client, teacherToken).body<LessonResponse>()
 
-        val response = client.put("/api/v1/lessons/${lesson.id}/sync") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(SyncLessonDocumentRequest(notes = "Prep notes"))
+        val sync = client.put("/api/v1/lessons/${lesson.id}/sync") {
+            contentType(ContentType.Application.Json); bearerAuth(teacherToken); setBody("""{ "notes": "x" }""")
         }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-        val doc = response.body<LessonDocumentResponse>()
-        assertEquals("Prep notes", doc.teacherNotes)
-    }
-
-    @Test
-    fun `sync no longer accepts the removed sharedDocument field`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-
-        val response = client.put("/api/v1/lessons/${lesson.id}/sync") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(SyncLessonDocumentRequest(field = "sharedDocument", value = "<p>Lesson plan</p>"))
+        val reflect = client.post("/api/v1/lessons/${lesson.id}/reflect") {
+            contentType(ContentType.Application.Json); bearerAuth(getStudentToken(client)); setBody("""{ "studentReflection": "x" }""")
         }
-
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-    }
-
-    @Test
-    fun `cannot sync a cancelled lesson`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-        client.post("/api/v1/lessons/${lesson.id}/cancel") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(CancelLessonRequest(reason = "conflict"))
-        }
-
-        val response = client.put("/api/v1/lessons/${lesson.id}/sync") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(SyncLessonDocumentRequest(notes = "late note"))
-        }
-
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-    }
-
-    @Test
-    fun `non-participant cannot sync`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-        val student2Token = getStudent2Token(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
-
-        val response = client.put("/api/v1/lessons/${lesson.id}/sync") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(student2Token)
-            setBody(SyncLessonDocumentRequest(notes = "Notes"))
-        }
-
-        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertTrue(sync.status == HttpStatusCode.NotFound || sync.status == HttpStatusCode.MethodNotAllowed, "sync: ${sync.status}")
+        assertTrue(reflect.status == HttpStatusCode.NotFound || reflect.status == HttpStatusCode.MethodNotAllowed, "reflect: ${reflect.status}")
     }
 
     // -- Complete --
@@ -1079,21 +1017,12 @@ class LessonIntegrationTest : IntegrationTest() {
         val lesson = createLesson(client, teacherToken).body<LessonResponse>()
         client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
 
-        val response = client.post("/api/v1/lessons/${lesson.id}/complete") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(CompleteLessonRequest(
-                teacherNotes = "Final notes",
-                teacherWentWell = "Pronunciation improved",
-                teacherWorkingOn = "Grammar articles",
-            ))
-        }
+        val response = client.post("/api/v1/lessons/${lesson.id}/complete") { bearerAuth(teacherToken) }
 
         assertEquals(HttpStatusCode.OK, response.status)
-        val doc = response.body<LessonDocumentResponse>()
-        assertEquals("Final notes", doc.teacherNotes)
-        assertEquals("Pronunciation improved", doc.teacherWentWell)
-        assertEquals("Grammar articles", doc.teacherWorkingOn)
+        val completed = response.body<LessonResponse>()
+        assertEquals(LessonStatus.COMPLETED, completed.status)
+        assertEquals(lesson.id, completed.id)
     }
 
     @Test
@@ -1105,33 +1034,9 @@ class LessonIntegrationTest : IntegrationTest() {
         val lesson = createLesson(client, teacherToken).body<LessonResponse>()
         client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
 
-        val response = client.post("/api/v1/lessons/${lesson.id}/complete") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(studentToken)
-            setBody(CompleteLessonRequest())
-        }
+        val response = client.post("/api/v1/lessons/${lesson.id}/complete") { bearerAuth(studentToken) }
 
         assertEquals(HttpStatusCode.Forbidden, response.status)
-    }
-
-    @Test
-    fun `teacher can complete lesson with empty feedback`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
-
-        val response = client.post("/api/v1/lessons/${lesson.id}/complete") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(CompleteLessonRequest())
-        }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-        val doc = response.body<LessonDocumentResponse>()
-        assertNull(doc.teacherWentWell)
-        assertNull(doc.teacherWorkingOn)
     }
 
     // -- Video token (early-join window) --
@@ -1203,11 +1108,7 @@ class LessonIntegrationTest : IntegrationTest() {
 
         val lesson = createLesson(client, teacherToken).body<LessonResponse>()
 
-        val response = client.post("/api/v1/lessons/${lesson.id}/complete") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(CompleteLessonRequest(teacherNotes = "Notes"))
-        }
+        val response = client.post("/api/v1/lessons/${lesson.id}/complete") { bearerAuth(teacherToken) }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
     }
@@ -1219,17 +1120,9 @@ class LessonIntegrationTest : IntegrationTest() {
 
         val lesson = createLesson(client, teacherToken).body<LessonResponse>()
         client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
-        client.post("/api/v1/lessons/${lesson.id}/complete") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(CompleteLessonRequest(teacherNotes = "Done"))
-        }
+        client.post("/api/v1/lessons/${lesson.id}/complete") { bearerAuth(teacherToken) }
 
-        val response = client.post("/api/v1/lessons/${lesson.id}/complete") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(CompleteLessonRequest(teacherNotes = "Done again"))
-        }
+        val response = client.post("/api/v1/lessons/${lesson.id}/complete") { bearerAuth(teacherToken) }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
     }
@@ -1245,13 +1138,13 @@ class LessonIntegrationTest : IntegrationTest() {
         assertEquals(LessonStatus.CONFIRMED, lesson.status)
         assertEquals(1, lesson.students.size)
         assertNull(lesson.startedAt)
-        assertNull(lesson.teacherNotes)
+        assertNull(lesson.rawNotes)
 
         // Start
-        val startDoc = client.post("/api/v1/lessons/${lesson.id}/start") {
+        val start = client.post("/api/v1/lessons/${lesson.id}/start") {
             bearerAuth(teacherToken)
-        }.body<StartLessonResponse>().document
-        assertEquals(lesson.id, startDoc.lessonId)
+        }.body<StartLessonResponse>()
+        assertEquals("lesson-${lesson.id}", start.videoRoom.roomName)
 
         // Verify startedAt is set and status is IN_PROGRESS via GET
         val afterStart = client.get("/api/v1/lessons/${lesson.id}") {
@@ -1260,159 +1153,22 @@ class LessonIntegrationTest : IntegrationTest() {
         assertNotNull(afterStart.startedAt)
         assertEquals(LessonStatus.IN_PROGRESS, afterStart.status)
 
-        // Teacher syncs notes
-        val teacherSync = client.put("/api/v1/lessons/${lesson.id}/sync") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(SyncLessonDocumentRequest(notes = "Working on articles"))
-        }.body<LessonDocumentResponse>()
-        assertEquals("Working on articles", teacherSync.teacherNotes)
+        // Teacher takes notes during the lesson
+        assertEquals("Working on articles", saveNotes(client, teacherToken, lesson.id, "Working on articles").body<LessonResponse>().rawNotes)
 
-        // Student syncs notes
-        val studentSync = client.put("/api/v1/lessons/${lesson.id}/sync") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(studentToken)
-            setBody(SyncLessonDocumentRequest(notes = "Learning der/die/das"))
-        }.body<LessonDocumentResponse>()
-        assertEquals("Learning der/die/das", studentSync.studentNotes)
-        assertEquals("Working on articles", studentSync.teacherNotes) // teacher notes preserved
+        // Teacher completes; the notes stay
+        val complete = client.post("/api/v1/lessons/${lesson.id}/complete") { bearerAuth(teacherToken) }.body<LessonResponse>()
+        assertEquals(LessonStatus.COMPLETED, complete.status)
+        assertEquals("Working on articles", complete.rawNotes)
 
-        // Verify doc fields appear in LessonResponse
-        val midLesson = client.get("/api/v1/lessons/${lesson.id}") {
-            bearerAuth(teacherToken)
-        }.body<LessonResponse>()
-        assertEquals("Working on articles", midLesson.teacherNotes)
-        assertEquals("Learning der/die/das", midLesson.studentNotes)
-
-        // Teacher completes
-        val complete = client.post("/api/v1/lessons/${lesson.id}/complete") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(CompleteLessonRequest(
-                teacherNotes = "Final teacher notes",
-                teacherWentWell = "Student engaged well",
-                teacherWorkingOn = "Article genders",
-            ))
-        }.body<LessonDocumentResponse>()
-        assertEquals("Final teacher notes", complete.teacherNotes)
-        assertEquals("Student engaged well", complete.teacherWentWell)
-        assertEquals("Article genders", complete.teacherWorkingOn)
-        assertEquals("Learning der/die/das", complete.studentNotes) // student notes preserved
-
-        // Student reflects after completion
-        val reflect = client.post("/api/v1/lessons/${lesson.id}/reflect") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(studentToken)
-            setBody(ReflectLessonRequest(
-                studentReflection = "I feel more confident",
-                studentHardToday = "Dative case",
-            ))
-        }.body<LessonDocumentResponse>()
-        assertEquals("I feel more confident", reflect.studentReflection)
-        assertEquals("Dative case", reflect.studentHardToday)
-        assertEquals("Final teacher notes", reflect.teacherNotes) // teacher notes preserved
-
-        // Final state via GET includes all doc fields
+        // Final state via GET
         val finalLesson = client.get("/api/v1/lessons/${lesson.id}") {
             bearerAuth(teacherToken)
         }.body<LessonResponse>()
         assertEquals(LessonStatus.COMPLETED, finalLesson.status)
         assertNotNull(finalLesson.startedAt)
-        assertEquals("Final teacher notes", finalLesson.teacherNotes)
-        assertEquals("Learning der/die/das", finalLesson.studentNotes)
-        assertEquals("Student engaged well", finalLesson.teacherWentWell)
-        assertEquals("Article genders", finalLesson.teacherWorkingOn)
-        assertEquals("I feel more confident", finalLesson.studentReflection)
-        assertEquals("Dative case", finalLesson.studentHardToday)
-    }
-
-    // -- Reflect --
-
-    @Test
-    fun `student can reflect on a started lesson`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-        val studentToken = getStudentToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
-
-        val response = client.post("/api/v1/lessons/${lesson.id}/reflect") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(studentToken)
-            setBody(ReflectLessonRequest(
-                studentReflection = "Great session",
-                studentHardToday = "Adjective endings",
-            ))
-        }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-        val doc = response.body<LessonDocumentResponse>()
-        assertEquals("Great session", doc.studentReflection)
-        assertEquals("Adjective endings", doc.studentHardToday)
-    }
-
-    @Test
-    fun `teacher cannot reflect`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
-
-        val response = client.post("/api/v1/lessons/${lesson.id}/reflect") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(ReflectLessonRequest(studentReflection = "Notes"))
-        }
-
-        assertEquals(HttpStatusCode.Forbidden, response.status)
-    }
-
-    @Test
-    fun `cannot reflect before lesson is started`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-        val studentToken = getStudentToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-
-        val response = client.post("/api/v1/lessons/${lesson.id}/reflect") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(studentToken)
-            setBody(ReflectLessonRequest(studentReflection = "Notes"))
-        }
-
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-    }
-
-    @Test
-    fun `student can reflect after lesson is completed`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-        val studentToken = getStudentToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
-        client.post("/api/v1/lessons/${lesson.id}/complete") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(CompleteLessonRequest(teacherNotes = "Done"))
-        }
-
-        val response = client.post("/api/v1/lessons/${lesson.id}/reflect") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(studentToken)
-            setBody(ReflectLessonRequest(
-                studentReflection = "Learned a lot",
-                studentHardToday = "Passive voice",
-            ))
-        }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-        val doc = response.body<LessonDocumentResponse>()
-        assertEquals("Learned a lot", doc.studentReflection)
-        assertEquals("Passive voice", doc.studentHardToday)
+        assertEquals("Working on articles", finalLesson.rawNotes)
+        assertNull(client.get("/api/v1/lessons/${lesson.id}") { bearerAuth(studentToken) }.body<LessonResponse>().rawNotes)
     }
 
     // -- Cancel --
@@ -1499,11 +1255,7 @@ class LessonIntegrationTest : IntegrationTest() {
 
         val lesson = createLesson(client, teacherToken).body<LessonResponse>()
         client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
-        client.post("/api/v1/lessons/${lesson.id}/complete") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(CompleteLessonRequest(teacherNotes = "Done"))
-        }
+        client.post("/api/v1/lessons/${lesson.id}/complete") { bearerAuth(teacherToken) }
 
         val response = client.post("/api/v1/lessons/${lesson.id}/cancel") {
             contentType(ContentType.Application.Json)
@@ -1602,30 +1354,6 @@ class LessonIntegrationTest : IntegrationTest() {
         assertEquals(LessonStatus.IN_PROGRESS, started.status)
         assertNotNull(started.startedAt)
     }
-
-    @Test
-    fun `cannot sync document for completed lesson`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
-        client.post("/api/v1/lessons/${lesson.id}/complete") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(CompleteLessonRequest(teacherNotes = "Done"))
-        }
-
-        val response = client.put("/api/v1/lessons/${lesson.id}/sync") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(SyncLessonDocumentRequest(notes = "More notes"))
-        }
-
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-    }
-
-    // -- Reschedule visibility --
 
     @Test
     fun `pending reschedule appears in lesson response`() = testApp {
@@ -1731,60 +1459,6 @@ class LessonIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `reflect with both fields null fails validation`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-        val studentToken = getStudentToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
-
-        val response = client.post("/api/v1/lessons/${lesson.id}/reflect") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(studentToken)
-            setBody(ReflectLessonRequest())
-        }
-
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-    }
-
-    @Test
-    fun `reflect with only studentReflection succeeds`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-        val studentToken = getStudentToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
-
-        val response = client.post("/api/v1/lessons/${lesson.id}/reflect") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(studentToken)
-            setBody(ReflectLessonRequest(studentReflection = "Good session"))
-        }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-    }
-
-    @Test
-    fun `reflect with only studentHardToday succeeds`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-        val studentToken = getStudentToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-        client.post("/api/v1/lessons/${lesson.id}/start") { bearerAuth(teacherToken) }
-
-        val response = client.post("/api/v1/lessons/${lesson.id}/reflect") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(studentToken)
-            setBody(ReflectLessonRequest(studentHardToday = "Dative case"))
-        }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-    }
-
-    @Test
     fun `lesson list pagination returns slice and total`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
@@ -1852,8 +1526,7 @@ class LessonIntegrationTest : IntegrationTest() {
         assertEquals("", busy.topic)
         assertTrue(busy.students.isEmpty())
         assertNull(busy.level)
-        assertNull(busy.teacherNotes)
-        assertNull(busy.studentNotes)
+        assertNull(busy.rawNotes)
     }
 
     @Test

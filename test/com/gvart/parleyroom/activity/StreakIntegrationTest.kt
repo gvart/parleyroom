@@ -6,11 +6,9 @@ import com.gvart.parleyroom.activity.data.LearningActivityTable
 import com.gvart.parleyroom.activity.transfer.StreakResponse
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.homework.HomeworkFixtures
-import com.gvart.parleyroom.lesson.data.LessonDocumentTable
 import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
-import com.gvart.parleyroom.lesson.transfer.CompleteLessonRequest
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.vocabulary.seedStudentVocab
@@ -253,12 +251,6 @@ class StreakIntegrationTest : IntegrationTest() {
                 it[createdAt] = OffsetDateTime.now()
                 it[updatedAt] = OffsetDateTime.now()
             }.value
-            // started lessons always have a document; completion returns it
-            LessonDocumentTable.insert {
-                it[LessonDocumentTable.lessonId] = id
-                it[createdAt] = OffsetDateTime.now()
-                it[updatedAt] = OffsetDateTime.now()
-            }
             listOf(studentUuid, student2Uuid).forEach { sid ->
                 LessonStudentTable.insert {
                     it[LessonStudentTable.lessonId] = id
@@ -268,11 +260,7 @@ class StreakIntegrationTest : IntegrationTest() {
             id
         }
 
-        val response = client.post("/api/v1/lessons/$lessonId/complete") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(teacherToken)
-            setBody(CompleteLessonRequest())
-        }
+        val response = client.post("/api/v1/lessons/$lessonId/complete") { bearerAuth(teacherToken) }
         assertEquals(HttpStatusCode.OK, response.status)
 
         assertEquals(listOf(ActivityKind.LESSON_COMPLETED), activityKinds(studentUuid))

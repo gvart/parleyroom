@@ -51,7 +51,7 @@ object GenerationJobs {
 
     fun input(row: ResultRow): JobInput = json.decodeFromJsonElement(row[GenerationJobTable.input])
 
-    fun toResponse(row: ResultRow, withResult: Boolean = true): GenerationJobResponse {
+    fun toResponse(row: ResultRow): GenerationJobResponse {
         val usage = JobUsage(row[GenerationJobTable.inputTokens], row[GenerationJobTable.outputTokens])
         return GenerationJobResponse(
             id = row[GenerationJobTable.id].value.toString(),
@@ -62,7 +62,7 @@ object GenerationJobs {
             parentJobId = row[GenerationJobTable.parentJobId]?.value?.toString(),
             documentId = row[GenerationJobTable.documentId]?.value?.toString(),
             input = input(row),
-            result = if (withResult) row[GenerationJobTable.result] else null,
+            result = row[GenerationJobTable.result],
             error = row[GenerationJobTable.errorCode]?.let { JobError(it, row[GenerationJobTable.errorMessage].orEmpty()) },
             model = row[GenerationJobTable.model],
             attempts = row[GenerationJobTable.attempts],

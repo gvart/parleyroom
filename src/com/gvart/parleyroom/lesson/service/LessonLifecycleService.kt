@@ -10,7 +10,6 @@ import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.group.data.GroupTable
-import com.gvart.parleyroom.lesson.data.LessonDocumentTable
 import com.gvart.parleyroom.lesson.data.LessonEventTable
 import com.gvart.parleyroom.lesson.data.LessonEventType
 import com.gvart.parleyroom.lesson.data.LessonStatus
@@ -18,9 +17,7 @@ import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.lesson.transfer.CancelLessonRequest
-import com.gvart.parleyroom.lesson.transfer.CompleteLessonRequest
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
-import com.gvart.parleyroom.lesson.transfer.LessonDocumentResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.StartLessonResponse
 import com.gvart.parleyroom.notification.data.NotificationType
@@ -47,7 +44,6 @@ import java.util.UUID
 class LessonLifecycleService(
     private val notificationService: NotificationService,
     private val videoTokenService: VideoTokenService,
-    private val documentService: LessonDocumentService,
     private val support: LessonSupport,
     private val availabilityValidator: AvailabilityValidator,
 ) {
@@ -308,8 +304,6 @@ class LessonLifecycleService(
             it[attended] = true
         }
 
-        val docId = documentService.ensureDocument(lessonId)
-
         LessonEventTable.insert {
             it[LessonEventTable.lessonId] = lessonId
             it[eventType] = LessonEventType.LESSON_STARTED
@@ -327,17 +321,11 @@ class LessonLifecycleService(
             )
         }
 
-        val document = LessonDocumentTable.selectAll()
-            .where { LessonDocumentTable.id eq docId }
-            .single()
-            .let(support::toDocumentResponse)
-
-        val videoRoom = mintVideoAccess(lessonId, principal)
-        StartLessonResponse(document = document, videoRoom = videoRoom)
+        StartLessonResponse(videoRoom = mintVideoAccess(lessonId, principal))
     }
 
-    fun completeLesson(lessonId: UUID, request: CompleteLessonRequest, principal: UserPrincipal): LessonDocumentResponse {
-        val response = doCompleteLesson(lessonId, request, principal)
+    fun completeLesson(lessonId: UUID, principal: UserPrincipal): LessonResponse {
+        val response = doCompleteLesson(lessonId, principal)
         // Kick everyone out of the LiveKit room so students don't linger in
         // a dead call after the teacher wraps. `deleteRoom` is already async
         // and internally catches failures — failure here doesn't undo the
@@ -346,7 +334,7 @@ class LessonLifecycleService(
         return response
     }
 
-    private fun doCompleteLesson(lessonId: UUID, request: CompleteLessonRequest, principal: UserPrincipal): LessonDocumentResponse = transaction {
+    private fun doCompleteLesson(lessonId: UUID, principal: UserPrincipal): LessonResponse = transaction {
         val lesson = support.findLesson(lessonId)
 
         if (principal.role == UserRole.STUDENT)
@@ -359,13 +347,6 @@ class LessonLifecycleService(
             throw BadRequestException("Only in-progress lessons can be completed", code = "LESSON_INVALID_STATE")
 
         val now = OffsetDateTime.now()
-
-        LessonDocumentTable.update({ LessonDocumentTable.lessonId eq lessonId }) {
-            if (request.teacherNotes != null) it[teacherNotes] = request.teacherNotes
-            if (request.teacherWentWell != null) it[teacherWentWell] = request.teacherWentWell
-            if (request.teacherWorkingOn != null) it[teacherWorkingOn] = request.teacherWorkingOn
-            it[updatedAt] = now
-        }
 
         LessonTable.update({ LessonTable.id eq lessonId }) {
             it[status] = LessonStatus.COMPLETED
@@ -392,10 +373,7 @@ class LessonLifecycleService(
             )
         }
 
-        LessonDocumentTable.selectAll()
-            .where { LessonDocumentTable.lessonId eq lessonId }
-            .single()
-            .let(support::toDocumentResponse)
+        support.toResponse(support.findLesson(lessonId), principal)
     }
 
     fun getVideoAccess(lessonId: UUID, principal: UserPrincipal): VideoAccess = transaction {

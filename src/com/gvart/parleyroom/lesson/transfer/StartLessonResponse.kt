@@ -5,6 +5,5 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class StartLessonResponse(
-    val document: LessonDocumentResponse,
     val videoRoom: VideoAccess,
 )

@@ -2,7 +2,6 @@ package com.gvart.parleyroom.material
 
 import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.common.data.LessonType
-import com.gvart.parleyroom.lesson.transfer.CompleteLessonRequest
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.material.data.MaterialType
@@ -147,11 +146,7 @@ class LessonMaterialIntegrationTest : IntegrationTest() {
     }
 
     private suspend fun completeLesson(client: HttpClient, token: String, lessonId: String) {
-        client.post("/api/v1/lessons/$lessonId/complete") {
-            bearerAuth(token)
-            contentType(ContentType.Application.Json)
-            setBody(CompleteLessonRequest())
-        }
+        client.post("/api/v1/lessons/$lessonId/complete") { bearerAuth(token) }
     }
 
     private suspend fun getStudentNotifications(client: HttpClient, token: String): NotificationPageResponse =

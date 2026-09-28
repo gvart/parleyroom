@@ -6,21 +6,15 @@ import com.gvart.parleyroom.common.routing.getQueryUUID
 import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
-import com.gvart.parleyroom.common.transfer.exception.BadRequestException
-import com.gvart.parleyroom.vocabulary.data.NounArticle
 import com.gvart.parleyroom.vocabulary.data.StudentVocabStatus
 import com.gvart.parleyroom.vocabulary.data.WordType
 import com.gvart.parleyroom.vocabulary.service.VocabEntryService
 import com.gvart.parleyroom.vocabulary.service.VocabSettingsService
 import com.gvart.parleyroom.vocabulary.service.VocabularyService
-import com.gvart.parleyroom.vocabulary.transfer.AssignVocabRequest
-import com.gvart.parleyroom.vocabulary.transfer.AssignVocabResponse
 import com.gvart.parleyroom.vocabulary.transfer.QuickAddVocabRequest
 import com.gvart.parleyroom.vocabulary.transfer.QuickAddVocabResponse
 import com.gvart.parleyroom.vocabulary.transfer.SetStudentLevelRequest
 import com.gvart.parleyroom.vocabulary.transfer.StudentVocabPageResponse
-import com.gvart.parleyroom.vocabulary.transfer.StudentVocabResponse
-import com.gvart.parleyroom.vocabulary.transfer.UpdateStudentVocabRequest
 import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
 import com.gvart.parleyroom.vocabulary.transfer.VocabEntryInput
 import com.gvart.parleyroom.vocabulary.transfer.VocabEntryPageResponse
@@ -98,28 +92,6 @@ fun Application.configureVocabularyRouting() {
                 }
 
                 route("/{id}") {
-                    get {
-                        call.respond(HttpStatusCode.OK, vocabularyService.getWord(call.getPathUUID(), call.requirePrincipal()))
-                    }.describe {
-                        summary = "Get student vocabulary word"
-                        parameters { path("id") { description = "Student vocab UUID" } }
-                        responses {
-                            HttpStatusCode.OK { schema = jsonSchema<StudentVocabResponse>() }
-                            HttpStatusCode.NotFound { description = "VOCABULARY_WORD_NOT_FOUND"; schema = jsonSchema<ProblemDetail>() }
-                        }
-                    }
-
-                    put<UpdateStudentVocabRequest> {
-                        val result = vocabularyService.updateStatus(call.getPathUUID(), it.status, call.requirePrincipal())
-                        call.respond(HttpStatusCode.OK, result)
-                    }.describe {
-                        summary = "Set word status"
-                        description = "Sets the learning status. Edit the word itself via /vocab-entries/{entryId}."
-                        parameters { path("id") { description = "Student vocab UUID" } }
-                        requestBody { schema = jsonSchema<UpdateStudentVocabRequest>() }
-                        responses { HttpStatusCode.OK { schema = jsonSchema<StudentVocabResponse>() } }
-                    }
-
                     delete {
                         vocabularyService.deleteWord(call.getPathUUID(), call.requirePrincipal())
                         call.respond(HttpStatusCode.NoContent)
@@ -156,28 +128,6 @@ fun Application.configureVocabularyRouting() {
                         query("pageSize") { description = "Items per page (default 20, max 100)"; required = false }
                     }
                     responses { HttpStatusCode.OK { schema = jsonSchema<VocabEntryPageResponse>() } }
-                }
-
-                get("/lookup") {
-                    val params = call.request.queryParameters
-                    val lemma = params["lemma"]?.takeIf { it.isNotBlank() }
-                        ?: throw BadRequestException("Missing query parameter: lemma")
-                    val result = vocabEntryService.lookup(
-                        principal = call.requirePrincipal(),
-                        lemma = lemma,
-                        article = params["article"]?.let(NounArticle::valueOf),
-                        wordType = params["wordType"]?.let(WordType::valueOf),
-                    )
-                    call.respond(HttpStatusCode.OK, result)
-                }.describe {
-                    summary = "Look up library entries by lemma"
-                    description = "Exact, case-insensitive lemma match in the teacher's library; use before creating to avoid duplicates."
-                    parameters {
-                        query("lemma") { description = "Lemma to look up"; required = true }
-                        query("article") { description = "DER, DIE or DAS"; required = false }
-                        query("wordType") { description = "Word type"; required = false }
-                    }
-                    responses { HttpStatusCode.OK { schema = jsonSchema<List<VocabEntryResponse>>() } }
                 }
 
                 post<VocabEntryInput> {
@@ -222,16 +172,6 @@ fun Application.configureVocabularyRouting() {
                         description = "Also removes the word from every student's vocabulary."
                         parameters { path("id") { description = "Vocab entry UUID" } }
                         responses { HttpStatusCode.NoContent { description = "Deleted" } }
-                    }
-
-                    post<AssignVocabRequest>("/assign") {
-                        call.respond(HttpStatusCode.OK, vocabEntryService.assign(call.getPathUUID(), it, call.requirePrincipal()))
-                    }.describe {
-                        summary = "Assign entry to students"
-                        description = "Adds the entry to studentIds + group members (or the lesson's confirmed students if neither is given). Students who already have it are skipped."
-                        parameters { path("id") { description = "Vocab entry UUID" } }
-                        requestBody { schema = jsonSchema<AssignVocabRequest>() }
-                        responses { HttpStatusCode.OK { schema = jsonSchema<AssignVocabResponse>() } }
                     }
                 }
             }

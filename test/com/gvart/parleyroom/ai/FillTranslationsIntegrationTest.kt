@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.ai
 
 import com.gvart.parleyroom.IntegrationTest
+import com.gvart.parleyroom.library.LibraryFixtures
 import com.gvart.parleyroom.ai.data.GenerationJobKind
 import com.gvart.parleyroom.ai.data.GenerationJobStatus
 import com.gvart.parleyroom.ai.llm.FakeLlmGateway
@@ -9,7 +10,6 @@ import com.gvart.parleyroom.ai.transfer.FillTranslationsResult
 import com.gvart.parleyroom.ai.transfer.GenerationJobResponse
 import com.gvart.parleyroom.ai.transfer.MissingFieldsResponse
 import com.gvart.parleyroom.common.transfer.ProblemDetail
-import com.gvart.parleyroom.vocabulary.transfer.AssignVocabRequest
 import com.gvart.parleyroom.vocabulary.transfer.VocabEntryResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -48,11 +48,7 @@ class FillTranslationsIntegrationTest : IntegrationTest() {
         val gehen = client.entry(token, """{ "lemma": "gehen", "wordType": "VERB", "translations": { "ru": "идти", "en": "to go" },
             "explanationDe": "sich zu Fuß bewegen" }""")
         val baum = client.entry(token, """{ "lemma": "Baum", "article": "DER", "wordType": "NOUN" }""")
-        listOf(haus, gehen).forEach {
-            client.post("/api/v1/vocab-entries/${it.id}/assign") {
-                contentType(ContentType.Application.Json); bearerAuth(token); setBody(AssignVocabRequest(studentIds = listOf(STUDENT_ID)))
-            }
-        }
+        listOf(haus, gehen).forEach { LibraryFixtures.assign(UUID.fromString(STUDENT_ID), UUID.fromString(it.id)) }
 
         val missing = client.get("/api/v1/students/$STUDENT_ID/vocab/missing-fields?fields=ru,de_explanation") { bearerAuth(token) }
             .body<MissingFieldsResponse>()

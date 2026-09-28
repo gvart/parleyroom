@@ -3,7 +3,6 @@ package com.gvart.parleyroom.ai.service
 import com.gvart.parleyroom.ai.config.AiRuntime
 import com.gvart.parleyroom.ai.data.GenerationJobKind
 import com.gvart.parleyroom.ai.llm.LlmGateway
-import com.gvart.parleyroom.ai.transfer.GenerationJobResponse
 import com.gvart.parleyroom.ai.transfer.JobInput
 import com.gvart.parleyroom.ai.transfer.SuggestTagsResult
 import com.gvart.parleyroom.ai.transfer.SuggestedGrammarTopic
@@ -11,19 +10,15 @@ import com.gvart.parleyroom.ai.transfer.SuggestedTopic
 import com.gvart.parleyroom.ai.transfer.TextSource
 import com.gvart.parleyroom.ai.transfer.TextSourceKind
 import com.gvart.parleyroom.common.storage.StorageService
-import com.gvart.parleyroom.common.transfer.exception.NotFoundException
-import com.gvart.parleyroom.common.transfer.exception.ServiceUnavailableException
 import com.gvart.parleyroom.common.transfer.exception.TooManyRequestsException
 import com.gvart.parleyroom.material.data.MaterialTable
 import com.gvart.parleyroom.material.data.MaterialType
 import com.gvart.parleyroom.topic.data.GrammarTopicTable
-import com.gvart.parleyroom.topic.service.LibraryAccess
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.security.UserPrincipal
 import kotlinx.serialization.json.encodeToJsonElement
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -39,17 +34,6 @@ class SuggestTagsService(
     private val context: LessonContextService,
     private val storage: StorageService,
 ) {
-
-    fun start(materialId: UUID, principal: UserPrincipal): GenerationJobResponse {
-        val gateway = ai.gateway
-            ?: throw ServiceUnavailableException("AI is not configured on this server", code = "AI_NOT_CONFIGURED")
-        transaction {
-            LibraryAccess.requireTeacher(principal)
-            requireOwnMaterial(materialId, principal)
-        }
-        val jobId = enqueue(gateway, materialId, principal.id)
-        return transaction { GenerationJobs.toResponse(GenerationJobs.requireReadable(jobId, principal)) }
-    }
 
     /** Auto-start after an upload: never fails the upload; null when AI is off or the teacher is at the job limit. */
     fun tryStart(materialId: UUID, principal: UserPrincipal): String? {
@@ -104,13 +88,6 @@ class SuggestTagsService(
         else null
         if (kind == null) return MaterialText.Extracted(TextSourceKind.NAME_ONLY, "", false)
         return MaterialText.extract(kind, material[MaterialTable.fileSize]) { storage.stream(key) }
-    }
-
-    private fun requireOwnMaterial(materialId: UUID, principal: UserPrincipal) {
-        val owned = !MaterialTable.selectAll()
-            .where { (MaterialTable.id eq materialId) and (MaterialTable.teacherId eq principal.id) }
-            .empty()
-        if (!owned) throw NotFoundException("Material not found", code = "MATERIAL_NOT_FOUND")
     }
 
     companion object {

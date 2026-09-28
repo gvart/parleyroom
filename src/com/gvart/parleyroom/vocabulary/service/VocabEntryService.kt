@@ -16,7 +16,6 @@ import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.vocabulary.data.LessonVocabTable
-import com.gvart.parleyroom.vocabulary.data.NounArticle
 import com.gvart.parleyroom.vocabulary.data.StudentVocabTable
 import com.gvart.parleyroom.vocabulary.data.VocabEntryTable
 import com.gvart.parleyroom.vocabulary.data.VocabEntryTopicTable
@@ -79,19 +78,6 @@ class VocabEntryService(
         val rows = query.orderBy(VocabEntryTable.lemma).limit(page.pageSize).offset(page.offset).toList()
         VocabEntryPageResponse(toResponses(rows), total, page.page, page.pageSize)
     }
-
-    /** Dedupe helper: entries in the teacher's library with this lemma (case-insensitive). */
-    fun lookup(principal: UserPrincipal, lemma: String, article: NounArticle?, wordType: WordType?): List<VocabEntryResponse> =
-        transaction {
-            LibraryAccess.requireTeacher(principal)
-            val query = VocabEntryTable.selectAll().where {
-                (VocabEntryTable.teacherId eq principal.id) and
-                        (VocabEntryTable.lemma.lowerCase() eq lemma.trim().lowercase())
-            }
-            if (article != null) query.andWhere { VocabEntryTable.article eq article }
-            if (wordType != null) query.andWhere { VocabEntryTable.wordType eq wordType }
-            toResponses(query.toList())
-        }
 
     fun getEntry(entryId: UUID, principal: UserPrincipal): VocabEntryResponse = transaction {
         toResponses(listOf(requireOwnedEntry(entryId, principal))).single()

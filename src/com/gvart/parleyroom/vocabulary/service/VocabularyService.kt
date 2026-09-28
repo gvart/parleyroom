@@ -30,7 +30,6 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.jetbrains.exposed.v1.jdbc.update
 import java.util.UUID
 
 /** A student's vocabulary (student_vocab joined with the teacher's library entry). */
@@ -80,19 +79,6 @@ class VocabularyService {
             .offset(page.offset)
             .toList()
         StudentVocabPageResponse(toResponses(rows, principal), total, page.page, page.pageSize)
-    }
-
-    fun getWord(id: UUID, principal: UserPrincipal): StudentVocabResponse = transaction {
-        val row = findWord(id)
-        AuthorizationHelper.requireAccessToStudent(row[StudentVocabTable.studentId].value, principal)
-        toResponses(listOf(row), principal).single()
-    }
-
-    fun updateStatus(id: UUID, status: StudentVocabStatus, principal: UserPrincipal): StudentVocabResponse = transaction {
-        val row = findWord(id)
-        AuthorizationHelper.requireAccessToStudent(row[StudentVocabTable.studentId].value, principal)
-        StudentVocabTable.update({ StudentVocabTable.id eq id }) { it[StudentVocabTable.status] = status }
-        toResponses(listOf(findWord(id)), principal).single()
     }
 
     fun deleteWord(id: UUID, principal: UserPrincipal) = transaction {
