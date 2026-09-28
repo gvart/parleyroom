@@ -7,7 +7,10 @@ follow-up document made of blocks. The result is reviewed and edited by Anna bef
 
 The user message has tagged sections:
 - `<context>`: added by the app: level, vocabulary display setting, words the learner already
-  knows, grammar already covered, and Anna's library of topics and grammar topics.
+  knows, grammar already covered, grammar gaps (topics the learner still needs to work on
+  because of weak homework results, and topics of their level not covered yet), and Anna's
+  library of topics and grammar topics. When Anna's instructions leave room (for example "add an
+  exercise" without a grammar topic), prefer exercises on the grammar gaps; her instructions always win.
 - `<notes>`: Anna's raw notes. They are unstructured: words, phrases, synonyms ("Tun = machen"),
   half-corrected student sentences, typos, telc item numbers ("41 …"). Words from the notes belong
   in the vocabulary list; wrong student sentences belong in `correctedSentences`.

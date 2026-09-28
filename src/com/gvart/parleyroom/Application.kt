@@ -15,6 +15,7 @@ import com.gvart.parleyroom.lesson.config.configureLessonModule
 import com.gvart.parleyroom.material.config.configureMaterialModule
 import com.gvart.parleyroom.notification.config.configureNotificationModule
 import com.gvart.parleyroom.practice.config.configurePracticeModule
+import com.gvart.parleyroom.progress.config.configureProgressModule
 import com.gvart.parleyroom.registration.routing.configureRegistrationModule
 import com.gvart.parleyroom.library.config.configureLibraryModule
 import com.gvart.parleyroom.topic.config.configureTopicModule
@@ -41,14 +42,16 @@ fun Application.module(dataSource: javax.sql.DataSource? = null) {
     configureLessonModule()
     configureAvailabilityModule()
     configureVocabularyModule()
-    configureGoalModule()
     configureMaterialModule()
     configureDocumentModule()
     // After materials (storage) and documents (DocumentSupport), which homework uses.
     configureHomeworkModule()
     configureLibraryModule()
-    configureAiModule()
     configureActivityModule()
+    // After activity (StreakService); before AI, whose lesson context uses the progress calculator.
+    configureProgressModule()
+    configureGoalModule()
+    configureAiModule()
     configurePracticeModule()
     configureHealthRouting()
 }

@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.topic.service
 
 import com.gvart.parleyroom.common.data.LanguageLevel
+import com.gvart.parleyroom.common.data.Sql
 import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
@@ -143,6 +144,12 @@ class GrammarTopicService {
             if (target[explanation].isNullOrBlank()) it[explanation] = source[explanation]
             it[examples] = (target[examples] + source[examples]).distinct()
         }
+        // Progress overrides move to the target; a student's existing override on the target wins.
+        Sql.update(
+            "UPDATE grammar_progress_overrides SET grammar_topic_id = ? WHERE grammar_topic_id = ? AND student_id NOT IN " +
+                    "(SELECT student_id FROM grammar_progress_overrides WHERE grammar_topic_id = ?)",
+            targetId, sourceId, targetId,
+        )
         GrammarTopicTable.deleteWhere { GrammarTopicTable.id eq sourceId }
         toResponse(find(targetId))
     }

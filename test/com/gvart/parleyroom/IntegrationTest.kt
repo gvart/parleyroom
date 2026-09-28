@@ -132,7 +132,7 @@ abstract class IntegrationTest {
     private fun loadTestData() {
         transaction {
             exec(
-                "TRUNCATE learning_activity, refresh_tokens, learning_goals, homework, student_vocab, vocab_entries, " +
+                "TRUNCATE learning_activity, refresh_tokens, goals, homework, student_vocab, vocab_entries, " +
                         "lesson_events, lesson_students, lessons, password_resets, registrations, " +
                         "teacher_students, materials, teacher_availability_exception, " +
                         "teacher_weekly_availability, users CASCADE"

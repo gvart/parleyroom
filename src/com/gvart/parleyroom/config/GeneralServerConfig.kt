@@ -24,8 +24,6 @@ import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.common.transfer.exception.ServiceUnavailableException
 import com.gvart.parleyroom.common.transfer.exception.TooManyRequestsException
 import com.gvart.parleyroom.common.transfer.exception.UnauthorizedException
-import com.gvart.parleyroom.goal.transfer.CreateGoalRequest
-import com.gvart.parleyroom.goal.transfer.UpdateGoalProgressRequest
 import com.gvart.parleyroom.homework.transfer.CreateAssignmentRequest
 import com.gvart.parleyroom.homework.transfer.ReviewDraftRequest
 import com.gvart.parleyroom.homework.transfer.ReviewRequest
@@ -185,8 +183,6 @@ fun Application.generalConfig() {
         validate<SaveAnswersRequest> { it.validate() }
         validate<ReviewDraftRequest> { it.validate() }
         validate<ReviewRequest> { it.validate() }
-        validate<CreateGoalRequest> { it.validate() }
-        validate<UpdateGoalProgressRequest> { it.validate() }
         validate<LogoutRequest> { it.validate() }
         validate<ReflectLessonRequest> { it.validate() }
         validate<MarkViewedRequest> { it.validate() }
