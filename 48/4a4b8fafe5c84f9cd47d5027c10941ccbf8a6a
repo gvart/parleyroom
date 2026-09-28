@@ -1,0 +1,66 @@
+test/com/gvart/parleyroom/homework/HomeworkUploadIntegrationTest.kt
+  s_2b5907717bc9a2::t_1c67e29238a5a2 1-203
+src/com/gvart/parleyroom/homework/service/HomeworkService.kt
+  s_2b5907717bc9a2::t_c285c33d61aa9a 5,9-14,17-19,22-25,27,29,31-32,34-36,39-40,45,48-65,67-72,74-76,78-82,85-92,95-122,125-127,129-134,136-178,181-188,191-239,242-248,250-251,253,256-262,265-270,272,274-289,291-297,299,302-313,315-337,339,343-345,348-351,353-355
+src/com/gvart/parleyroom/homework/transfer/HomeworkDtos.kt
+  s_2b5907717bc9a2::t_e45e681606e9df 1-324
+resources/db/migration/V12__homework.sql
+  s_2b5907717bc9a2::t_add556b9136e13 1-134
+  s_2b5907717bc9a2::t_2ffa24d17a37d8 135-140
+src/com/gvart/parleyroom/homework/service/HomeworkUnits.kt
+  s_2b5907717bc9a2::t_356be1645a60ca 1-281
+src/com/gvart/parleyroom/homework/service/HomeworkUploadService.kt
+  s_2b5907717bc9a2::t_bccf486ae843b6 1-168
+src/com/gvart/parleyroom/homework/service/AssignmentService.kt
+  s_2b5907717bc9a2::t_7b161bcecb5097 1-324
+src/com/gvart/parleyroom/homework/routing/Routing.kt
+  s_2b5907717bc9a2::t_12dd8f8b273d37 6-8,11,13,15-20,23-30,32,37-38,40,44,49-50,53,55-57,61-63,65-67,69-76,81-89,91-93,98,100-101,103-104,108-115,117-119,121-173,175-176,181,184-193,195-197,201-202,205,207-208,212-222,224-225,228-229,231-255,258-296,303-309
+src/com/gvart/parleyroom/homework/data/HomeworkTables.kt
+  s_2b5907717bc9a2::t_14c84822361fca 1-101
+test/com/gvart/parleyroom/homework/HomeworkIntegrationTest.kt
+  s_2b5907717bc9a2::t_5f952c4906c450 4-16,18-21,24-26,32,37,41-46,49-50,52,56,58-61,63-66,68-74,78-79,81-82,84-94,97-98,100-108,110-111,113,115-116,118-122,125,128,130-146,150,152-189,193,195-207,211,213-234,237,240,242-272,276,278-299,302,305,307-350,354,356-419,421-431,435,437-454,457,460,462-490,494,496-502
+src/com/gvart/parleyroom/homework/service/HomeworkViews.kt
+  s_2b5907717bc9a2::t_b35cb34f9e6239 1-330
+src/com/gvart/parleyroom/common/storage/StorageService.kt
+  s_2b5907717bc9a2::t_dd1c8a4f6671e6 66-68
+test/com/gvart/parleyroom/homework/HomeworkFixtures.kt
+  s_2b5907717bc9a2::t_e39fec33fddccb 1-98
+test/com/gvart/parleyroom/homework/HomeworkUnitsTest.kt
+  s_2b5907717bc9a2::t_8d85720ff90a22 1-127
+src/com/gvart/parleyroom/Application.kt
+  s_2b5907717bc9a2::t_1184d80c4cff28 46-47
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_2b5907717bc9a2::t_8f2fde1b598f91 29-33,183-187
+src/com/gvart/parleyroom/document/service/DocumentSupport.kt
+  s_2b5907717bc9a2::t_9715517e9e79d6 148-156,167
+src/com/gvart/parleyroom/homework/config/HomeworkModuleConfig.kt
+  s_2b5907717bc9a2::t_532b38ec943ac3 4,6-7,13-14,16
+src/com/gvart/parleyroom/homework/service/HomeworkAccess.kt
+  s_2b5907717bc9a2::t_86c649c7eff208 1-26
+src/com/gvart/parleyroom/material/service/MaterialAccessResolver.kt
+  s_2b5907717bc9a2::t_ea18f0945ec3b2 4,34-35,161-163
+src/com/gvart/parleyroom/notification/data/NotificationTable.kt
+  s_2b5907717bc9a2::t_9ae90ca615a3f4 26-29
+test/com/gvart/parleyroom/activity/StreakIntegrationTest.kt
+  s_2b5907717bc9a2::t_39138e9d7a7ae5 8,222-223
+test/com/gvart/parleyroom/admin/AdminIntegrationTest.kt
+  s_2b5907717bc9a2::t_ba106f32ecaaeb 8,29,344,347-352
+test/com/gvart/parleyroom/security/AuthorizationBypassIntegrationTest.kt
+  s_2b5907717bc9a2::t_dbf31ba604a7d2 4,155-156,165,176,187,234-235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "484a4b8fafe5c84f9cd47d5027c10941ccbf8a6a",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
