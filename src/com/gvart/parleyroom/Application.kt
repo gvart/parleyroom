@@ -15,6 +15,7 @@ import com.gvart.parleyroom.lesson.config.configureLessonModule
 import com.gvart.parleyroom.material.config.configureMaterialModule
 import com.gvart.parleyroom.notification.config.configureNotificationModule
 import com.gvart.parleyroom.registration.routing.configureRegistrationModule
+import com.gvart.parleyroom.library.config.configureLibraryModule
 import com.gvart.parleyroom.topic.config.configureTopicModule
 import com.gvart.parleyroom.user.config.configureUserModule
 import com.gvart.parleyroom.video.config.configureVideoModule
@@ -43,6 +44,7 @@ fun Application.module(dataSource: javax.sql.DataSource? = null) {
     configureGoalModule()
     configureMaterialModule()
     configureDocumentModule()
+    configureLibraryModule()
     configureAiModule()
     configureActivityModule()
     configureHealthRouting()

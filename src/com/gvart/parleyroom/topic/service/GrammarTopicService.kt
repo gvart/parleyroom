@@ -178,7 +178,7 @@ class GrammarTopicService {
             throw ConflictException("A grammar topic named '${name.trim()}' already exists", code = "GRAMMAR_TOPIC_DUPLICATE")
     }
 
-    private fun toResponse(row: ResultRow) = GrammarTopicResponse(
+    fun toResponse(row: ResultRow) = GrammarTopicResponse(
         id = row[GrammarTopicTable.id].value.toString(),
         teacherId = row[GrammarTopicTable.teacherId].value.toString(),
         name = row[GrammarTopicTable.name],

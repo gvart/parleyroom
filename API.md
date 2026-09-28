@@ -80,8 +80,9 @@ GET /api/v1/library/grammar?level=B1          -> [GrammarLevelGroup]   the check
 GET /api/v1/library/grammar/{id}              -> GrammarTopicLibrary   404 GRAMMAR_TOPIC_NOT_FOUND
 ```
 `level` (optional) restricts **word / document / material** counts and lists to items with exactly
-that level (items without a level only appear when `level` is omitted). Lessons and covered-by are
-never level-filtered.
+that level (items without a level only appear when `level` is omitted). Lessons, covered-by and the
+`levels` / `totals` blocks of the summary are never level-filtered. On `/library/grammar`, `level`
+only selects that level's group (its counts are not level-filtered).
 
 ```
 LibrarySummary {
@@ -106,7 +107,7 @@ TopicLibrary {
 }
 GrammarLevelGroup { level: A1..C2 | null, topics: [GrammarChecklistItem] }   // A1..C2 then null; empty levels omitted;
                                                                              // with ?level= only that group
-GrammarChecklistItem = GrammarTopic + { documents, materials, lessons, coveredStudents }   // counts, ordered by position
+GrammarChecklistItem { grammarTopic: GrammarTopic, documents, materials, lessons, coveredStudents }   // counts, ordered by position
 GrammarTopicLibrary {
   grammarTopic: GrammarTopic,         // explanation + examples = the "explanation" link target
   documents: [DocumentSummary], materials: [MaterialResponse], lessons: [LibraryLessonRef],

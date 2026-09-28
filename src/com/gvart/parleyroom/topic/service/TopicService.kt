@@ -212,7 +212,7 @@ class TopicService {
             throw ConflictException("A topic named '${name.trim()}' already exists here", code = "TOPIC_DUPLICATE")
     }
 
-    private fun toResponse(row: ResultRow) = TopicResponse(
+    fun toResponse(row: ResultRow) = TopicResponse(
         id = row[TopicTable.id].value.toString(),
         teacherId = row[TopicTable.teacherId].value.toString(),
         parentId = row[TopicTable.parentId]?.value?.toString(),
