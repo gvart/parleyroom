@@ -5,9 +5,7 @@ import com.gvart.parleyroom.activity.data.ActivityKind
 import com.gvart.parleyroom.activity.data.LearningActivityTable
 import com.gvart.parleyroom.activity.transfer.StreakResponse
 import com.gvart.parleyroom.common.data.LessonType
-import com.gvart.parleyroom.homework.data.HomeworkCategory
-import com.gvart.parleyroom.homework.data.HomeworkTable
-import com.gvart.parleyroom.homework.transfer.SubmitHomeworkRequest
+import com.gvart.parleyroom.homework.HomeworkFixtures
 import com.gvart.parleyroom.lesson.data.LessonDocumentTable
 import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
@@ -221,21 +219,11 @@ class StreakIntegrationTest : IntegrationTest() {
     fun `submitting homework records activity`() = testApp {
         val client = createJsonClient(this)
         val token = getStudentToken(client)
-        val homeworkId = transaction {
-            HomeworkTable.insertAndGetId {
-                it[studentId] = studentUuid
-                it[teacherId] = UUID.fromString(TEACHER_ID)
-                it[title] = "Essay"
-                it[category] = HomeworkCategory.WRITING
-                it[createdAt] = OffsetDateTime.now()
-                it[updatedAt] = OffsetDateTime.now()
-            }.value
-        }
+        val assignment = HomeworkFixtures.assignTextTask(client, getTeacherToken(client), STUDENT_ID)
+        val homeworkId = HomeworkFixtures.homeworkIdOf(assignment, STUDENT_ID)
 
         val response = client.post("/api/v1/homework/$homeworkId/submit") {
-            contentType(ContentType.Application.Json)
             bearerAuth(token)
-            setBody(SubmitHomeworkRequest(submissionText = "Mein Aufsatz"))
         }
         assertEquals(HttpStatusCode.OK, response.status)
 

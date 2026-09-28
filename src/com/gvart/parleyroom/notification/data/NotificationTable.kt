@@ -23,6 +23,10 @@ enum class NotificationType {
     MATERIAL_SHARED,
     FOLDER_SHARED,
     MATERIAL_ATTACHED_TO_LESSON,
+    HOMEWORK_ASSIGNED,
+    HOMEWORK_SUBMITTED,
+    HOMEWORK_REVIEWED,
+    HOMEWORK_RETURNED,
 }
 
 object NotificationTable : UUIDTable("notifications") {
