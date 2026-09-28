@@ -16,6 +16,16 @@ object Prompts {
     const val TASK_SENTENCE_FEEDBACK = "sentence_feedback"
     const val VALIDATION_ERRORS = "validation_errors"
 
+    /** Block types numbered "Übung n" in the portal; keep identical to `isExercise` in the portal's documents/lib/blocks.ts. */
+    val EXERCISE_BLOCK_TYPES = listOf(
+        "gap_fill", "multiple_choice", "error_correction", "free_sentences", "writing_task", "reading", "media", "exam_part", "free_form",
+    )
+
+    /** The app numbers exercises itself, and the teacher refers to them by that number. */
+    val exerciseNumbering: String =
+        "The teacher refers to exercises as 'Übung N': N counts only exercise blocks (types ${EXERCISE_BLOCK_TYPES.joinToString()}) " +
+                "in document order, starting at 1. The app shows these numbers itself, so do not write numbers into titles or instructions."
+
     private fun resource(name: String): String =
         Prompts::class.java.classLoader.getResource("ai/$name")!!.readText()
 
@@ -36,6 +46,7 @@ object Prompts {
         section("context", context)
         section("notes", notes)
         section("teacher_instructions", prompt.ifBlank { "(no special instructions: follow the defaults)" })
+        append(exerciseNumbering)
     }
 
     fun refine(mode: NachbereitungMode, context: String, notes: String, prompt: String, currentOutput: String, instruction: String): String =
@@ -47,6 +58,7 @@ object Prompts {
             section("teacher_instructions", prompt.ifBlank { "(none)" })
             section("current_output", currentOutput)
             section("refine_instruction", instruction)
+            append(exerciseNumbering).append('\n')
             append("Apply the refine instruction to current_output and keep everything else as it is ")
             append("(including the teacher's manual edits). Answer with the complete new JSON object.")
         }
