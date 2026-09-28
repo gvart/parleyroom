@@ -829,8 +829,8 @@ overlap, ≤ 10 each.
 LibrarySuggestions {
   level,
   summary: [{ kind: TOPIC | GRAMMAR, id, name, level?, documentCount, materialCount }],  // "3 B1 exercises on …"
-  documents: [DocumentSummary + { matchedTopicIds, matchedGrammarTopicIds }],
-  materials: [MaterialResponse + { matchedTopicIds, matchedGrammarTopicIds }]
+  documents: [{ document: DocumentSummary, matchedTopicIds, matchedGrammarTopicIds }],
+  materials: [{ material: MaterialResponse, matchedTopicIds, matchedGrammarTopicIds }]
 }
 ```
 Suggestions only — nothing is assigned.
