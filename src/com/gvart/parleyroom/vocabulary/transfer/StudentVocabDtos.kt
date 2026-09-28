@@ -54,11 +54,6 @@ data class StudentVocabPageResponse(
     val pageSize: Int,
 )
 
-@Serializable
-data class UpdateStudentVocabRequest(
-    val status: StudentVocabStatus,
-)
-
 /** Which fields a student sees: any of "ru", "en", "de_explanation". */
 @Serializable
 data class VocabDisplaySetting(

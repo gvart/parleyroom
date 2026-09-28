@@ -107,6 +107,19 @@ class SuggestTagsIntegrationTest : IntegrationTest() {
         },
     ) { bearerAuth(token) }
 
+    /** A LINK material (no file part) with suggestions on: only its name is sent. */
+    private suspend fun HttpClient.uploadLink(token: String, name: String): MaterialResponse = submitFormWithBinaryData(
+        url = "/api/v1/materials",
+        formData = formData {
+            append(
+                "metadata",
+                Json.encodeToString(CreateMaterialRequest.serializer(),
+                    CreateMaterialRequest(name = name, type = MaterialType.LINK, url = "https://example.com/x", suggestTags = true)),
+                Headers.build { append(HttpHeaders.ContentType, "application/json") },
+            )
+        },
+    ) { bearerAuth(token) }.body()
+
     private fun result(job: GenerationJobResponse): SuggestTagsResult = json.decodeFromJsonElement(job.result!!)
 
     private fun suggestTagCalls() = FakeLlmGateway.received.filter {
@@ -151,17 +164,14 @@ class SuggestTagsIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `suggest-tags on a DOCX reads word document xml and proposes new names`() = testApp {
+    fun `suggestions for a DOCX read word document xml and propose new names`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
         val material = client.upload(token, "Küche", "kueche.docx",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            docx("A2 Wortschatz|Kochen", "Der Herd und die Pfanne")).body<MaterialResponse>()
-        assertNull(material.suggestTagsJobId)
+            docx("A2 Wortschatz|Kochen", "Der Herd und die Pfanne"), suggestTags = true).body<MaterialResponse>()
 
-        val started = client.post("/api/v1/materials/${material.id}/suggest-tags") { bearerAuth(token) }
-        assertEquals(HttpStatusCode.Accepted, started.status)
-        val job = client.awaitJob(token, started.body<GenerationJobResponse>().id)
+        val job = client.awaitJob(token, assertNotNull(material.suggestTagsJobId))
         assertEquals(GenerationJobStatus.SUCCEEDED, job.status)
         val result = result(job)
         assertEquals(TextSourceKind.DOCX, result.source.kind)
@@ -179,10 +189,9 @@ class SuggestTagsIntegrationTest : IntegrationTest() {
         val token = getTeacherToken(client)
         LibraryFixtures.topic("Haushalt")
         FakeLlmGateway.received.clear()
-        val material = client.upload(token, "Blatt", "Maria_Hausaufgabe.pdf", "application/pdf", pdf("Text von Anna"))
+        val material = client.upload(token, "Blatt", "Maria_Hausaufgabe.pdf", "application/pdf", pdf("Text von Anna"), suggestTags = true)
             .body<MaterialResponse>()
-        val job = client.awaitJob(token, client.post("/api/v1/materials/${material.id}/suggest-tags") { bearerAuth(token) }
-            .body<GenerationJobResponse>().id)
+        val job = client.awaitJob(token, assertNotNull(material.suggestTagsJobId))
         assertEquals(GenerationJobStatus.SUCCEEDED, job.status)
 
         val call = suggestTagCalls().single()
@@ -198,17 +207,13 @@ class SuggestTagsIntegrationTest : IntegrationTest() {
     fun `links use the name only, invalid output fails the job`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
-        val link = LibraryFixtures.material("B2 Hörverstehen")
-        val job = client.awaitJob(token, client.post("/api/v1/materials/$link/suggest-tags") { bearerAuth(token) }
-            .body<GenerationJobResponse>().id)
+        val job = client.awaitJob(token, assertNotNull(client.uploadLink(token, "B2 Hörverstehen").suggestTagsJobId))
         val result = result(job)
         assertEquals(TextSourceKind.NAME_ONLY, result.source.kind)
         assertEquals(LanguageLevel.B2, result.level)
         assertNull(result.skill)
 
-        val broken = LibraryFixtures.material("[fake:invalid]")
-        val failed = client.awaitJob(token, client.post("/api/v1/materials/$broken/suggest-tags") { bearerAuth(token) }
-            .body<GenerationJobResponse>().id)
+        val failed = client.awaitJob(token, assertNotNull(client.uploadLink(token, "[fake:invalid]").suggestTagsJobId))
         assertEquals(GenerationJobStatus.FAILED, failed.status)
         assertEquals("AI_OUTPUT_INVALID", failed.error?.code)
     }
@@ -217,36 +222,21 @@ class SuggestTagsIntegrationTest : IntegrationTest() {
     fun `an unreadable PDF falls back to the name`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
-        val material = client.upload(token, "C1 Zeitung", "kaputt.pdf", "application/pdf", "not a pdf".toByteArray())
+        val material = client.upload(token, "C1 Zeitung", "kaputt.pdf", "application/pdf", "not a pdf".toByteArray(), suggestTags = true)
             .body<MaterialResponse>()
-        val job = client.awaitJob(token, client.post("/api/v1/materials/${material.id}/suggest-tags") { bearerAuth(token) }
-            .body<GenerationJobResponse>().id)
+        val job = client.awaitJob(token, assertNotNull(material.suggestTagsJobId))
         assertEquals(GenerationJobStatus.SUCCEEDED, job.status)
         assertEquals(TextSourceKind.NAME_ONLY, result(job).source.kind)
         assertEquals(LanguageLevel.C1, result(job).level)
     }
 
     @Test
-    fun `only the owning teacher can ask for suggestions`() = testApp {
-        val client = createJsonClient(this)
-        getTeacherToken(client)
-        val material = LibraryFixtures.material("Blatt")
-        assertEquals(HttpStatusCode.Forbidden, client.post("/api/v1/materials/$material/suggest-tags") { bearerAuth(getStudentToken(client)) }.status)
-        assertEquals(HttpStatusCode.Forbidden, client.post("/api/v1/materials/$material/suggest-tags") { bearerAuth(getAdminToken(client)) }.status)
-        LibraryFixtures.otherTeacher()
-        val other = client.post("/api/v1/materials/$material/suggest-tags") { bearerAuth(getToken(client, "teacher2@test.com")) }
-        assertEquals(HttpStatusCode.NotFound, other.status)
-        assertEquals("MATERIAL_NOT_FOUND", other.body<ProblemDetail>().code)
-    }
-
-    @Test
     fun `deleting the material deletes its suggestion jobs`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
-        val material = LibraryFixtures.material("Blatt")
-        val job = client.awaitJob(token, client.post("/api/v1/materials/$material/suggest-tags") { bearerAuth(token) }
-            .body<GenerationJobResponse>().id)
-        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/materials/$material") { bearerAuth(token) }.status)
+        val material = client.uploadLink(token, "Blatt")
+        val job = client.awaitJob(token, assertNotNull(material.suggestTagsJobId))
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/materials/${material.id}") { bearerAuth(token) }.status)
         assertEquals("AI_JOB_NOT_FOUND", client.get("/api/v1/ai/jobs/${job.id}") { bearerAuth(token) }.body<ProblemDetail>().code)
     }
 
@@ -269,9 +259,5 @@ class SuggestTagsIntegrationTest : IntegrationTest() {
             assertEquals(HttpStatusCode.Created, upload.status)
             val material = upload.body<MaterialResponse>()
             assertNull(material.suggestTagsJobId)
-
-            val started = client.post("/api/v1/materials/${material.id}/suggest-tags") { bearerAuth(token) }
-            assertEquals(HttpStatusCode.ServiceUnavailable, started.status)
-            assertEquals("AI_NOT_CONFIGURED", started.body<ProblemDetail>().code)
         }
 }

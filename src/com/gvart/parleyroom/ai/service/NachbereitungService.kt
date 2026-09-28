@@ -85,15 +85,6 @@ class NachbereitungService(
         )
     }
 
-    fun listJobs(lessonId: UUID, principal: UserPrincipal): List<GenerationJobResponse> = transaction {
-        context.requireLessonTeacher(lessonId, principal)
-        GenerationJobTable.selectAll()
-            .where { GenerationJobTable.lessonId eq lessonId }
-            .orderBy(GenerationJobTable.createdAt, SortOrder.DESC)
-            .limit(20)
-            .map { GenerationJobs.toResponse(it, withResult = false) }
-    }
-
     fun getJob(jobId: UUID, principal: UserPrincipal): GenerationJobResponse = transaction {
         GenerationJobs.toResponse(GenerationJobs.requireReadable(jobId, principal))
     }

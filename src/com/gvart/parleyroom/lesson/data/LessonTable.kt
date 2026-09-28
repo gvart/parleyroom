@@ -26,7 +26,6 @@ object LessonTable : UUIDTable("lessons") {
     val allowTranslationToggle = bool("allow_translation_toggle").nullable()
     val rawNotes = text("raw_notes").nullable()
     val promptUsed = text("prompt_used").nullable()
-    val hasAiSummary = bool("has_ai_summary").default(false)
     val startedAt = timestampWithTimeZone("started_at").nullable()
     val endedAt = timestampWithTimeZone("ended_at").nullable()
     val createdBy = reference("created_by", UserTable)

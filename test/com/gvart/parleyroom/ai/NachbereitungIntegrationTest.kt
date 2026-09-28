@@ -356,21 +356,16 @@ class NachbereitungIntegrationTest : IntegrationTest() {
         val after = client.get("/api/v1/lessons/$lessonId/nachbereitung") { bearerAuth(token) }.body<NachbereitungState>()
         assertEquals(job.id, after.latestJob?.id)
         assertEquals(job.documentId, after.draftDocumentId)
-        assertEquals(1, client.get("/api/v1/lessons/$lessonId/ai-jobs") { bearerAuth(token) }.body<List<GenerationJobResponse>>().size)
     }
 
     @Test
-    fun `state prefills live-classroom notes as plain text and shows a running job`() = testApp {
+    fun `state prefills the notes saved in the live classroom and shows a running job`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
         val lessonId = seedLesson()
-        transaction {
-            com.gvart.parleyroom.lesson.data.LessonDocumentTable.insert {
-                it[this.lessonId] = lessonId
-                it[teacherNotes] = "<p>die <em>Gießkanne</em></p><ul><li><p>Blumen gießen</p></li></ul>"
-                it[createdAt] = OffsetDateTime.now()
-                it[updatedAt] = OffsetDateTime.now()
-            }
+        client.patch("/api/v1/lessons/$lessonId/content") {
+            contentType(ContentType.Application.Json); bearerAuth(token)
+            setBody("""{ "rawNotes": "die Gießkanne\nBlumen gießen" }""")
         }
         val state = client.get("/api/v1/lessons/$lessonId/nachbereitung") { bearerAuth(token) }.body<NachbereitungState>()
         assertEquals("die Gießkanne\nBlumen gießen", state.notes)

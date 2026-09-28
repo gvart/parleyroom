@@ -3,7 +3,6 @@ package com.gvart.parleyroom.ai.routing
 import com.gvart.parleyroom.topic.service.LibraryAccess
 import com.gvart.parleyroom.ai.transfer.AiStatusResponse
 import com.gvart.parleyroom.ai.config.AiRuntime
-import com.gvart.parleyroom.ai.service.SuggestTagsService
 import com.gvart.parleyroom.ai.data.PromptTemplateLessonType
 import com.gvart.parleyroom.ai.service.FillTranslationsService
 import com.gvart.parleyroom.ai.service.LibrarySuggestionService
@@ -46,7 +45,6 @@ fun Application.configureAiRouting() {
     val templates: PromptTemplateService by dependencies
     val suggestions: LibrarySuggestionService by dependencies
     val fillService: FillTranslationsService by dependencies
-    val suggestTagsService: SuggestTagsService by dependencies
     val aiRuntime: AiRuntime by dependencies
 
     routing {
@@ -89,15 +87,6 @@ fun Application.configureAiRouting() {
                         HttpStatusCode.OK { schema = jsonSchema<PublishResponse>() }
                         HttpStatusCode.Conflict { description = "AI_JOB_NOT_READY"; schema = jsonSchema<ProblemDetail>() }
                     }
-                }
-
-                get("/ai-jobs") {
-                    call.respond(HttpStatusCode.OK, nachbereitung.listJobs(call.getPathUUID(), call.requirePrincipal()))
-                }.describe {
-                    summary = "List the lesson's AI jobs"
-                    description = "Newest first, at most 20, without results."
-                    parameters { path("id") { description = "Lesson UUID" } }
-                    responses { HttpStatusCode.OK { schema = jsonSchema<List<GenerationJobResponse>>() } }
                 }
 
                 get("/library-suggestions") {
@@ -210,23 +199,8 @@ fun Application.configureAiRouting() {
                 call.respond(HttpStatusCode.OK, AiStatusResponse(available = aiRuntime.gateway != null))
             }.describe {
                 summary = "AI availability"
-                description = "Whether AI features (generate, fill-missing, suggest-tags) are configured. Teacher only."
+                description = "Whether AI features (generate, fill-missing, material tag suggestions) are configured. Teacher only."
                 responses { HttpStatusCode.OK { schema = jsonSchema<AiStatusResponse>() } }
-            }
-
-            post("/api/v1/materials/{id}/suggest-tags") {
-                call.respond(HttpStatusCode.Accepted, suggestTagsService.start(call.getPathUUID(), call.requirePrincipal()))
-            }.describe {
-                summary = "Suggest material tags"
-                description = "Queues a SUGGEST_TAGS job (level, skill, topics, grammar) from the material's name and file text. " +
-                        "Suggestions only: apply them with PUT /api/v1/materials/{id}. Owning teacher only."
-                parameters { path("id") { description = "Material UUID" } }
-                responses {
-                    HttpStatusCode.Accepted { schema = jsonSchema<GenerationJobResponse>() }
-                    HttpStatusCode.NotFound { description = "MATERIAL_NOT_FOUND"; schema = jsonSchema<ProblemDetail>() }
-                    HttpStatusCode.TooManyRequests { description = "AI_RATE_LIMITED"; schema = jsonSchema<ProblemDetail>() }
-                    HttpStatusCode.ServiceUnavailable { description = "AI_NOT_CONFIGURED"; schema = jsonSchema<ProblemDetail>() }
-                }
             }
 
             post<FillMissingRequest>("/api/v1/vocab-entries/fill-missing") {

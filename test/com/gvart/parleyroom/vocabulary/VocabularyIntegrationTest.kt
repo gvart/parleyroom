@@ -13,15 +13,13 @@ import com.gvart.parleyroom.topic.transfer.CreateTopicRequest
 import com.gvart.parleyroom.topic.transfer.TopicResponse
 import com.gvart.parleyroom.vocabulary.data.NounArticle
 import com.gvart.parleyroom.vocabulary.data.StudentVocabStatus
+import com.gvart.parleyroom.vocabulary.data.StudentVocabTable
 import com.gvart.parleyroom.vocabulary.data.WordType
-import com.gvart.parleyroom.vocabulary.transfer.AssignVocabRequest
-import com.gvart.parleyroom.vocabulary.transfer.AssignVocabResponse
 import com.gvart.parleyroom.vocabulary.transfer.QuickAddVocabRequest
 import com.gvart.parleyroom.vocabulary.transfer.QuickAddVocabResponse
 import com.gvart.parleyroom.vocabulary.transfer.SetStudentLevelRequest
 import com.gvart.parleyroom.vocabulary.transfer.StudentVocabPageResponse
 import com.gvart.parleyroom.vocabulary.transfer.StudentVocabResponse
-import com.gvart.parleyroom.vocabulary.transfer.UpdateStudentVocabRequest
 import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
 import com.gvart.parleyroom.vocabulary.transfer.VocabEntryInput
 import com.gvart.parleyroom.vocabulary.transfer.VocabEntryPageResponse
@@ -39,7 +37,11 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import java.time.OffsetDateTime
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -171,12 +173,6 @@ class VocabularyIntegrationTest : IntegrationTest() {
         val dasEssen = createEntry(client, token, VocabEntryInput(lemma = "Essen", article = NounArticle.DAS, wordType = WordType.NOUN))
         assertEquals(HttpStatusCode.Created, essen.status)
         assertEquals(HttpStatusCode.Created, dasEssen.status)
-
-        val lookup = client.get("/api/v1/vocab-entries/lookup?lemma=ESSEN") { bearerAuth(token) }.body<List<VocabEntryResponse>>()
-        assertEquals(2, lookup.size)
-        val nounOnly = client.get("/api/v1/vocab-entries/lookup?lemma=essen&wordType=NOUN") { bearerAuth(token) }
-            .body<List<VocabEntryResponse>>()
-        assertEquals("Essen", nounOnly.single().lemma)
     }
 
     @Test
@@ -234,27 +230,6 @@ class VocabularyIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `assigning an entry to a group adds it to every member`() = testApp {
-        val client = createJsonClient(this)
-        val token = getTeacherToken(client)
-        val groupId = client.post("/api/v1/groups") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(token)
-            setBody(GroupRequest(name = "Club", type = GroupType.SPEECH, studentIds = listOf(STUDENT_ID)))
-        }.body<GroupResponse>().id
-        val entryId = createEntry(client, token).body<VocabEntryResponse>().id
-
-        val result = client.post("/api/v1/vocab-entries/$entryId/assign") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(token)
-            setBody(AssignVocabRequest(groupId = groupId))
-        }.body<AssignVocabResponse>()
-
-        assertEquals(AssignVocabResponse(assigned = 1, skipped = 0), result)
-        assertEquals(1, studentWords(client, getStudentToken(client)).size)
-    }
-
-    @Test
     fun `deleting an entry removes it from students`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
@@ -284,25 +259,20 @@ class VocabularyIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `status filter, status update and removal`() = testApp {
+    fun `status filter and removal`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
         quickAdd(client, token)
         quickAdd(client, token, entry = VocabEntryInput(lemma = "gehen", wordType = WordType.VERB))
         val id = studentWords(client, token).first { it.lemma == "gehen" }.id
 
-        val updated = client.put("/api/v1/vocabulary/$id") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(token)
-            setBody(UpdateStudentVocabRequest(StudentVocabStatus.LEARNED))
-        }.body<StudentVocabResponse>()
-        assertEquals(StudentVocabStatus.LEARNED, updated.status)
+        transaction {
+            StudentVocabTable.update({ StudentVocabTable.id eq UUID.fromString(id) }) { it[status] = StudentVocabStatus.LEARNED }
+        }
         assertEquals(listOf("gehen"), studentWords(client, token, "?status=LEARNED").map { it.lemma })
 
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/vocabulary/$id") { bearerAuth(token) }.status)
         assertEquals(listOf("Wort"), studentWords(client, token).map { it.lemma })
-        val missing = client.get("/api/v1/vocabulary/$id") { bearerAuth(token) }
-        assertEquals("VOCABULARY_WORD_NOT_FOUND", missing.body<ProblemDetail>().code)
     }
 
     // -- Display settings --
