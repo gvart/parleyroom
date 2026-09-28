@@ -41,6 +41,12 @@ data class GoalProgress(
     val checklistEmpty: Boolean,
     val grammar: GoalGrammarCounts,
     val topics: GoalTopicCounts,
+    /** Breakdown under the goal bar: grammar topics practised in homework (PRACTICED) of all at the target level. */
+    val grammarDone: Int,
+    val grammarTotal: Int,
+    /** Topics covered (lesson or words) of all relevant to the target level. */
+    val topicsDone: Int,
+    val topicsTotal: Int,
     val daysLeft: Int? = null,
     val expectedPercent: Int? = null,
     val onTrack: Boolean? = null,

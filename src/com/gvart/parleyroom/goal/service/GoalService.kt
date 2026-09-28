@@ -196,7 +196,8 @@ class GoalService(private val calculator: ProgressCalculator) {
         )
         val covered = topics.count { it.covered }
         val percent = if (grammar.isEmpty()) null else {
-            val grammarScore = (counts.practiced + 0.5 * (counts.covered + counts.needsWork)) / grammar.size
+            // PRACTICED 1, lesson-only COVERED ½, NEEDS_WORK and NOT_COVERED 0.
+            val grammarScore = (counts.practiced + 0.5 * counts.covered) / grammar.size
             val score = if (topics.isEmpty()) grammarScore
             else GRAMMAR_WEIGHT * grammarScore + (1 - GRAMMAR_WEIGHT) * covered.toDouble() / topics.size
             (100 * score).roundToInt()
@@ -235,6 +236,10 @@ class GoalService(private val calculator: ProgressCalculator) {
                 checklistEmpty = computed.grammar.total == 0,
                 grammar = computed.grammar,
                 topics = computed.topics,
+                grammarDone = computed.grammar.practiced,
+                grammarTotal = computed.grammar.total,
+                topicsDone = computed.topics.covered,
+                topicsTotal = computed.topics.total,
                 daysLeft = targetDate?.let { ChronoUnit.DAYS.between(today, it).toInt() },
                 expectedPercent = expected,
                 onTrack = expected?.let { computed.percent!! >= it - ON_TRACK_TOLERANCE },
