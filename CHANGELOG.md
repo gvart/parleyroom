@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.12.0](https://github.com/gvart/parleyroom/compare/v0.11.0...v0.12.0) (2026-09-28)
+
+
+### Features
+
+* **activity:** record learning activity and expose streak endpoint ([#22](https://github.com/gvart/parleyroom/issues/22)) ([c22246f](https://github.com/gvart/parleyroom/commit/c22246f1e69388020f58082e9fdd1d051d59ad2b))
+* **activity:** record learning activity and expose streak endpoint ([#24](https://github.com/gvart/parleyroom/issues/24)) ([c923d9d](https://github.com/gvart/parleyroom/commit/c923d9d1076da22cd627f1034b722d704e07abae))
+* apply Anna's decisions — library-only publish, sentence limit, day-based review queue, progress window and goal formula ([#34](https://github.com/gvart/parleyroom/issues/34)) ([04bef53](https://github.com/gvart/parleyroom/commit/04bef539d296be82670b0d7bc43721d2c70d83b3))
+* **document:** block documents with versions and sharing ([#28](https://github.com/gvart/parleyroom/issues/28)) ([e3a92c3](https://github.com/gvart/parleyroom/commit/e3a92c326b7adc682744f1a266db57346a6c0032))
+* **homework:** assignments answered in the app with auto-check, uploads and review ([#31](https://github.com/gvart/parleyroom/issues/31)) ([f40830f](https://github.com/gvart/parleyroom/commit/f40830f168e6f18d807606ca1e1fd443d8df8145))
+* i18n-ready API (error codes, locale, lesson teacher) ([#26](https://github.com/gvart/parleyroom/issues/26)) ([4fb7b85](https://github.com/gvart/parleyroom/commit/4fb7b857cc79cc80b97e09693b6faeee41b08f62))
+* **library:** teacher library views, topic merge, grammar checklist and AI tag suggestions ([#30](https://github.com/gvart/parleyroom/issues/30)) ([fd8871c](https://github.com/gvart/parleyroom/commit/fd8871c3f3cada35fc9cc1ccd84a8bf94ce1abf7))
+* **nachbereitung:** AI post-lesson flow with Koog, async jobs and publish ([#29](https://github.com/gvart/parleyroom/issues/29)) ([803fe71](https://github.com/gvart/parleyroom/commit/803fe716d451f7f6fa8c586ef1bd06026093c3f1))
+* P2 domain model — topics, groups, vocab library, lesson content, material tags ([#27](https://github.com/gvart/parleyroom/issues/27)) ([d9d19b7](https://github.com/gvart/parleyroom/commit/d9d19b72471f0a01cf7e8928a1a5408d4a756349))
+* **practice:** FSRS flashcards, article trainer and own sentences with AI feedback ([#32](https://github.com/gvart/parleyroom/issues/32)) ([abadb6a](https://github.com/gvart/parleyroom/commit/abadb6a40948e4dd324b15c18729c3eaec8085a3))
+* **progress:** student progress, grammar overrides, auto-tracked goals and AI grammar gaps ([#33](https://github.com/gvart/parleyroom/issues/33)) ([9303979](https://github.com/gvart/parleyroom/commit/930397955c75502b646a794a22f88b8a00d7901d))
+
 ## [0.11.0](https://github.com/gvart/parleyroom/compare/v0.10.0...v0.11.0) (2026-04-20)
 
 
