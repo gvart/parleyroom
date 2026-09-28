@@ -15,7 +15,7 @@ import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 import org.jetbrains.exposed.v1.json.jsonb
 
 enum class DocumentAudience { STUDENT, GROUP, LIBRARY }
-enum class DocumentVersionReason { AUTOSAVE, SHARE, RESTORE, DUPLICATE }
+enum class DocumentVersionReason { AUTOSAVE, SHARE, RESTORE, DUPLICATE, AI_REFINE }
 
 object DocumentTable : UUIDTable("documents") {
     val ownerId = reference("owner_id", UserTable)

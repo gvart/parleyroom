@@ -442,7 +442,8 @@ class MaterialService(
 
     private fun toResponse(row: ResultRow): MaterialResponse = toResponses(listOf(row)).single()
 
-    private fun toResponses(rows: List<ResultRow>): List<MaterialResponse> {
+    /** Batch-maps material rows (loads tags in two queries). Must run in a transaction. */
+    fun toResponses(rows: List<ResultRow>): List<MaterialResponse> {
         if (rows.isEmpty()) return emptyList()
         val ids = rows.map { it[MaterialTable.id].value }
         val topicsByMaterial = MaterialTopicTable.selectAll()
