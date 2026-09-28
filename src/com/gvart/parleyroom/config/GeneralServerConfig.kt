@@ -5,6 +5,12 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetPasswordRequest
 import com.gvart.parleyroom.admin.transfer.AdminUpdateUserRequest
+import com.gvart.parleyroom.ai.transfer.FillMissingRequest
+import com.gvart.parleyroom.ai.transfer.GenerateRequest
+import com.gvart.parleyroom.ai.transfer.PromptTemplateInput
+import com.gvart.parleyroom.ai.transfer.PublishRequest
+import com.gvart.parleyroom.ai.transfer.RefineRequest
+import com.gvart.parleyroom.ai.transfer.ReviewUpdateRequest
 import com.gvart.parleyroom.availability.transfer.CreateAvailabilityExceptionRequest
 import com.gvart.parleyroom.availability.transfer.ReplaceWeeklyAvailabilityRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
@@ -15,6 +21,8 @@ import com.gvart.parleyroom.document.transfer.DuplicateDocumentRequest
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
+import com.gvart.parleyroom.common.transfer.exception.ServiceUnavailableException
+import com.gvart.parleyroom.common.transfer.exception.TooManyRequestsException
 import com.gvart.parleyroom.common.transfer.exception.UnauthorizedException
 import com.gvart.parleyroom.goal.transfer.CreateGoalRequest
 import com.gvart.parleyroom.goal.transfer.UpdateGoalProgressRequest
@@ -192,6 +200,12 @@ fun Application.generalConfig() {
         validate<CreateDocumentRequest> { it.validate() }
         validate<UpdateDocumentRequest> { it.validate() }
         validate<DuplicateDocumentRequest> { it.validate() }
+        validate<GenerateRequest> { it.validate() }
+        validate<RefineRequest> { it.validate() }
+        validate<ReviewUpdateRequest> { it.validate() }
+        validate<PublishRequest> { it.validate() }
+        validate<PromptTemplateInput> { it.validate() }
+        validate<FillMissingRequest> { it.validate() }
     }
 
 
@@ -230,6 +244,20 @@ fun Application.generalConfig() {
                 HttpStatusCode.Conflict,
                 ProblemDetail.of(HttpStatusCode.Conflict, cause.message, cause.code ?: "CONFLICT")
                     .copy(currentRevision = cause.currentRevision),
+            )
+        }
+
+        exception<TooManyRequestsException> { call, cause ->
+            call.respond(
+                HttpStatusCode.TooManyRequests,
+                ProblemDetail.of(HttpStatusCode.TooManyRequests, cause.message, cause.code ?: "TOO_MANY_REQUESTS"),
+            )
+        }
+
+        exception<ServiceUnavailableException> { call, cause ->
+            call.respond(
+                HttpStatusCode.ServiceUnavailable,
+                ProblemDetail.of(HttpStatusCode.ServiceUnavailable, cause.message, cause.code ?: "SERVICE_UNAVAILABLE"),
             )
         }
 

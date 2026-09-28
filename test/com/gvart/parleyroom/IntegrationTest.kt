@@ -80,7 +80,10 @@ abstract class IntegrationTest {
         }
     }
 
-    protected fun testApp(block: suspend ApplicationTestBuilder.() -> Unit) = testApplication {
+    protected fun testApp(
+        extraConfig: Map<String, String> = emptyMap(),
+        block: suspend ApplicationTestBuilder.() -> Unit,
+    ) = testApplication {
         environment {
             config = MapApplicationConfig(
                 "ktor.deployment.port" to "8080",
@@ -115,7 +118,9 @@ abstract class IntegrationTest {
                 "swagger.allowed_hosts" to "",
                 "telegram.bot_token" to TEST_TELEGRAM_BOT_TOKEN,
                 "telegram.init_data_max_age" to "24h",
-            )
+                "ai.provider" to "fake",
+                "ai.job_timeout" to "30s",
+            ).apply { extraConfig.forEach { (key, value) -> put(key, value) } }
         }
         application {
             module(sharedDataSource)

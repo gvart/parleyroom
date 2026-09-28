@@ -523,7 +523,8 @@ Snapshots are taken of the state **before** a change:
   1.5 s autosave does not create versions);
 - `SHARE`: on every `share` (the state that was shared);
 - `RESTORE`: on restore, the current state before it is overwritten;
-- `DUPLICATE`: on duplicate, a snapshot of the source.
+- `DUPLICATE`: on duplicate, a snapshot of the source;
+- `AI_REFINE`: before an AI refine replaces a Nachbereitung draft (so Anna can restore her version).
 Only the newest 30 versions per document are kept.
 
 ### Lessons
@@ -566,7 +567,7 @@ ai.model     = claude-sonnet-5           AI_MODEL
 ai.anthropic_api_key                     ANTHROPIC_API_KEY  (never in the repo)
 ai.max_active_jobs_per_teacher = 2       AI_MAX_ACTIVE_JOBS_PER_TEACHER
 ai.max_concurrent_jobs = 3               AI_MAX_CONCURRENT_JOBS   (global; extra jobs wait QUEUED)
-ai.job_timeout = 180s                    AI_JOB_TIMEOUT
+ai.job_timeout = 600s                    AI_JOB_TIMEOUT          (whole job incl. the retry)
 ```
 The app boots without a key: with `provider = anthropic` and an empty key every endpoint that
 starts a job returns **503 `AI_NOT_CONFIGURED`** (reads still work). `fake` is a deterministic
@@ -626,8 +627,14 @@ NachbereitungState {
   publishedAt: ISO8601 | null          // last publish of this lesson
 }
 ContextSummary {
-  level: A1..C2 | null, display: { fields, allowTranslationToggle }, displaySource: LESSON | STUDENT | LEVEL_DEFAULT,
-  attendeeCount, knownWordCount, coveredGrammar: [{ id, name, level }], libraryTopicCount, libraryGrammarTopicCount
+  level: A1..C2 | null,
+  display: { fields, allowTranslationToggle }, displaySource: LESSON | STUDENT | LEVEL_DEFAULT,
+  lessonOverrideActive: bool,          // = displaySource == LESSON
+  knownWordCount,                      // words the context sends (1:1: the student's words from this teacher)
+  coveredGrammar: [{ id, name, level }],
+  libraryTopicCount, libraryGrammarTopicCount,
+  attendees: [{ id, firstName, lastName }],   // who publish targets (1:1: the student; club: confirmed attendees)
+  attendeeCount
 }
 ```
 **Mode**: `CLUB` when the lesson has a `groupId` or its type is `SPEAKING_CLUB` / `READING_CLUB`,
@@ -783,9 +790,13 @@ everywhere, existing assignments/links/shares/rows are skipped; it simply re-app
 ```
 PublishResult {
   documentId, revision,
-  vocab: [{ key, entryId, reused: bool, assigned: int, skipped: int }],
+  wordsCreated, wordsReused,            // library entries created / found (matchedEntryId or dedupe key)
+  wordsAssigned,                        // new student-vocab rows (already assigned ones are not counted)
+  recipients: int, recipientIds: [uuid],   // who received words / the document
+  topicsCreated, grammarTopicsCreated,
+  vocab: [{ key, entryId, reused: bool }],
   topics: [{ key, id, reused: bool }], grammarTopics: [{ key, id, reused: bool }],
-  studentIds: [uuid]                    // who received words / the document
+  publishedAt
 }
 ```
 Errors: 404 `AI_JOB_NOT_FOUND`, 409 `AI_JOB_NOT_READY`, 400 `AI_JOB_LESSON_MISMATCH` (job of
@@ -835,6 +846,13 @@ plural, wordType, forms, government, example sentence and level. Only **empty** 
 (never overwritten); entries with nothing missing are skipped without a model call.
 `FillTranslationsResult = { updated: [{ entryId, filled: ["ru", …] }], skipped: [entryId] }`.
 
+```
+GET /api/v1/students/{studentId}/vocab/missing-fields?fields=ru,en,de_explanation -> { count, entryIds: [uuid] }
+```
+Teacher only (the student must be theirs, else 403). Entries of the calling teacher's library assigned
+to that student that lack **any** of the requested fields (`fields` required, same codes as the display
+setting, 400 `VOCAB_DISPLAY_FIELD_UNSUPPORTED`). Feed `entryIds` (in chunks of 100) to `fill-missing`.
+
 ### Fake provider (`ai.provider = fake`)
 
 Deterministic, offline, no key. Derives output from the notes: each non-empty note line without
@@ -852,12 +870,16 @@ and (club) a `grammar_box` TIP + `free_sentences` SPEAKING. Suggests topic `Allt
 
 | Code | Status | Notes |
 |---|---|---|
-| `AI_NOT_CONFIGURED` | 503 | no provider key; starting a job |
+| `AI_NOT_CONFIGURED` | 503 | no provider key; starting a job (generate, refine, fill-missing) |
 | `AI_RATE_LIMITED` | 429 | too many active jobs for this teacher (also a job error code for provider 429) |
 | `AI_JOB_NOT_FOUND` | 404 | |
 | `AI_JOB_NOT_READY` | 409 | refine/review/publish on a job that is not SUCCEEDED (or wrong kind) |
 | `AI_JOB_LESSON_MISMATCH` | 400 | publish with a job of another lesson |
-| `AI_OUTPUT_INVALID`, `AI_PROVIDER_ERROR`, `AI_TIMEOUT`, `AI_INTERRUPTED` | – | job `error.code` only |
+| `AI_OUTPUT_INVALID` | – | job `error.code`: model output still invalid after one retry |
+| `AI_PROVIDER_ERROR` | – | job `error.code`: provider/network error |
+| `AI_TIMEOUT` | – | job `error.code`: exceeded `ai.job_timeout` |
+| `AI_INTERRUPTED` | – | job `error.code`: server restarted while the job was queued/running |
+| `INTERNAL_ERROR` | – | job `error.code`: unexpected server error while running the job |
 | `NACHBEREITUNG_NO_ATTENDEES` | 400 | 1:1 without exactly one confirmed student / club without attendees |
 | `PROMPT_TEMPLATE_NOT_FOUND` | 404 | |
 | `PROMPT_TEMPLATE_DUPLICATE` | 409 | |
