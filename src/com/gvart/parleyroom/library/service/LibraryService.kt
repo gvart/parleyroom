@@ -10,6 +10,7 @@ import com.gvart.parleyroom.document.service.DocumentSupport
 import com.gvart.parleyroom.lesson.data.LessonGrammarTopicTable
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.lesson.data.LessonTopicTable
+import com.gvart.parleyroom.lesson.service.LessonAttendance
 import com.gvart.parleyroom.library.transfer.CoverageSource
 import com.gvart.parleyroom.library.transfer.CoveredStudent
 import com.gvart.parleyroom.library.transfer.GrammarChecklistItem
@@ -275,8 +276,8 @@ class LibraryService(
 }
 
 /**
- * "Covered by" rules (API.md): CONFIRMED participants of held lessons (not CANCELLED / REQUEST,
- * scheduled in the past) tagged with the topic, and students owning a tagged library word.
+ * "Covered by" rules (API.md): participants of lessons that took place ([LessonAttendance]) tagged
+ * with the topic, and students owning a tagged library word.
  */
 private object Coverage {
 
@@ -285,8 +286,7 @@ private object Coverage {
         "SELECT t.$tagColumn, ls.student_id FROM $tagTable t " +
                 "JOIN lessons l ON l.id = t.lesson_id " +
                 "JOIN lesson_students ls ON ls.lesson_id = l.id " +
-                "WHERE l.teacher_id = ? AND ls.status = 'CONFIRMED' AND l.status NOT IN ('CANCELLED', 'REQUEST') " +
-                "AND l.scheduled_at <= now()"
+                "WHERE l.teacher_id = ? AND ${LessonAttendance.TOOK_PLACE}"
 
     /** (topic id, student id) of vocab coverage; one uuid parameter: the teacher. */
     fun vocabStudents() =
@@ -298,8 +298,7 @@ private object Coverage {
     fun students(teacher: UUID, tagId: UUID, lessonTagTable: String, lessonTagColumn: String, withVocab: Boolean): List<CoveredStudent> {
         val lessonPart = "SELECT ls.student_id, 'LESSON' AS via, l.scheduled_at AS at FROM $lessonTagTable t " +
                 "JOIN lessons l ON l.id = t.lesson_id JOIN lesson_students ls ON ls.lesson_id = l.id " +
-                "WHERE t.$lessonTagColumn = ? AND l.teacher_id = ? AND ls.status = 'CONFIRMED' " +
-                "AND l.status NOT IN ('CANCELLED', 'REQUEST') AND l.scheduled_at <= now()"
+                "WHERE t.$lessonTagColumn = ? AND l.teacher_id = ? AND ${LessonAttendance.TOOK_PLACE}"
         val vocabPart = "SELECT sv.student_id, 'VOCAB' AS via, sv.added_at AS at FROM vocab_entry_topics t " +
                 "JOIN vocab_entries e ON e.id = t.vocab_entry_id JOIN student_vocab sv ON sv.vocab_entry_id = e.id " +
                 "WHERE t.topic_id = ? AND e.teacher_id = ?"

@@ -2,6 +2,7 @@ package com.gvart.parleyroom.progress.service
 
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.Sql
+import com.gvart.parleyroom.lesson.service.LessonAttendance
 import com.gvart.parleyroom.library.transfer.CoverageSource
 import com.gvart.parleyroom.progress.data.GrammarProgressOverrideTable
 import com.gvart.parleyroom.progress.data.GrammarProgressStatus
@@ -85,7 +86,7 @@ class ProgressCalculator(val config: ProgressConfig) {
                     "FROM lesson_grammar_topics t JOIN lessons l ON l.id = t.lesson_id " +
                     "JOIN lesson_students ls ON ls.lesson_id = l.id " +
                     "WHERE l.teacher_id = ? AND ls.student_id = ANY(?::uuid[]) AND t.grammar_topic_id = ANY(?::uuid[]) " +
-                    "AND $HELD_LESSON GROUP BY 1, 2",
+                    "AND ${LessonAttendance.TOOK_PLACE} GROUP BY 1, 2",
             teacherId, students, topicIds,
         ) { rs -> (rs.uuid(1) to rs.uuid(2)) to Lessons(rs.getInt(3), rs.time(4)!!) }.toMap()
 
@@ -179,7 +180,7 @@ class ProgressCalculator(val config: ProgressConfig) {
         val lessons = Sql.rows(
             "SELECT t.topic_id, ls.student_id, max(l.scheduled_at) FROM lesson_topics t " +
                     "JOIN lessons l ON l.id = t.lesson_id JOIN lesson_students ls ON ls.lesson_id = l.id " +
-                    "WHERE l.teacher_id = ? AND ls.student_id = ANY(?::uuid[]) AND $HELD_LESSON GROUP BY 1, 2",
+                    "WHERE l.teacher_id = ? AND ls.student_id = ANY(?::uuid[]) AND ${LessonAttendance.TOOK_PLACE} GROUP BY 1, 2",
             teacherId, students,
         ) { rs -> (rs.uuid(1) to rs.uuid(2)) to rs.time(3)!! }.toMap()
         val words = Sql.rows(
@@ -212,9 +213,6 @@ class ProgressCalculator(val config: ProgressConfig) {
     ) { rs -> WordCounts(learned = rs.getInt(2), total = rs.getInt(1)) }.single()
 
     companion object {
-        /** The P5 "covered by" lesson rule; aliases `l` (lessons) and `ls` (lesson_students). */
-        private const val HELD_LESSON =
-            "ls.status = 'CONFIRMED' AND l.status NOT IN ('CANCELLED', 'REQUEST') AND l.scheduled_at <= now()"
 
         fun counts(statuses: List<GrammarProgressStatus>): GrammarCounts {
             val total = statuses.size

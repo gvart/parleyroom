@@ -182,6 +182,28 @@ class LibraryIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    fun `lessons started or completed before their scheduled time count as covered`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val topic = LibraryFixtures.topic("Reisen")
+        val grammar = LibraryFixtures.grammar("Passiv", LanguageLevel.B1)
+        val tomorrow = OffsetDateTime.now().plusDays(1)
+        val completed = seedLesson(students = listOf(STUDENT), scheduledAt = tomorrow)       // seeded COMPLETED
+        val running = seedLesson(students = listOf(STUDENT_2), scheduledAt = tomorrow).also { setStatus(it, LessonStatus.IN_PROGRESS) }
+        LibraryFixtures.tagLesson(completed, topics = listOf(topic), grammar = listOf(grammar))
+        LibraryFixtures.tagLesson(running, topics = listOf(topic), grammar = listOf(grammar))
+
+        val view = client.get("/api/v1/library/topics/$topic") { bearerAuth(token) }.body<TopicLibrary>()
+        assertEquals(setOf(STUDENT.toString(), STUDENT_2.toString()), view.coveredBy.map { it.studentId }.toSet())
+        val detail = client.get("/api/v1/library/grammar/$grammar") { bearerAuth(token) }.body<GrammarTopicLibrary>()
+        assertEquals(2, detail.coveredBy.size)
+        val summary = client.get("/api/v1/library/summary") { bearerAuth(token) }.body<LibrarySummary>()
+        assertEquals(2L, summary.topics.single { it.topicId == topic.toString() }.coveredStudents)
+        val checklist = client.get("/api/v1/library/grammar?level=B1") { bearerAuth(token) }.body<List<GrammarLevelGroup>>()
+        assertEquals(2L, checklist.single().topics.single().coveredStudents)
+    }
+
+    @Test
     fun `library views are for the owning teacher only`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)

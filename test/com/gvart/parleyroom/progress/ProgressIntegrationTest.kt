@@ -122,19 +122,21 @@ class ProgressIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `lessons count only when held, confirmed and not cancelled`() = testApp {
+    fun `lessons count only when they took place for a confirmed participant`() = testApp {
         val client = createJsonClient(this)
         startApplication() // loads the test data before seeding
         ProgressFixtures.setLevel(STUDENT, LanguageLevel.B1)
         val future = LibraryFixtures.grammar("Zukunft", LanguageLevel.B1)
         val cancelled = LibraryFixtures.grammar("Abgesagt", LanguageLevel.B1)
         val pending = LibraryFixtures.grammar("Angefragt", LanguageLevel.B1)
-        LibraryFixtures.tagLesson(seedLesson(scheduledAt = OffsetDateTime.now().plusDays(2)), grammar = listOf(future))
+        val futureLesson = seedLesson(scheduledAt = OffsetDateTime.now().plusDays(2))
+        LibraryFixtures.tagLesson(futureLesson, grammar = listOf(future))
         val cancelledLesson = seedLesson()
         LibraryFixtures.tagLesson(cancelledLesson, grammar = listOf(cancelled))
         val pendingLesson = seedLesson()
         LibraryFixtures.tagLesson(pendingLesson, grammar = listOf(pending))
         transaction {
+            LessonTable.update({ LessonTable.id eq futureLesson }) { it[status] = LessonStatus.CONFIRMED }
             LessonTable.update({ LessonTable.id eq cancelledLesson }) { it[status] = LessonStatus.CANCELLED }
             LessonStudentTable.update({ LessonStudentTable.lessonId eq pendingLesson }) { it[status] = LessonStudentStatus.REQUESTED }
         }
@@ -144,6 +146,33 @@ class ProgressIntegrationTest : IntegrationTest() {
 
         val body = client.progress(getTeacherToken(client))
         body.items().forEach { assertEquals("NOT_COVERED", it.str("derived"), it.str("name")) }
+    }
+
+    @Test
+    fun `lessons started or completed before their scheduled time count at once`() = testApp {
+        val client = createJsonClient(this)
+        startApplication() // loads the test data before seeding
+        ProgressFixtures.setLevel(STUDENT, LanguageLevel.B1)
+        val completed = LibraryFixtures.grammar("Früh fertig", LanguageLevel.B1)
+        val running = LibraryFixtures.grammar("Läuft", LanguageLevel.B1)
+        val requested = LibraryFixtures.grammar("Nur angefragt", LanguageLevel.B1)
+        val tomorrow = OffsetDateTime.now().plusDays(1)
+        val completedLesson = seedLesson(scheduledAt = tomorrow)          // seeded COMPLETED
+        val runningLesson = seedLesson(scheduledAt = tomorrow)
+        val requestedLesson = seedLesson(scheduledAt = tomorrow)
+        LibraryFixtures.tagLesson(completedLesson, grammar = listOf(completed))
+        LibraryFixtures.tagLesson(runningLesson, grammar = listOf(running))
+        LibraryFixtures.tagLesson(requestedLesson, grammar = listOf(requested))
+        transaction {
+            LessonTable.update({ LessonTable.id eq runningLesson }) { it[status] = LessonStatus.IN_PROGRESS }
+            LessonStudentTable.update({ LessonStudentTable.lessonId eq requestedLesson }) { it[status] = LessonStudentStatus.REQUESTED }
+        }
+
+        val body = client.progress(getTeacherToken(client))
+        assertEquals("COVERED", body.item("Früh fertig").str("derived"))
+        assertEquals(1, body.item("Früh fertig").obj("evidence")["lessonCount"]!!.jsonPrimitive.int)
+        assertEquals("COVERED", body.item("Läuft").str("derived"))
+        assertEquals("NOT_COVERED", body.item("Nur angefragt").str("derived"), "the participant must be CONFIRMED")
     }
 
     @Test

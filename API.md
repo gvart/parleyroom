@@ -117,9 +117,13 @@ LibraryLessonRef { id, title, scheduledAt, status, groupId? }
 CoveredStudent  { studentId, firstName, lastName, via: [LESSON | VOCAB], lastAt }   // lastName asc, firstName asc
 ```
 **Covered by** (topic): a student is listed if
-- **LESSON**: they are a `CONFIRMED` participant (`lesson_students`) of a lesson of this teacher that
-  is tagged with the topic, is not `CANCELLED` / `REQUEST`, and has `scheduledAt ≤ now`; or
+- **LESSON**: a lesson of this teacher tagged with the topic **took place** for them; or
 - **VOCAB**: they have a `student_vocab` row for an entry of this teacher's library tagged with the topic.
+
+**Took place** (one shared rule, also used by Student progress — `LessonAttendance.TOOK_PLACE`): the
+student is a `CONFIRMED` participant (`lesson_students`), the lesson is not `CANCELLED` / `REQUEST`, and
+it is `COMPLETED` or `IN_PROGRESS` (so a lesson started early counts at once) **or** its
+`scheduledAt ≤ now`.
 
 One row per student; `via` lists every source that applies; `lastAt` = the latest of the lesson's
 `scheduledAt` / the student_vocab `addedAt` over all matching rows. Direct tags only (a student
@@ -702,7 +706,7 @@ For each grammar topic G on the checklist (teacher T, student S):
 |---|---|
 | `NEEDS_WORK` | `scored.total ≥ minScoredItems` (3) **and** `scored.correct / scored.total < needsWorkBelow` (0.60) |
 | `PRACTICED` | S has **submitted** (`attempt ≥ 1`, any status) homework of T with an item whose source is tagged with G |
-| `COVERED` | S is a `CONFIRMED` participant of a lesson of T tagged with G that is not `CANCELLED` / `REQUEST` and has `scheduledAt ≤ now` (the P5 "covered by" rule) |
+| `COVERED` | a lesson of T tagged with G **took place** for S (the shared rule in Library views → Covered by: CONFIRMED participant, not `CANCELLED` / `REQUEST`, and `COMPLETED` / `IN_PROGRESS` or `scheduledAt ≤ now`) |
 | `NOT_COVERED` | none of the above |
 
 - **Item source tagged with G**: a `DOCUMENT` item whose source document (`assignment_items.document_id`)
@@ -849,6 +853,9 @@ onTrack = percent ≥ expectedPercent − 10          (10-point tolerance; past 
 ```
 Listing goals runs a fixed number of grouped queries per distinct teacher in the result (no per-goal
 queries).
+
+**Admin stats**: `GET /api/v1/admin/stats` keeps the field `domain.learningGoals`; it now counts
+`ACTIVE` goals of the new `goals` table.
 
 ### Tables (V14)
 
