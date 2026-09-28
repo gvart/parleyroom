@@ -1,0 +1,26 @@
+test/com/gvart/parleyroom/progress/ProgressAiContextIntegrationTest.kt
+  s_2b5907717bc9a2::t_04c895885673ce 1-118
+  s_2b5907717bc9a2::t_afa51ace655349 119-121
+resources/ai/nachbereitung-system.md
+  s_2b5907717bc9a2::t_05df2190214422 10-13
+src/com/gvart/parleyroom/ai/service/LessonContextService.kt
+  s_2b5907717bc9a2::t_c086a21bc5ef9f 6,18-19,61,76,101-109,121,178,268-284,299
+src/com/gvart/parleyroom/ai/transfer/AiDtos.kt
+  s_2b5907717bc9a2::t_9470d36aa9996f 270-282,291
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "dbe56239232bce798f03c7b69ed3860386f5f33c",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
