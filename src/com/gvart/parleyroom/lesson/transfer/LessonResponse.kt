@@ -3,6 +3,7 @@ package com.gvart.parleyroom.lesson.transfer
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
+import com.gvart.parleyroom.document.transfer.LessonDocumentRef
 import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.topic.transfer.GrammarTopicRef
 import com.gvart.parleyroom.topic.transfer.TopicRef
@@ -29,7 +30,8 @@ data class LessonResponse(
     @Serializable(with = OffsetDateTimeSerializer::class)
     val startedAt: OffsetDateTime? = null,
     val pendingReschedule: PendingRescheduleResponse? = null,
-    val sharedDocument: String? = null,
+    /** Block documents linked to the lesson; clients refetch one when its updatedAt changes. */
+    val documents: List<LessonDocumentRef> = emptyList(),
     val teacherNotes: String? = null,
     val studentNotes: String? = null,
     val teacherWentWell: String? = null,

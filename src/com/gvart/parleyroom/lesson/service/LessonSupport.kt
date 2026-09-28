@@ -4,6 +4,9 @@ import com.gvart.parleyroom.common.service.singleOrNotFound
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
+import com.gvart.parleyroom.document.data.DocumentLessonTable
+import com.gvart.parleyroom.document.data.DocumentTable
+import com.gvart.parleyroom.document.transfer.LessonDocumentRef
 import com.gvart.parleyroom.lesson.data.LessonCorrectionTable
 import com.gvart.parleyroom.lesson.data.LessonDocumentTable
 import com.gvart.parleyroom.lesson.data.LessonGrammarTopicTable
@@ -40,6 +43,7 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.andWhere
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import java.time.OffsetDateTime
 import java.util.UUID
@@ -252,10 +256,27 @@ class LessonSupport {
                 )
             }
 
+        val documentsByLesson = DocumentLessonTable
+            .join(DocumentTable, JoinType.INNER, DocumentLessonTable.documentId, DocumentTable.id)
+            .select(DocumentLessonTable.lessonId, DocumentTable.id, DocumentTable.title, DocumentTable.revision, DocumentTable.updatedAt)
+            .where { DocumentLessonTable.lessonId inList lessonIds }
+            .orderBy(DocumentLessonTable.linkedAt)
+            .groupBy({ it[DocumentLessonTable.lessonId].value }) {
+                LessonDocumentRef(
+                    id = it[DocumentTable.id].value.toString(),
+                    title = it[DocumentTable.title],
+                    revision = it[DocumentTable.revision],
+                    updatedAt = it[DocumentTable.updatedAt],
+                )
+            }
+
         val isStudent = viewer.role == UserRole.STUDENT
         return rows.map { row ->
             val lessonId = row[LessonTable.id].value
             val doc = docByLesson[lessonId]
+            val students = studentsByLesson[lessonId] ?: emptyList()
+            // Students only read linked documents once they are confirmed on the lesson.
+            val showDocuments = !isStudent || students.any { it.id == viewer.id.toString() && it.status == LessonStudentStatus.CONFIRMED.name }
             LessonResponse(
                 id = lessonId.toString(),
                 title = row[LessonTable.title],
@@ -269,10 +290,10 @@ class LessonSupport {
                 level = row[LessonTable.level],
                 maxParticipants = row[LessonTable.maxParticipants],
                 groupId = row[LessonTable.groupId]?.value?.toString(),
-                students = studentsByLesson[lessonId] ?: emptyList(),
+                students = students,
                 startedAt = row[LessonTable.startedAt],
                 pendingReschedule = pendingByLesson[lessonId],
-                sharedDocument = doc?.get(LessonDocumentTable.sharedDocument),
+                documents = if (showDocuments) documentsByLesson[lessonId].orEmpty() else emptyList(),
                 teacherNotes = doc?.get(LessonDocumentTable.teacherNotes),
                 studentNotes = doc?.get(LessonDocumentTable.studentNotes),
                 teacherWentWell = doc?.get(LessonDocumentTable.teacherWentWell),
@@ -297,7 +318,6 @@ class LessonSupport {
     fun toDocumentResponse(row: ResultRow) = LessonDocumentResponse(
         id = row[LessonDocumentTable.id].value.toString(),
         lessonId = row[LessonDocumentTable.lessonId].value.toString(),
-        sharedDocument = row[LessonDocumentTable.sharedDocument],
         teacherNotes = row[LessonDocumentTable.teacherNotes],
         studentNotes = row[LessonDocumentTable.studentNotes],
         teacherWentWell = row[LessonDocumentTable.teacherWentWell],

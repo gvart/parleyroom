@@ -4,6 +4,7 @@ import com.gvart.parleyroom.activity.config.configureActivityModule
 import com.gvart.parleyroom.admin.config.configureAdminModule
 import com.gvart.parleyroom.availability.config.configureAvailabilityModule
 import com.gvart.parleyroom.config.configureDatabase
+import com.gvart.parleyroom.document.config.configureDocumentModule
 import com.gvart.parleyroom.config.configureHealthRouting
 import com.gvart.parleyroom.config.generalConfig
 import com.gvart.parleyroom.goal.config.configureGoalModule
@@ -40,6 +41,7 @@ fun Application.module(dataSource: javax.sql.DataSource? = null) {
     configureHomeworkModule()
     configureGoalModule()
     configureMaterialModule()
+    configureDocumentModule()
     configureActivityModule()
     configureHealthRouting()
 }

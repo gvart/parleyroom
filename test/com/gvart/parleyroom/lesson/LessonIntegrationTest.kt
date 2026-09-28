@@ -1015,7 +1015,7 @@ class LessonIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `teacher can write sharedDocument on a confirmed lesson`() = testApp {
+    fun `sync no longer accepts the removed sharedDocument field`() = testApp {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
 
@@ -1027,31 +1027,7 @@ class LessonIntegrationTest : IntegrationTest() {
             setBody(SyncLessonDocumentRequest(field = "sharedDocument", value = "<p>Lesson plan</p>"))
         }
 
-        assertEquals(HttpStatusCode.OK, response.status)
-        val doc = response.body<LessonDocumentResponse>()
-        assertEquals("<p>Lesson plan</p>", doc.sharedDocument)
-
-        val refetched = client.get("/api/v1/lessons/${lesson.id}") {
-            bearerAuth(teacherToken)
-        }.body<LessonResponse>()
-        assertEquals("<p>Lesson plan</p>", refetched.sharedDocument)
-    }
-
-    @Test
-    fun `student cannot write sharedDocument`() = testApp {
-        val client = createJsonClient(this)
-        val teacherToken = getTeacherToken(client)
-        val studentToken = getStudentToken(client)
-
-        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
-
-        val response = client.put("/api/v1/lessons/${lesson.id}/sync") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(studentToken)
-            setBody(SyncLessonDocumentRequest(field = "sharedDocument", value = "hijack"))
-        }
-
-        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 
     @Test

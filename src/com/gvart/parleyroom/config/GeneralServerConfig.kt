@@ -9,6 +9,9 @@ import com.gvart.parleyroom.availability.transfer.CreateAvailabilityExceptionReq
 import com.gvart.parleyroom.availability.transfer.ReplaceWeeklyAvailabilityRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
+import com.gvart.parleyroom.document.transfer.CreateDocumentRequest
+import com.gvart.parleyroom.document.transfer.UpdateDocumentRequest
+import com.gvart.parleyroom.document.transfer.DuplicateDocumentRequest
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
@@ -186,6 +189,9 @@ fun Application.generalConfig() {
         validate<GrammarTopicRequest> { it.validate() }
         validate<GroupRequest> { it.validate() }
         validate<UpdateLessonContentRequest> { it.validate() }
+        validate<CreateDocumentRequest> { it.validate() }
+        validate<UpdateDocumentRequest> { it.validate() }
+        validate<DuplicateDocumentRequest> { it.validate() }
     }
 
 
@@ -216,11 +222,15 @@ fun Application.generalConfig() {
         }
 
         exception<BadRequestException> { call, cause ->
-            call.respond(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, cause.code ?: "BAD_REQUEST"))
+            call.respond(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, cause.code ?: "BAD_REQUEST", cause.pointer))
         }
 
         exception<ConflictException> { call, cause ->
-            call.respond(HttpStatusCode.Conflict, ProblemDetail.of(HttpStatusCode.Conflict, cause.message, cause.code ?: "CONFLICT"))
+            call.respond(
+                HttpStatusCode.Conflict,
+                ProblemDetail.of(HttpStatusCode.Conflict, cause.message, cause.code ?: "CONFLICT")
+                    .copy(currentRevision = cause.currentRevision),
+            )
         }
 
         exception<IllegalArgumentException> { call, cause ->

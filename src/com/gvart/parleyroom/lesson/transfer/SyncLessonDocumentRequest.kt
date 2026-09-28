@@ -15,7 +15,6 @@ data class SyncLessonDocumentRequest(
 )
 
 enum class LessonDocumentField {
-    SHARED_DOCUMENT,
     TEACHER_NOTES,
     STUDENT_NOTES,
     TEACHER_WENT_WELL,
@@ -25,7 +24,6 @@ enum class LessonDocumentField {
 
     companion object {
         fun fromClient(raw: String): LessonDocumentField? = when (raw) {
-            "sharedDocument" -> SHARED_DOCUMENT
             "teacherNotes" -> TEACHER_NOTES
             "studentNotes" -> STUDENT_NOTES
             "teacherWentWell" -> TEACHER_WENT_WELL
