@@ -32,13 +32,7 @@ data class LessonResponse(
     val pendingReschedule: PendingRescheduleResponse? = null,
     /** Block documents linked to the lesson; clients refetch one when its updatedAt changes. */
     val documents: List<LessonDocumentRef> = emptyList(),
-    val teacherNotes: String? = null,
-    val studentNotes: String? = null,
-    val teacherWentWell: String? = null,
-    val teacherWorkingOn: String? = null,
-    val studentReflection: String? = null,
-    val studentHardToday: String? = null,
-    /** Teacher-only: null for students. */
+    /** The teacher's plain-text lesson notes (live classroom + Nachbereitung). Teacher-only: null for students. */
     val rawNotes: String? = null,
     /** Teacher-only: null for students. */
     val promptUsed: String? = null,

@@ -10,7 +10,6 @@ import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.group.data.GroupTable
-import com.gvart.parleyroom.lesson.data.LessonDocumentTable
 import com.gvart.parleyroom.lesson.data.LessonGrammarTopicTable
 import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
@@ -182,9 +181,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
                 .orderBy(GrammarTopicTable.level to SortOrder.ASC_NULLS_LAST, GrammarTopicTable.name to SortOrder.ASC)
                 .limit(MAX_LIBRARY_ITEMS)
                 .map { GrammarTopicRef(it[GrammarTopicTable.id].value.toString(), it[GrammarTopicTable.name], it[GrammarTopicTable.level]) },
-            prefillNotes = lesson[LessonTable.rawNotes] ?: LessonDocumentTable.select(LessonDocumentTable.teacherNotes)
-                .where { LessonDocumentTable.lessonId eq lessonId }
-                .singleOrNull()?.get(LessonDocumentTable.teacherNotes)?.let(HtmlText::toPlainText)?.takeIf { it.isNotBlank() },
+            prefillNotes = lesson[LessonTable.rawNotes],
             promptUsed = lesson[LessonTable.promptUsed],
         )
     }

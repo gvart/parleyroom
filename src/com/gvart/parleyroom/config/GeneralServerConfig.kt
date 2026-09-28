@@ -31,7 +31,6 @@ import com.gvart.parleyroom.homework.transfer.SaveAnswersRequest
 import com.gvart.parleyroom.homework.transfer.UpdateAssignmentRequest
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.UpdateLessonContentRequest
-import com.gvart.parleyroom.lesson.transfer.ReflectLessonRequest
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.notification.transfer.MarkViewedRequest
 import com.gvart.parleyroom.registration.transfer.InviteUserRequest
@@ -184,7 +183,6 @@ fun Application.generalConfig() {
         validate<ReviewDraftRequest> { it.validate() }
         validate<ReviewRequest> { it.validate() }
         validate<LogoutRequest> { it.validate() }
-        validate<ReflectLessonRequest> { it.validate() }
         validate<MarkViewedRequest> { it.validate() }
         validate<UpdateProfileRequest> { it.validate() }
         validate<AdminCreateUserRequest> { it.validate() }

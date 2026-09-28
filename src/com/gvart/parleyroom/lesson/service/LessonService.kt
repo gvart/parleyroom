@@ -129,12 +129,6 @@ class LessonService(
                 students = emptyList(),
                 maxParticipants = null,
                 pendingReschedule = null,
-                teacherNotes = null,
-                studentNotes = null,
-                teacherWentWell = null,
-                teacherWorkingOn = null,
-                studentReflection = null,
-                studentHardToday = null,
                 topics = emptyList(),
                 grammarTopics = emptyList(),
                 vocab = emptyList(),
@@ -144,12 +138,6 @@ class LessonService(
             // Group club — show title/topic/spots (joinable) but hide private docs.
             response.copy(
                 students = emptyList(),
-                teacherNotes = null,
-                studentNotes = null,
-                teacherWentWell = null,
-                teacherWorkingOn = null,
-                studentReflection = null,
-                studentHardToday = null,
                 correctedSentences = emptyList(),
             )
         }

@@ -158,12 +158,10 @@ different entries). Students get words through `StudentVocab` rows (status + FSR
 
 ```
 GET    /api/v1/vocab-entries?q=&topicId=&level=&wordType=&page=&pageSize=  -> { entries, total, page, pageSize }
-GET    /api/v1/vocab-entries/lookup?lemma=&article=&wordType=              -> [VocabEntry]  (exact, case-insensitive)
 POST   /api/v1/vocab-entries            Body: VocabEntryInput   409 VOCAB_ENTRY_DUPLICATE
 GET    /api/v1/vocab-entries/{id}
 PUT    /api/v1/vocab-entries/{id}       Body: VocabEntryInput   full replace
 DELETE /api/v1/vocab-entries/{id}       also removes the word from every student
-POST   /api/v1/vocab-entries/{id}/assign  Body: { studentIds?: [], groupId?, lessonId? } -> { assigned, skipped }
 ```
 
 VocabEntryInput:
@@ -181,7 +179,7 @@ VocabEntryInput:
 `translations` is keyed by language code; supported codes are `ru`, `en`
 (`vocabulary/service/VocabDisplay.kt`; others -> 400 `VOCAB_LANGUAGE_UNSUPPORTED`).
 
-**Assign targets**: `studentIds` ∪ current members of `groupId`; if both are empty and `lessonId` is set,
+**Assign targets** (quick-add below; Nachbereitung publish uses the lesson rule): `studentIds` ∪ current members of `groupId`; if both are empty and `lessonId` is set,
 the lesson's confirmed attendees (`lesson_students`, e.g. a club session's participants). With `lessonId`, the entry is also linked to the lesson's words.
 Students who already have the word are counted in `skipped`.
 
@@ -202,11 +200,9 @@ Body: { entry: VocabEntryInput, studentIds?: [], groupId?, lessonId? }
 -> 201 { entry: VocabEntry, reused: bool, assigned, skipped }
 ```
 Finds the entry by dedupe key or creates it (`sourceLessonId` defaults to `lessonId`), links it
-to the lesson and assigns it (same target rules as `/assign`).
+to the lesson and assigns it (assign targets above).
 
 ```
-GET    /api/v1/vocabulary/{id}
-PUT    /api/v1/vocabulary/{id}          Body: { status }
 DELETE /api/v1/vocabulary/{id}          removes the word from the student (library entry stays)
 POST   /api/v1/vocabulary/{id}/review           Body: { rating, mode, responseMs? }   see Practice
 POST   /api/v1/vocabulary/{id}/article          Body: { article, responseMs? }        see Practice
@@ -903,7 +899,13 @@ Body: { reason? }
 Any participant can cancel. Works on REQUEST, CONFIRMED, or IN_PROGRESS lessons. Resolves any pending reschedule. Status -> CANCELLED.
 
 ### New: IN_PROGRESS status
-Starting a lesson now sets status to `IN_PROGRESS` (was staying CONFIRMED before). Sync/complete only work on IN_PROGRESS lessons.
+Starting a lesson now sets status to `IN_PROGRESS` (was staying CONFIRMED before). Complete only works on IN_PROGRESS lessons.
+
+### Start / complete
+```
+POST /api/v1/lessons/{id}/start      -> { videoRoom: VideoAccess }     teacher/admin, CONFIRMED only
+POST /api/v1/lessons/{id}/complete   (no body) -> LessonResponse        teacher/admin, IN_PROGRESS only
+```
 
 ### New: Pending reschedule in response
 `LessonResponse` now includes:
@@ -926,7 +928,7 @@ Null when no pending reschedule.
 ```json
 {
   "groupId": "uuid | null",
-  "rawNotes": "string | null (teacher/admin only; null for students)",
+  "rawNotes": "string | null (the lesson's one plain-text teacher note; teacher/admin only, null for students)",
   "promptUsed": "string | null (teacher/admin only; null for students)",
   "topics": [{ "id": "uuid", "name": "Haushalt" }],
   "grammarTopics": [{ "id": "uuid", "name": "Perfekt", "level": "A2" }],
@@ -941,7 +943,7 @@ PATCH /api/v1/lessons/{id}/content
 Body: { rawNotes?, promptUsed?, groupId?, clearGroup?: bool, topicIds?, grammarTopicIds?,
         vocabEntryIds?, correctedSentences?: [{ incorrect, correct }] }
 ```
-Lesson teacher or admin. `null` = unchanged; lists replace (`[]` clears). Ids must belong to the
+Lesson teacher or admin, in any lesson status. `null` = unchanged; lists replace (`[]` clears). Ids must belong to the
 lesson teacher's library (404 `TOPIC_NOT_FOUND` / `GRAMMAR_TOPIC_NOT_FOUND` / `VOCAB_ENTRY_NOT_FOUND`).
 
 ```
@@ -949,6 +951,17 @@ PUT    /api/v1/lessons/{id}/vocab-display   Body: { fields, allowTranslationTogg
 DELETE /api/v1/lessons/{id}/vocab-display
 ```
 Per-lesson override of the vocab display setting for words students received in this lesson.
+
+### Lesson notes (one field)
+`lessons.raw_notes` is the only lesson note: plain text, written by the teacher. The live classroom
+autosaves it with `PATCH /lessons/{id}/content { rawNotes }` (debounced; `""` clears), the recap shows
+it, and the Nachbereitung panel prefills and edits the same value. Students never see it.
+Removed with V15: the `lesson_documents` table (rich-text `teacherNotes`, `studentNotes`,
+`teacherWentWell`, `teacherWorkingOn`, `studentReflection`, `studentHardToday`),
+`PUT /lessons/{id}/sync`, `POST /lessons/{id}/reflect` and the `/complete` request body.
+Existing `teacher_notes` HTML was converted to plain text into empty `raw_notes`. Corrected sentences
+now reference the lesson directly (`lesson_corrections.lesson_id`). Also dropped: `lessons.has_ai_summary`,
+`users.points` (never exposed).
 
 ---
 
@@ -1145,9 +1158,7 @@ Only the newest 30 versions per document are kept.
 
 ### Lessons
 
-`lesson_documents.shared_document`, `LessonResponse.sharedDocument`,
-`LessonDocumentResponse.sharedDocument` and the `sharedDocument` field of
-`PUT /api/v1/lessons/{id}/sync` are removed (sync keeps the notes/reflection fields).
+The lesson's old free-text shared document is gone (V9); lesson notes are `rawNotes` (see Lesson Changes).
 `LessonResponse.documents: [{ id, title, revision, updatedAt }]` lists the linked documents the
 caller can read (students: once they are CONFIRMED on the lesson).
 **Live sync** stays poll-based: clients poll `GET /lessons/{id}` (every 10 s) or
@@ -1181,7 +1192,7 @@ Anna reviews / refines → one transactional **publish**. Everything here is **t
 GET /api/v1/ai/status -> { available: bool }    teacher only (students / admins 403)
 ```
 `available` is false when no provider is configured; the portal then hides AI buttons (generate,
-fill-missing, suggest-tags).
+fill-missing, material tag suggestions).
 
 ```
 ai.provider  = anthropic | fake          AI_PROVIDER        (default anthropic)
@@ -1231,7 +1242,6 @@ the retry), `AI_PROVIDER_ERROR` (provider/network error), `AI_RATE_LIMITED` (pro
 
 ```
 GET  /api/v1/ai/jobs/{id}                  -> GenerationJob          404 AI_JOB_NOT_FOUND (also for other teachers' jobs)
-GET  /api/v1/lessons/{id}/ai-jobs          -> [GenerationJob]  newest first, max 20 (result omitted: null)
 ```
 
 ### Panel state
@@ -1243,8 +1253,7 @@ GET /api/v1/lessons/{id}/nachbereitung -> NachbereitungState
 NachbereitungState {
   lessonId, mode: ONE_ON_ONE | CLUB,
   aiAvailable: bool,                   // false -> generate/refine return 503 AI_NOT_CONFIGURED
-  notes: string | null,                // lesson.raw_notes, else the live-classroom teacher notes as PLAIN TEXT
-                                       // (HTML converted: one line per paragraph / heading / list item)
+  notes: string | null,                // lesson.raw_notes (the notes the live classroom saved)
   prompt: string | null,               // lesson.prompt_used
   context: ContextSummary,             // what the server will add (shown read-only in the panel)
   latestJob: GenerationJob | null,     // newest GENERATE/REFINE of this lesson in any status (QUEUED/RUNNING
@@ -1533,7 +1542,7 @@ and (club) a `grammar_box` TIP + `free_sentences` SPEAKING. Suggests topic `Allt
 
 | Code | Status | Notes |
 |---|---|---|
-| `AI_NOT_CONFIGURED` | 503 | no provider key; starting a job (generate, refine, fill-missing, suggest-tags) |
+| `AI_NOT_CONFIGURED` | 503 | no provider key; starting a job (generate, refine, fill-missing) |
 | `AI_RATE_LIMITED` | 429 | too many active jobs for this teacher (also a job error code for provider 429) |
 | `AI_JOB_NOT_FOUND` | 404 | |
 | `AI_JOB_NOT_READY` | 409 | refine/review/publish on a job that is not SUCCEEDED (or wrong kind) |
@@ -1599,11 +1608,7 @@ filters by `topicId` and `grammarTopicId`. PUT/DELETE: owning teacher or admin o
 
 ### AI tag suggestions (brief §3 "tagging easy, AI-suggested")
 
-```
-POST /api/v1/materials/{id}/suggest-tags   (no body) -> 202 GenerationJob (kind SUGGEST_TAGS, materialId set)
-```
-Owning teacher only (other teachers 404 `MATERIAL_NOT_FOUND`; admins / students 403). 503
-`AI_NOT_CONFIGURED`, 429 `AI_RATE_LIMITED` as for every job. Poll `GET /api/v1/ai/jobs/{id}`.
+Started only on upload (below); poll `GET /api/v1/ai/jobs/{id}`.
 **Suggestions only**: nothing is written to the material or the library. Anna applies them with the
 existing `PUT /api/v1/materials/{id}` (`level`, `skill`, `topicIds`, `grammarTopicIds`), after
 creating the accepted new topics / grammar topics with `POST /topics` / `POST /grammar-topics`.
@@ -1612,7 +1617,7 @@ creating the accepted new topics / grammar topics with `POST /topics` / `POST /g
 `suggestTags: true`. After the material is stored the server starts a SUGGEST_TAGS job and returns
 its id in `MaterialResponse.suggestTagsJobId` (only in that 201 response). The upload never fails
 because of AI: if AI is not configured or the teacher is at the job limit, the material is created
-and `suggestTagsJobId` is `null` (the portal can offer the button later).
+and `suggestTagsJobId` is `null`.
 
 **Text sent to the model** (at most **6 000 chars** after whitespace normalisation, cut at a word
 boundary):

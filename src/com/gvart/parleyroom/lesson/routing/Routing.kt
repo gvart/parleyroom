@@ -6,22 +6,17 @@ import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.lesson.service.LessonContentService
-import com.gvart.parleyroom.lesson.service.LessonDocumentService
 import com.gvart.parleyroom.lesson.service.LessonLifecycleService
 import com.gvart.parleyroom.lesson.service.LessonParticipantService
 import com.gvart.parleyroom.lesson.service.LessonRescheduleService
 import com.gvart.parleyroom.lesson.service.LessonService
 import com.gvart.parleyroom.lesson.transfer.CancelLessonRequest
-import com.gvart.parleyroom.lesson.transfer.CompleteLessonRequest
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
-import com.gvart.parleyroom.lesson.transfer.LessonDocumentResponse
 import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.PublicCalendarResponse
-import com.gvart.parleyroom.lesson.transfer.ReflectLessonRequest
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.lesson.transfer.StartLessonResponse
-import com.gvart.parleyroom.lesson.transfer.SyncLessonDocumentRequest
 import com.gvart.parleyroom.lesson.transfer.UpdateLessonContentRequest
 import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
 import com.gvart.parleyroom.video.transfer.VideoAccess
@@ -47,7 +42,6 @@ fun Application.configureLessonRouting() {
     val lifecycleService: LessonLifecycleService by dependencies
     val participantService: LessonParticipantService by dependencies
     val rescheduleService: LessonRescheduleService by dependencies
-    val documentService: LessonDocumentService by dependencies
     val contentService: LessonContentService by dependencies
 
     routing {
@@ -307,7 +301,7 @@ fun Application.configureLessonRouting() {
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Start lesson"
-                        description = "Starts a lesson: sets startedAt, marks confirmed students as attended, creates a lesson document, and returns a LiveKit room + access token for the teacher."
+                        description = "Starts a lesson: sets startedAt, marks confirmed students as attended, and returns a LiveKit room + access token for the teacher."
                         parameters {
                             path("id") {
                                 description = "UUID of the lesson"
@@ -315,7 +309,7 @@ fun Application.configureLessonRouting() {
                         }
                         responses {
                             HttpStatusCode.OK {
-                                description = "Lesson started, document created, and video room provisioned"
+                                description = "Lesson started and video room provisioned"
                                 schema = jsonSchema<StartLessonResponse>()
                             }
                             HttpStatusCode.BadRequest {
@@ -376,7 +370,7 @@ fun Application.configureLessonRouting() {
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Update lesson content"
-                        description = "Lesson teacher or admin. Sets rawNotes, promptUsed, group link, and replaces topic, grammar topic, vocab entry and corrected-sentence lists (null = unchanged). rawNotes/promptUsed are never returned to students."
+                        description = "Lesson teacher or admin, in any status. Sets rawNotes (the one plain-text lesson note; the live classroom autosaves it here), promptUsed, group link, and replaces topic, grammar topic, vocab entry and corrected-sentence lists (null = unchanged). rawNotes/promptUsed are never returned to students."
                         requestBody { schema = jsonSchema<UpdateLessonContentRequest>() }
                         parameters { path("id") { description = "UUID of the lesson" } }
                         responses {
@@ -410,55 +404,15 @@ fun Application.configureLessonRouting() {
                         }
                     }
 
-                    put<SyncLessonDocumentRequest>("/sync") {
+                    post("/complete") {
                         val principal = call.requirePrincipal()
                         val id = call.getPathUUID()
 
-                        val result = documentService.syncDocument(id, it, principal)
-                        call.respond(HttpStatusCode.OK, result)
-                    }.describe {
-                        summary = "Sync lesson document"
-                        description = "Patches one field of the lesson document. Body takes {field, value}; legacy {notes} is treated as the role-appropriate private notes. Allowed in CONFIRMED or IN_PROGRESS."
-                        requestBody {
-                            schema = jsonSchema<SyncLessonDocumentRequest>()
-                        }
-                        parameters {
-                            path("id") {
-                                description = "UUID of the lesson"
-                            }
-                        }
-                        responses {
-                            HttpStatusCode.OK {
-                                description = "Document synced"
-                                schema = jsonSchema<LessonDocumentResponse>()
-                            }
-                            HttpStatusCode.BadRequest {
-                                description = "Unknown field, invalid status, or malformed request"
-                                schema = jsonSchema<ProblemDetail>()
-                            }
-                            HttpStatusCode.Forbidden {
-                                description = "Not a participant of this lesson, or role not allowed to write this field"
-                                schema = jsonSchema<ProblemDetail>()
-                            }
-                            HttpStatusCode.NotFound {
-                                description = "Lesson not found"
-                                schema = jsonSchema<ProblemDetail>()
-                            }
-                        }
-                    }
-
-                    post<CompleteLessonRequest>("/complete") {
-                        val principal = call.requirePrincipal()
-                        val id = call.getPathUUID()
-
-                        val result = lifecycleService.completeLesson(id, it, principal)
+                        val result = lifecycleService.completeLesson(id, principal)
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Complete lesson"
-                        description = "Completes a lesson. Teachers/admins submit teacherNotes, teacherWentWell, teacherWorkingOn. Students can submit reflections via the sync endpoint before completion."
-                        requestBody {
-                            schema = jsonSchema<CompleteLessonRequest>()
-                        }
+                        description = "Completes an in-progress lesson (teacher or admin) and closes the video room. No request body; notes are saved beforehand via PATCH /content { rawNotes }."
                         parameters {
                             path("id") {
                                 description = "UUID of the lesson"
@@ -467,7 +421,7 @@ fun Application.configureLessonRouting() {
                         responses {
                             HttpStatusCode.OK {
                                 description = "Lesson completed"
-                                schema = jsonSchema<LessonDocumentResponse>()
+                                schema = jsonSchema<LessonResponse>()
                             }
                             HttpStatusCode.BadRequest {
                                 description = "Lesson not started or already completed"
@@ -475,43 +429,6 @@ fun Application.configureLessonRouting() {
                             }
                             HttpStatusCode.Forbidden {
                                 description = "Not a participant of this lesson"
-                                schema = jsonSchema<ProblemDetail>()
-                            }
-                            HttpStatusCode.NotFound {
-                                description = "Lesson not found"
-                                schema = jsonSchema<ProblemDetail>()
-                            }
-                        }
-                    }
-
-                    post<ReflectLessonRequest>("/reflect") {
-                        val principal = call.requirePrincipal()
-                        val id = call.getPathUUID()
-
-                        val result = documentService.reflectOnLesson(id, it, principal)
-                        call.respond(HttpStatusCode.OK, result)
-                    }.describe {
-                        summary = "Submit student reflection"
-                        description = "Allows a student to submit their reflection and what was hard today. Can be called anytime after the lesson is started."
-                        requestBody {
-                            schema = jsonSchema<ReflectLessonRequest>()
-                        }
-                        parameters {
-                            path("id") {
-                                description = "UUID of the lesson"
-                            }
-                        }
-                        responses {
-                            HttpStatusCode.OK {
-                                description = "Reflection saved"
-                                schema = jsonSchema<LessonDocumentResponse>()
-                            }
-                            HttpStatusCode.BadRequest {
-                                description = "Lesson has not been started yet"
-                                schema = jsonSchema<ProblemDetail>()
-                            }
-                            HttpStatusCode.Forbidden {
-                                description = "Only students can submit reflections"
                                 schema = jsonSchema<ProblemDetail>()
                             }
                             HttpStatusCode.NotFound {

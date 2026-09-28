@@ -8,7 +8,6 @@ import com.gvart.parleyroom.document.data.DocumentLessonTable
 import com.gvart.parleyroom.document.data.DocumentTable
 import com.gvart.parleyroom.document.transfer.LessonDocumentRef
 import com.gvart.parleyroom.lesson.data.LessonCorrectionTable
-import com.gvart.parleyroom.lesson.data.LessonDocumentTable
 import com.gvart.parleyroom.lesson.data.LessonGrammarTopicTable
 import com.gvart.parleyroom.lesson.data.LessonTopicTable
 import com.gvart.parleyroom.lesson.data.LessonEventTable
@@ -18,7 +17,6 @@ import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.lesson.transfer.CorrectedSentenceResponse
-import com.gvart.parleyroom.lesson.transfer.LessonDocumentResponse
 import com.gvart.parleyroom.lesson.transfer.LessonVocabRef
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.LessonStudentResponse
@@ -201,10 +199,6 @@ class LessonSupport {
                 )
             }
 
-        val docByLesson: Map<UUID, ResultRow> = LessonDocumentTable.selectAll()
-            .where { LessonDocumentTable.lessonId inList lessonIds }
-            .associateBy { it[LessonDocumentTable.lessonId].value }
-
         val pendingByLesson: Map<UUID, PendingRescheduleResponse> = LessonEventTable.selectAll()
             .where {
                 (LessonEventTable.lessonId inList lessonIds) and
@@ -244,11 +238,10 @@ class LessonSupport {
                 )
             }
 
-        val lessonByDoc = docByLesson.values.associate { it[LessonDocumentTable.id].value to it[LessonDocumentTable.lessonId].value }
-        val correctionsByLesson = if (lessonByDoc.isEmpty()) emptyMap() else LessonCorrectionTable.selectAll()
-            .where { LessonCorrectionTable.lessonDocumentId inList lessonByDoc.keys }
+        val correctionsByLesson = LessonCorrectionTable.selectAll()
+            .where { LessonCorrectionTable.lessonId inList lessonIds }
             .orderBy(LessonCorrectionTable.orderIndex)
-            .groupBy({ lessonByDoc.getValue(it[LessonCorrectionTable.lessonDocumentId].value) }) {
+            .groupBy({ it[LessonCorrectionTable.lessonId].value }) {
                 CorrectedSentenceResponse(
                     id = it[LessonCorrectionTable.id].value.toString(),
                     incorrect = it[LessonCorrectionTable.incorrect],
@@ -273,7 +266,6 @@ class LessonSupport {
         val isStudent = viewer.role == UserRole.STUDENT
         return rows.map { row ->
             val lessonId = row[LessonTable.id].value
-            val doc = docByLesson[lessonId]
             val students = studentsByLesson[lessonId] ?: emptyList()
             // Students only read linked documents once they are confirmed on the lesson.
             val showDocuments = !isStudent || students.any { it.id == viewer.id.toString() && it.status == LessonStudentStatus.CONFIRMED.name }
@@ -294,12 +286,6 @@ class LessonSupport {
                 startedAt = row[LessonTable.startedAt],
                 pendingReschedule = pendingByLesson[lessonId],
                 documents = if (showDocuments) documentsByLesson[lessonId].orEmpty() else emptyList(),
-                teacherNotes = doc?.get(LessonDocumentTable.teacherNotes),
-                studentNotes = doc?.get(LessonDocumentTable.studentNotes),
-                teacherWentWell = doc?.get(LessonDocumentTable.teacherWentWell),
-                teacherWorkingOn = doc?.get(LessonDocumentTable.teacherWorkingOn),
-                studentReflection = doc?.get(LessonDocumentTable.studentReflection),
-                studentHardToday = doc?.get(LessonDocumentTable.studentHardToday),
                 rawNotes = if (isStudent) null else row[LessonTable.rawNotes],
                 promptUsed = if (isStudent) null else row[LessonTable.promptUsed],
                 topics = topicIdsByLesson[lessonId].orEmpty().mapNotNull(topicRefs::get),
@@ -314,17 +300,4 @@ class LessonSupport {
             )
         }
     }
-
-    fun toDocumentResponse(row: ResultRow) = LessonDocumentResponse(
-        id = row[LessonDocumentTable.id].value.toString(),
-        lessonId = row[LessonDocumentTable.lessonId].value.toString(),
-        teacherNotes = row[LessonDocumentTable.teacherNotes],
-        studentNotes = row[LessonDocumentTable.studentNotes],
-        teacherWentWell = row[LessonDocumentTable.teacherWentWell],
-        teacherWorkingOn = row[LessonDocumentTable.teacherWorkingOn],
-        studentReflection = row[LessonDocumentTable.studentReflection],
-        studentHardToday = row[LessonDocumentTable.studentHardToday],
-        createdAt = row[LessonDocumentTable.createdAt],
-        updatedAt = row[LessonDocumentTable.updatedAt],
-    )
 }

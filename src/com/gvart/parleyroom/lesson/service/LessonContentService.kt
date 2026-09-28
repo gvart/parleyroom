@@ -6,7 +6,6 @@ import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.group.data.GroupTable
 import com.gvart.parleyroom.lesson.data.LessonCorrectionTable
-import com.gvart.parleyroom.lesson.data.LessonDocumentTable
 import com.gvart.parleyroom.lesson.data.LessonGrammarTopicTable
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.lesson.data.LessonTopicTable
@@ -32,7 +31,6 @@ import java.util.UUID
 /** Teacher-authored lesson content: notes, prompt, tags, words, corrections, vocab display override. */
 class LessonContentService(
     private val support: LessonSupport,
-    private val documentService: LessonDocumentService,
 ) {
 
     fun updateContent(lessonId: UUID, request: UpdateLessonContentRequest, principal: UserPrincipal): LessonResponse = transaction {
@@ -75,10 +73,9 @@ class LessonContentService(
             }
         }
         request.correctedSentences?.let { sentences ->
-            val documentId = documentService.ensureDocument(lessonId)
-            LessonCorrectionTable.deleteWhere { lessonDocumentId eq documentId }
+            LessonCorrectionTable.deleteWhere { LessonCorrectionTable.lessonId eq lessonId }
             LessonCorrectionTable.batchInsert(sentences.withIndex()) { (index, s) ->
-                this[LessonCorrectionTable.lessonDocumentId] = documentId
+                this[LessonCorrectionTable.lessonId] = lessonId
                 this[LessonCorrectionTable.incorrect] = s.incorrect.trim()
                 this[LessonCorrectionTable.correct] = s.correct.trim()
                 this[LessonCorrectionTable.orderIndex] = index
