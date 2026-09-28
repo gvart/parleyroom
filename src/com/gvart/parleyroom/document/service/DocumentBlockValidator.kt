@@ -16,10 +16,12 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.util.UUID
 
 /**
- * Validates document blocks: first against the published JSON Schema
- * (`resources/document-blocks.schema.json`), then the rules a schema cannot express
- * (unique ids, gap counts, option references). Library references (vocab entries,
- * materials) are returned for the caller to check against the owner's library.
+ * Validates document blocks. [validate] is the structural check run on every save: the
+ * published JSON Schema (`resources/document-blocks.schema.json`) plus the rules a schema
+ * cannot express (unique ids, gap counts, option references). It accepts half-finished
+ * blocks (empty texts and lists) because the editor autosaves while typing. Library
+ * references (vocab entries, materials) are returned for the caller to check against the
+ * owner's library. [completenessIssues] is the strict profile for finished content (AI output).
  */
 object DocumentBlockValidator {
 
@@ -68,7 +70,7 @@ object DocumentBlockValidator {
                 "reading", "exam_part" -> checkQuestions(block, pointer)
                 "media" -> {
                     checkQuestions(block, pointer)
-                    block.string("materialId")?.let { materials["$pointer/materialId"] = UUID.fromString(it) }
+                    block.string("materialId")?.takeIf { it.isNotEmpty() }?.let { materials["$pointer/materialId"] = UUID.fromString(it) }
                 }
                 "vocab_table" -> block.array("rows").forEachIndexed { rowIndex, row ->
                     vocabEntries["$pointer/rows/$rowIndex/vocabEntryId"] = UUID.fromString(row.jsonObject.string("vocabEntryId"))
@@ -109,7 +111,7 @@ object DocumentBlockValidator {
             val item = element.jsonObject
             val answers = item.solution()?.array("answers") ?: return@forEachIndexed
             val gaps = countGaps(item.string("text")!!)
-            if (answers.size != gaps)
+            if (answers.size > gaps)
                 throw invalid("$pointer/items/$i/solution/answers", "text has $gaps gap(s) but ${answers.size} answer group(s)")
         }
     }
@@ -133,8 +135,8 @@ object DocumentBlockValidator {
             val itemPointer = "$pointer/items/$i"
             val correct = checkCorrectOptions(item, itemPointer) ?: return@forEachIndexed
             val multiple = (item["multiple"] as? JsonPrimitive)?.content == "true"
-            if (!multiple && correct.size != 1)
-                throw invalid("$itemPointer/solution/correctOptionIds", "single-choice item needs exactly one correct option")
+            if (!multiple && correct.size > 1)
+                throw invalid("$itemPointer/solution/correctOptionIds", "single-choice item has more than one correct option")
         }
     }
 
@@ -153,6 +155,86 @@ object DocumentBlockValidator {
             if (id !in optionIds) throw invalid("$pointer/solution/correctOptionIds/$j", "unknown option id $id")
         }
         return correct
+    }
+
+    data class Issue(val pointer: String, val message: String)
+
+    /**
+     * Strict "complete" profile for finished content (e.g. AI output): required texts are
+     * non-empty, exercises have items, every gap has exactly one non-empty answer group,
+     * media has a source, and choices have at least two options and a correct one.
+     * Expects blocks that already passed [validate].
+     */
+    fun completenessIssues(blocks: JsonArray): List<Issue> {
+        val issues = mutableListOf<Issue>()
+        fun requireText(obj: JsonObject, key: String, pointer: String) {
+            if (obj.string(key).isNullOrBlank()) issues += Issue("$pointer/$key", "$key is empty")
+        }
+        fun requireItems(block: JsonObject, key: String, pointer: String): JsonArray {
+            val items = block.array(key)
+            if (items.isEmpty()) issues += Issue("$pointer/$key", "$key is empty")
+            return items
+        }
+        fun checkOptions(item: JsonObject, pointer: String, multiple: Boolean) {
+            val options = item.array("options")
+            if (options.size < 2) issues += Issue("$pointer/options", "needs at least two options")
+            options.forEachIndexed { j, option -> requireText(option.jsonObject, "text", "$pointer/options/$j") }
+            val correct = item.solution()?.array("correctOptionIds").orEmpty()
+            if (correct.isEmpty() || (!multiple && correct.size != 1))
+                issues += Issue("$pointer/solution/correctOptionIds", if (multiple) "needs a correct option" else "needs exactly one correct option")
+        }
+        fun checkQuestions(block: JsonObject, pointer: String) {
+            block.array("questions").forEachIndexed { i, element ->
+                val question = element.jsonObject
+                val questionPointer = "$pointer/questions/$i"
+                requireText(question, "question", questionPointer)
+                if (question.string("kind") == "CHOICE") checkOptions(question, questionPointer, multiple = true)
+            }
+        }
+
+        blocks.forEachIndexed { index, element ->
+            val block = element.jsonObject
+            val pointer = "/blocks/$index"
+            when (block.string("type")) {
+                "heading" -> requireText(block, "text", pointer)
+                "gap_fill" -> requireItems(block, "items", pointer).forEachIndexed { i, item ->
+                    val itemPointer = "$pointer/items/$i"
+                    val text = item.jsonObject.string("text").orEmpty()
+                    val gaps = countGaps(text)
+                    if (gaps == 0) issues += Issue("$itemPointer/text", "text has no gap (___)")
+                    val answers = item.jsonObject.solution()?.array("answers").orEmpty()
+                    if (answers.size != gaps || answers.any { group -> group.jsonArray.none { it.jsonPrimitive.content.isNotBlank() } })
+                        issues += Issue("$itemPointer/solution/answers", "needs one non-empty answer group per gap ($gaps)")
+                }
+                "multiple_choice" -> requireItems(block, "items", pointer).forEachIndexed { i, item ->
+                    val itemPointer = "$pointer/items/$i"
+                    requireText(item.jsonObject, "question", itemPointer)
+                    checkOptions(item.jsonObject, itemPointer, (item.jsonObject["multiple"] as? JsonPrimitive)?.content == "true")
+                }
+                "error_correction" -> requireItems(block, "items", pointer).forEachIndexed { i, item ->
+                    requireText(item.jsonObject, "sentence", "$pointer/items/$i")
+                }
+                "free_sentences", "writing_task" -> requireItems(block, "items", pointer).forEachIndexed { i, item ->
+                    requireText(item.jsonObject, "prompt", "$pointer/items/$i")
+                    item.jsonObject.array("points").forEachIndexed { j, point ->
+                        if (point.jsonPrimitive.content.isBlank()) issues += Issue("$pointer/items/$i/points/$j", "point is empty")
+                    }
+                }
+                "free_form" -> block.array("items").forEachIndexed { i, item -> requireText(item.jsonObject, "prompt", "$pointer/items/$i") }
+                "reading" -> checkQuestions(block, pointer)
+                "media" -> {
+                    if (block.string("url").isNullOrEmpty() && block.string("materialId").isNullOrEmpty())
+                        issues += Issue(pointer, "media needs a url or a materialId")
+                    checkQuestions(block, pointer)
+                }
+                "exam_part" -> {
+                    requireText(block, "exam", pointer)
+                    requireText(block, "part", pointer)
+                    checkQuestions(block, pointer)
+                }
+            }
+        }
+        return issues
     }
 
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
