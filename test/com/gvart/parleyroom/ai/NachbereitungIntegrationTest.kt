@@ -601,12 +601,67 @@ class NachbereitungIntegrationTest : IntegrationTest() {
         )).body<PublishResponse>()
         assertEquals(1, response.wordsCreated)
         assertEquals(1, response.wordsReused)
-        assertEquals(2, response.wordsAssigned)
+        assertEquals(0, response.wordsAssigned)
+        assertFalse(response.shared)
         val document = client.document(token, result.documentId).body<DocumentResponse>()
         assertTrue(document.lessonIds.isEmpty())
         assertTrue(document.studentIds.isEmpty())
         assertTrue(existing in document.vocab.map { it.id })
         assertEquals(HttpStatusCode.NotFound, client.document(getStudentToken(client), result.documentId).status)
+    }
+
+    @Test
+    fun `library-only publish shares nothing, a later shared publish assigns and shares without duplicates`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+        val lessonId = seedLesson()
+        val job = client.generateAndWait(token, lessonId)
+        val result = job.nachbereitung()
+        val request = publishAll(job)
+
+        val saved = client.publish(token, lessonId, request.copy(share = false))
+        assertEquals(HttpStatusCode.OK, saved.status)
+        val library = saved.body<PublishResponse>()
+        assertFalse(library.shared)
+        assertEquals(result.vocab.size, library.wordsCreated)
+        assertEquals(0, library.wordsAssigned)
+        assertEquals(0, library.recipients)
+        assertTrue(library.recipientIds.isEmpty())
+
+        // Library has the words, the student has nothing, the document is neither linked nor shared.
+        assertEquals(result.vocab.size, client.get("/api/v1/vocab-entries") { bearerAuth(token) }.body<JsonObject>()["total"]!!.jsonPrimitive.content.toInt())
+        assertTrue(client.get("/api/v1/vocabulary?lessonId=$lessonId") { bearerAuth(studentToken) }.body<StudentVocabPageResponse>().words.isEmpty())
+        val draft = client.document(token, result.documentId).body<DocumentResponse>()
+        assertTrue(draft.lessonIds.isEmpty())
+        assertTrue(draft.studentIds.isEmpty())
+        assertEquals(result.vocab.size, draft.vocab.size)
+        assertEquals(HttpStatusCode.NotFound, client.document(studentToken, result.documentId).status)
+        // Lesson content is updated, but the words are not on the lesson.
+        val lesson = client.get("/api/v1/lessons/$lessonId") { bearerAuth(token) }.body<LessonResponse>()
+        assertEquals(ANNA_NOTES, lesson.rawNotes)
+        assertEquals(listOf("Alltag"), lesson.topics.map { it.name })
+        assertTrue(lesson.vocab.isEmpty())
+        // Only a shared publish counts as published.
+        val savedJob = client.awaitJob(token, job.id)
+        assertNull(savedJob.publishedAt)
+        assertNotNull(savedJob.nachbereitung().savedToLibraryAt)
+
+        // Sharing later assigns and shares, reusing everything the library-only save created.
+        val shared = client.publish(token, lessonId, request).body<PublishResponse>()
+        assertTrue(shared.shared)
+        assertEquals(0, shared.wordsCreated)
+        assertEquals(result.vocab.size, shared.wordsReused)
+        assertEquals(result.vocab.size, shared.wordsAssigned)
+        assertEquals(0, shared.topicsCreated)
+        assertEquals(0, shared.grammarTopicsCreated)
+        assertEquals(listOf(STUDENT_ID), shared.recipientIds)
+        assertEquals(result.vocab.size, client.get("/api/v1/vocab-entries") { bearerAuth(token) }.body<JsonObject>()["total"]!!.jsonPrimitive.content.toInt())
+        assertEquals(result.vocab.size, client.get("/api/v1/vocabulary?lessonId=$lessonId") { bearerAuth(studentToken) }.body<StudentVocabPageResponse>().words.size)
+        val document = client.document(studentToken, result.documentId).body<DocumentResponse>()
+        assertEquals(listOf(lessonId.toString()), document.lessonIds)
+        assertEquals(result.vocab.size, client.get("/api/v1/lessons/$lessonId") { bearerAuth(token) }.body<LessonResponse>().vocab.size)
+        assertNotNull(client.awaitJob(token, job.id).publishedAt)
     }
 
     @Test

@@ -42,6 +42,8 @@ import java.util.UUID
 /**
  * Publish: one transaction that puts accepted words into the library and to the learners, creates
  * accepted topic / grammar proposals, updates the lesson content and fills + shares the draft.
+ * With `share = false` it is library-only: words, topics and the document land in the library and the
+ * lesson content is updated, but nothing is assigned, linked to the lesson or shared.
  * Find-or-create everywhere, so publishing again creates nothing twice.
  */
 class NachbereitungPublishService(
@@ -63,6 +65,7 @@ class NachbereitungPublishService(
         val result = NachbereitungService.nachbereitungResult(job)
         val ctx = context.load(lesson)
         val teacherId = principal.id
+        val share = request.share
 
         val resultKeys = result.vocab.map { it.key }.toSet()
         request.vocab.map { it.key }.filter { it !in resultKeys }.takeIf { it.isNotEmpty() }?.let {
@@ -82,7 +85,7 @@ class NachbereitungPublishService(
             g.key to matcher.findOrCreateGrammar(g.name, g.level ?: ctx.level)
         }
 
-        // 2. Words: library find-or-create, assigned to the lesson's confirmed attendees and linked to the lesson.
+        // 2. Words: library find-or-create; when sharing, assigned to the lesson's confirmed attendees and linked to the lesson.
         val words = request.vocab.map { item ->
             if (item.matchedEntryId != null) {
                 val entryId = UUID.fromString(item.matchedEntryId)
@@ -90,8 +93,10 @@ class NachbereitungPublishService(
                     .where { (VocabEntryTable.id eq entryId) and (VocabEntryTable.teacherId eq teacherId) }
                     .empty().not()
                 if (!owned) throw NotFoundException("Vocab entry not found", code = "VOCAB_ENTRY_NOT_FOUND")
-                val assigned = vocabEntryService.assign(entryId, AssignVocabRequest(lessonId = lessonId.toString()), principal)
-                Word(item.key, entryId, reused = true, assigned = assigned.assigned)
+                val assigned = if (share)
+                    vocabEntryService.assign(entryId, AssignVocabRequest(lessonId = lessonId.toString()), principal).assigned
+                else 0
+                Word(item.key, entryId, reused = true, assigned = assigned)
             } else {
                 val entry = item.entry!!.let { e ->
                     e.copy(
@@ -99,7 +104,11 @@ class NachbereitungPublishService(
                         sourceLessonId = e.sourceLessonId ?: lessonId.toString(),
                     )
                 }
-                val added = vocabEntryService.quickAdd(QuickAddVocabRequest(entry = entry, lessonId = lessonId.toString()), principal)
+                // Without a lesson (and no students) quickAdd only finds or creates the library entry.
+                val added = vocabEntryService.quickAdd(
+                    QuickAddVocabRequest(entry = entry, lessonId = lessonId.toString().takeIf { share }),
+                    principal,
+                )
                 Word(item.key, UUID.fromString(added.entry.id), reused = added.reused, assigned = added.assigned)
             }
         }
@@ -148,7 +157,7 @@ class NachbereitungPublishService(
             ),
             principal,
         )
-        if (request.share) {
+        if (share) {
             documentService.linkLesson(lessonId, documentId, principal)
             val share = when {
                 ctx.mode == NachbereitungMode.CLUB && ctx.groupId != null -> DocumentShareRequest(groupIds = listOf(ctx.groupId.toString()))
@@ -160,11 +169,14 @@ class NachbereitungPublishService(
             share?.let { documentService.share(documentId, it, principal) }
         }
 
-        // 5. Remember what was published on the job.
+        // 5. Remember what was published on the job. publishedAt only marks a shared publish.
         val now = OffsetDateTime.now()
-        val updatedResult = result.copy(publishedEntries = entryByKey)
+        val updatedResult = result.copy(
+            publishedEntries = entryByKey,
+            savedToLibraryAt = if (share) result.savedToLibraryAt else now,
+        )
         GenerationJobTable.update({ GenerationJobTable.id eq job[GenerationJobTable.id] }) {
-            it[publishedAt] = now
+            if (share) it[publishedAt] = now
             it[GenerationJobTable.result] = GenerationJobs.json.encodeToJsonElement(updatedResult)
         }
 
@@ -174,14 +186,15 @@ class NachbereitungPublishService(
             wordsCreated = words.count { !it.reused },
             wordsReused = words.count { it.reused },
             wordsAssigned = words.sumOf { it.assigned },
-            recipients = ctx.attendees.size,
-            recipientIds = ctx.attendees.map { it.id },
+            recipients = if (share) ctx.attendees.size else 0,
+            recipientIds = if (share) ctx.attendees.map { it.id } else emptyList(),
             topicsCreated = topics.values.count { !it.second },
             grammarTopicsCreated = grammar.values.count { !it.second },
             vocab = words.map { PublishedVocab(it.key, it.entryId.toString(), it.reused) },
             topics = topics.map { (key, value) -> PublishedRef(key, value.first.toString(), value.second) },
             grammarTopics = grammar.map { (key, value) -> PublishedRef(key, value.first.toString(), value.second) },
             publishedAt = now,
+            shared = share,
         )
     }
 

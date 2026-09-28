@@ -76,6 +76,9 @@ data class NachbereitungResult(
     val correctedSentences: List<CorrectedSentenceInput>,
     /** Vocab key -> library entry id, filled by publish. */
     val publishedEntries: Map<String, String> = emptyMap(),
+    /** Last library-only publish (`share = false`); a shared publish sets the job's publishedAt instead. */
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val savedToLibraryAt: OffsetDateTime? = null,
 )
 
 @Serializable
@@ -245,6 +248,8 @@ data class PublishResponse(
     val grammarTopics: List<PublishedRef>,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val publishedAt: OffsetDateTime,
+    /** False for a library-only publish: nothing was assigned, linked to the lesson or shared. */
+    val shared: Boolean = true,
 )
 
 @Serializable
