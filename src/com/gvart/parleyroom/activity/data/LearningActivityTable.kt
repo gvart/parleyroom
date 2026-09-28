@@ -6,7 +6,7 @@ import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
-enum class ActivityKind { VOCAB_REVIEW, LESSON_COMPLETED, HOMEWORK_SUBMITTED }
+enum class ActivityKind { VOCAB_REVIEW, VOCAB_SENTENCE, LESSON_COMPLETED, HOMEWORK_SUBMITTED }
 
 object LearningActivityTable : UUIDTable("learning_activity") {
     val userId = reference("user_id", UserTable, onDelete = ReferenceOption.CASCADE)

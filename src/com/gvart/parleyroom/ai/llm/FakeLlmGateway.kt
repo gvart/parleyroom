@@ -21,7 +21,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * answers with plausible output derived from the notes that always passes validation.
  *
  * Markers anywhere in the first user message: `[fake:invalid-once]`, `[fake:invalid]`,
- * `[fake:error]`, `[fake:rate-limit]`, `[fake:delay=<ms>]`.
+ * `[fake:error]`, `[fake:rate-limit]`, `[fake:delay=<ms>]`; sentence feedback also `[fake:wrong]`.
  */
 class FakeLlmGateway : LlmGateway {
 
@@ -43,6 +43,7 @@ class FakeLlmGateway : LlmGateway {
             Prompts.TASK_FILL -> fill(request)
             Prompts.TASK_SUGGEST_TAGS -> suggestTags(request, invalid)
             Prompts.TASK_REFINE -> refine(request, invalid)
+            Prompts.TASK_SENTENCE_FEEDBACK -> sentenceFeedback(request, invalid)
             else -> generate(request, invalid)
         }
         val text = output.toString()
@@ -166,6 +167,41 @@ class FakeLlmGateway : LlmGateway {
             putJsonArray("grammarTopics") {
                 grammar.ifEmpty { listOf("Perfekt") }.forEach { add(buildJsonObject { put("name", it) }) }
             }
+        }
+    }
+
+    /** Uses the word = the lemma stem occurs; correct = uses the word and no `[fake:wrong]` marker. */
+    private fun sentenceFeedback(request: String, invalid: Boolean): JsonObject {
+        val sentence = Prompts.section(request, "sentence").orEmpty()
+        val lemma = Prompts.section(request, "target_word").orEmpty().lineSequence()
+            .firstOrNull { it.startsWith("lemma: ") }?.removePrefix("lemma: ").orEmpty()
+        val language = Prompts.section(request, "translation_language")
+        val usesWord = lemmaStem(lemma).let { it.isNotEmpty() && it in sentence.lowercase() }
+        val correct = usesWord && "[fake:wrong]" !in sentence
+        val cleaned = Regex("""\[fake:[^\]]*]""").replace(sentence, "").trim().replace(WHITESPACE, " ")
+        val corrected = if (correct) sentence
+        else cleaned.ifEmpty { lemma }.replaceFirstChar(Char::uppercase).let { if (it.last() in ".!?") it else "$it." }
+        val explanation = when {
+            invalid -> ""
+            correct -> "Richtig, gut gemacht!"
+            !usesWord -> "Benutze das Wort „$lemma“ im Satz."
+            else -> "Achte auf Großschreibung und Satzzeichen."
+        }
+        return buildJsonObject {
+            put("isCorrect", correct)
+            put("corrected", corrected)
+            put("explanation", explanation)
+            language?.let { put("explanationTranslation", "($it) $explanation") }
+            put("usesWord", usesWord)
+        }
+    }
+
+    private fun lemmaStem(lemma: String): String {
+        val lower = lemma.trim().lowercase()
+        return when {
+            lower.length > 4 && lower.endsWith("en") -> lower.dropLast(2)
+            lower.length > 3 && lower.endsWith("n") -> lower.dropLast(1)
+            else -> lower
         }
     }
 

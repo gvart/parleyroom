@@ -98,7 +98,11 @@ class StreakIntegrationTest : IntegrationTest() {
         val token = getStudentToken(client)
         val wordId = seedStudentVocab(studentUuid, lemma = "Hund")
 
-        val review = client.post("/api/v1/vocabulary/$wordId/review") { bearerAuth(token) }
+        val review = client.post("/api/v1/vocabulary/$wordId/review") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(token)
+            setBody("""{"rating":"GOOD","mode":"DE_TO_MEANING"}""")
+        }
         assertEquals(HttpStatusCode.OK, review.status)
 
         val streak = getMyStreak(client, token)

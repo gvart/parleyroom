@@ -13,6 +13,7 @@ object Prompts {
     const val TASK_REFINE = "refine"
     const val TASK_FILL = "fill_translations"
     const val TASK_SUGGEST_TAGS = "suggest_tags"
+    const val TASK_SENTENCE_FEEDBACK = "sentence_feedback"
     const val VALIDATION_ERRORS = "validation_errors"
 
     private fun resource(name: String): String =
@@ -24,6 +25,7 @@ object Prompts {
     private val clubSystem: String by lazy { resource("nachbereitung-club.md") }
     val fillSystem: String by lazy { resource("fill-translations-system.md") }
     val suggestTagsSystem: String by lazy { resource("suggest-tags-system.md") }
+    val sentenceFeedbackSystem: String by lazy { resource("sentence-feedback-system.md") }
 
     fun nachbereitungSystem(mode: NachbereitungMode): String =
         if (mode == NachbereitungMode.CLUB) nachbereitungSystem + "\n\n" + clubSystem else nachbereitungSystem
@@ -64,6 +66,16 @@ object Prompts {
         section("material_text", text.replace("</", "< /").ifBlank { "(no text: use the name only)" })
         section("library_topics", topicPaths.joinToString("\n").ifEmpty { "(empty library)" })
         section("library_grammar_topics", grammar.joinToString("\n").ifEmpty { "(empty library)" })
+    }
+
+    /** Only the sentence, the word data, the level and a language code: nothing about the student. */
+    fun sentenceFeedback(sentence: String, targetWord: String, level: String, translationLanguage: String?): String = buildString {
+        section("task", TASK_SENTENCE_FEEDBACK)
+        section("level", level)
+        section("target_word", targetWord)
+        // The sentence is student input: keep it from closing our sections.
+        section("sentence", sentence.replace("</", "< /"))
+        translationLanguage?.let { section("translation_language", it) }
     }
 
     fun retry(issues: List<Issue>): String = buildString {

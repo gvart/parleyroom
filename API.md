@@ -204,10 +204,13 @@ to the lesson and assigns it (same target rules as `/assign`).
 GET    /api/v1/vocabulary/{id}
 PUT    /api/v1/vocabulary/{id}          Body: { status }
 DELETE /api/v1/vocabulary/{id}          removes the word from the student (library entry stays)
-POST   /api/v1/vocabulary/{id}/review
+POST   /api/v1/vocabulary/{id}/review           Body: { rating, mode, responseMs? }   see Practice
+POST   /api/v1/vocabulary/{id}/article          Body: { article, responseMs? }        see Practice
+POST   /api/v1/vocabulary/{id}/sentences        Body: { sentence }                    see Practice
+GET    /api/v1/vocabulary/{id}/sentences
 ```
-`{id}` is the student-vocab id. Review (until FSRS lands): `reps+1`, interval `2^reps` days (max 64)
-into `due`/`scheduledDays`, `lastReview = now`; status LEARNING (<3 reps) -> REVIEW (3–4) -> LEARNED (5+).
+`{id}` is the student-vocab id. `PUT … { status }` is a manual override (teacher or student); the
+next review recomputes the status from FSRS.
 
 StudentVocab:
 ```json
@@ -244,6 +247,185 @@ PUT    /api/v1/students/{studentId}/level            Body: { level }            
 ```
 Unknown fields -> 400 `VOCAB_DISPLAY_FIELD_UNSUPPORTED`. `teacherId` is only needed by a student/admin
 when the student has several teachers (defaults to the earliest).
+
+### Practice: flashcards, article trainer, own sentences (brief §5.7)
+
+**Scheduler.** FSRS-6 with the official default parameters, desired retention 0.9, learning steps
+1 min / 10 min, relearning step 10 min, max interval 36500 days, **no fuzz** (deterministic). It is a
+Kotlin port of `py-fsrs` v6.3.2 (`practice/service/Fsrs.kt`), unit-tested against py-fsrs
+reference values. The only JVM library (`io.github.open-spaced-repetition:fsrs` 1.0.0, 07/2025) ships
+outdated defaults and pulls in Jackson + a shared seeded `Random`, so it is not used.
+
+FSRS card state per `student_vocab` row: `state` 0 NEW (never reviewed), 1 LEARNING, 2 REVIEW,
+3 RELEARNING; `step` (learning step index), `stability`, `difficulty`, `due`, `lastReview`,
+`reps`, `lapses` (REVIEW → AGAIN), `elapsedDays` / `scheduledDays` (informational).
+
+**Status** is derived after every review:
+
+| FSRS state after the review | status |
+|---|---|
+| LEARNING / RELEARNING | `LEARNING` |
+| REVIEW, stability < 21 days | `REVIEW` |
+| REVIEW, stability ≥ 21 days (`practice.learned_stability_days`) | `LEARNED` |
+
+21 days is Anki's "mature" threshold: the student is predicted to still know the word with 90 %
+probability three weeks later. `LEARNED` words keep being scheduled (long intervals); an AGAIN on
+one drops it back to `LEARNING`.
+
+**Who.** Reviews, article checks and sentences are **student only, own words** (a teacher's click
+would corrupt the student's schedule): others get 403 `PRACTICE_STUDENT_ONLY`. Stats and sentence
+lists are readable by the student, their teachers and admins.
+
+#### Modes
+
+| Mode | Front | Back | Cards |
+|---|---|---|---|
+| `DE_TO_MEANING` | German (article, lemma, plural, forms, government) | meaning per display setting + example | all words |
+| `MEANING_TO_DE` | meaning per display setting | German | words with at least one visible meaning field |
+| `ARTICLE` | noun **without** article (`article`, `plural`, `exampleSentence` are null) + meaning per display setting | server checks der/die/das | `NOUN` with an article |
+
+All modes grade the **same FSRS card** per word. The display setting (§5.3, same resolution as the
+vocabulary list) applies: a B1 student with `["de_explanation"]` gets `explanationDe`; translations
+only in `revealTranslations` when the toggle is allowed.
+
+#### Queue
+
+```
+GET /api/v1/practice/queue?mode=DE_TO_MEANING&topicId=&lessonId=&level=&limit=20     student only
+-> { mode, cards: [PracticeCard], dueCount, newCount, newLimit, newIntroducedToday }
+```
+- **Due first**: reviewed cards (`state > 0`) with `due <= now`, oldest `due` first.
+- **Then new** (`state = 0`), oldest `addedAt` first, at most `newLimit − newIntroducedToday`
+  (`practice.new_cards_per_day`, default **15**; "today" = the student's timezone; a card counts
+  as introduced by its first review in any mode). Filters don't change the daily budget.
+- Filters: `topicId` (that topic **and its subtopics**, so a folder practises its whole subtree),
+  `lessonId`, `level` (entry level). `limit` 1..100, default 20.
+- `dueCount` / `newCount` = totals for these filters (before `limit`), so the client can show
+  "12 due · 5 new". Cards failed with AGAIN come back after 1–10 min: the client re-appends them
+  to the end of the session and/or refetches the queue when it runs out.
+- Unknown mode → 400 `PRACTICE_MODE_INVALID`.
+
+PracticeCard:
+```json
+{
+  "mode": "DE_TO_MEANING", "isNew": true,
+  "word": { /* StudentVocab, display-filtered, see mode table */ },
+  "intervals": {
+    "AGAIN": { "dueAt": "ISO8601", "seconds": 60 },
+    "HARD":  { "dueAt": "ISO8601", "seconds": 330 },
+    "GOOD":  { "dueAt": "ISO8601", "seconds": 600 },
+    "EASY":  { "dueAt": "ISO8601", "seconds": 691200 }
+  }
+}
+```
+`intervals` previews the next due date if the card were rated now with each rating, for button
+labels ("1 Min / 6 Min / 10 Min / 8 Tage"). The client formats `seconds` in the UI language (no
+server label). `ARTICLE` cards only have `AGAIN` and `GOOD`.
+
+#### Review (flashcards)
+
+```
+POST /api/v1/vocabulary/{id}/review
+Body: { "rating": "AGAIN | HARD | GOOD | EASY", "mode": "DE_TO_MEANING | MEANING_TO_DE", "responseMs": 4200 }
+-> 200 StudentVocab (new status, due, reps, lapses, lastReview)
+```
+`mode` is required; `ARTICLE` → 400 `PRACTICE_MODE_INVALID` (use `/article`). `responseMs` optional,
+0..600000 (else 400 `VALIDATION_FAILED`). Missing / unknown rating → 400. The body is now
+**required** (the old body-less "knew it" review is gone; the portal's quick-review card sends
+`GOOD`).
+
+#### Article trainer
+
+```
+POST /api/v1/vocabulary/{id}/article
+Body: { "article": "DER | DIE | DAS", "responseMs": 1800 }
+-> 200 { "correct": false, "correctArticle": "DIE", "rating": "AGAIN", "word": StudentVocab }
+```
+Correct → `GOOD`, wrong → `AGAIN`, applied to the word's FSRS card like a review.
+Not a noun / no article on the entry → 400 `NOT_A_NOUN`.
+
+Every review and article check writes a `vocab_reviews` log row (rating, mode, state before,
+responseMs) and a `VOCAB_REVIEW` learning activity (streak).
+
+#### Stats (dashboard card)
+
+```
+GET /api/v1/practice/stats?studentId=      student (own; param ignored), teacher of the student, admin
+-> {
+  "dueNow": 7,            // reviewed cards with due <= now
+  "dueToday": 9,          // … due before the end of today (student's timezone)
+  "newAvailable": 5,      // min(unseen words, newLimit − newIntroducedToday)
+  "newTotal": 40,         // unseen words
+  "newLimit": 15, "newIntroducedToday": 10,
+  "reviewedToday": 23,    // distinct words reviewed today
+  "sentencesToday": 2, "sentenceLimit": 30,
+  "aiAvailable": true,    // students read it here to show "write your own sentence"
+  "streak": { "current": 4, "longest": 9, "todayDone": true, "week": [...] }   // = /users/{id}/streak
+}
+```
+Teachers/admins must pass `studentId` (400 `VALIDATION_FAILED` otherwise).
+
+#### Own sentences with AI feedback
+
+```
+POST /api/v1/vocabulary/{id}/sentences     Body: { "sentence": "Ich kümmere mich um die Blumen." }
+-> 201 Sentence
+GET  /api/v1/vocabulary/{id}/sentences                     -> [Sentence]   newest first
+GET  /api/v1/students/{studentId}/sentences?page=&pageSize= -> { sentences: [Sentence], total, page, pageSize }
+```
+POST: student only, own word. GET: the student, their teachers, admins (others 403 / 404).
+
+Sentence:
+```json
+{
+  "id": "uuid", "studentVocabId": "uuid", "studentId": "uuid", "entryId": "uuid",
+  "word": { "lemma": "kümmern", "article": null, "wordType": "VERB" },
+  "sentence": "Ich kümmere mich um die Blumen.",
+  "feedback": {
+    "isCorrect": true,
+    "corrected": "Ich kümmere mich um die Blumen.",
+    "explanation": "Richtig! „sich kümmern um“ + Akkusativ.",
+    "explanationTranslation": { "language": "ru", "text": "Верно! …" },
+    "usesWord": true
+  },
+  "createdAt": "ISO8601"
+}
+```
+- **Synchronous** call through the shared provider abstraction (no job), timeout
+  `practice.sentence_timeout` = 30 s. Model output is validated JSON with one retry (as for jobs).
+- `explanation`: one short line in simple German. `explanationTranslation` only when the student's
+  level is A1/A2 (or unset) **and** the word's display setting contains a translation language
+  (the first one in `fields`); otherwise null.
+- `usesWord`: the sentence uses the target word (any inflected form). `isCorrect` concerns grammar
+  and spelling; `corrected` equals the input when correct.
+- Validation: trimmed, 1..300 chars → 400 `SENTENCE_EMPTY` / `SENTENCE_TOO_LONG`.
+- Errors: 503 `AI_NOT_CONFIGURED`; 429 `AI_RATE_LIMITED` after `practice.sentences_per_day` (30)
+  stored sentences today (student's timezone) or when the provider rate-limits; 503
+  `AI_PROVIDER_ERROR` / `AI_OUTPUT_INVALID` / `AI_TIMEOUT`. Failed calls are not stored and do not
+  count toward the limit.
+- Every successful sentence + feedback is stored (`student_vocab_sentences`) and counts as a
+  `VOCAB_SENTENCE` learning activity for the streak.
+- **Privacy**: the model only receives the sentence, the target word (lemma, article, word type,
+  government), the level and the translation language code. No names, emails, ids,
+  translations or topics. The system prompt is
+  `resources/ai/sentence-feedback-system.md` (editable).
+- Fake provider (deterministic): `usesWord` = the lemma stem (lemma minus a trailing `-en`/`-n`,
+  case-insensitive) occurs in the sentence; `isCorrect` = `usesWord` and no `[fake:wrong]` marker.
+  Correct → `corrected` = the sentence, explanation `"Richtig, gut gemacht!"`. Wrong → `corrected` =
+  the sentence without markers, first letter capitalised, `.` appended if missing; explanation
+  `"Benutze das Wort „<lemma>“ im Satz."` (word missing) or `"Achte auf Großschreibung und
+  Satzzeichen."`. `explanationTranslation` = `"(<lang>) <explanation>"`. The usual markers work
+  in the sentence: `[fake:error]` → 503 `AI_PROVIDER_ERROR`, `[fake:rate-limit]` → 429
+  `AI_RATE_LIMITED`, `[fake:invalid]` → 503 `AI_OUTPUT_INVALID`, `[fake:invalid-once]` → retry
+  succeeds, `[fake:delay=<ms>]` (→ 503 `AI_TIMEOUT` beyond `practice.sentence_timeout`).
+
+Config: `practice.new_cards_per_day = 15` (`PRACTICE_NEW_CARDS_PER_DAY`),
+`practice.learned_stability_days = 21`, `practice.sentences_per_day = 30`
+(`PRACTICE_SENTENCES_PER_DAY`), `practice.sentence_timeout = 30s`.
+
+Migration `V13__practice.sql`: `student_vocab.step`; cards reviewed by the old simple scheduler
+(no stability) are reset to NEW; `vocab_reviews`; `student_vocab_sentences`; `VOCAB_SENTENCE`
+learning-activity kind.
 
 ---
 
@@ -1326,7 +1508,7 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 | Materials | `MATERIAL_NOT_FOUND`, `MATERIAL_FILE_NOT_FOUND`, `FOLDER_NOT_FOUND`, `TARGET_FOLDER_NOT_FOUND`, `FOLDER_NOT_EMPTY`, `FOLDER_NAME_TAKEN`, `FOLDER_CYCLE`, `FILE_TOO_LARGE` |
 | Homework | `ASSIGNMENT_NOT_FOUND`, `ASSIGNMENT_NO_STUDENTS`, `HOMEWORK_NOT_FOUND`, `HOMEWORK_ITEM_INVALID` (+ `pointer`), `HOMEWORK_ANSWER_INVALID` (+ `pointer`), `HOMEWORK_INVALID_STATE` (409), `SUBMISSION_LOCKED` (409), `UPLOAD_TYPE_NOT_ALLOWED`, `UPLOAD_LIMIT_REACHED` (409), `HOMEWORK_UPLOAD_NOT_FOUND` |
 | Goals | `GOAL_NOT_FOUND`, `GOAL_NOT_ACTIVE` |
-| Vocabulary | `VOCABULARY_WORD_NOT_FOUND`, `VOCAB_ENTRY_NOT_FOUND`, `VOCAB_ENTRY_DUPLICATE`, `VOCAB_LANGUAGE_UNSUPPORTED`, `VOCAB_DISPLAY_FIELD_UNSUPPORTED`, `TEACHER_STUDENT_NOT_FOUND` |
+| Vocabulary | `VOCABULARY_WORD_NOT_FOUND`, `VOCAB_ENTRY_NOT_FOUND`, `VOCAB_ENTRY_DUPLICATE`, `VOCAB_LANGUAGE_UNSUPPORTED`, `VOCAB_DISPLAY_FIELD_UNSUPPORTED`, `TEACHER_STUDENT_NOT_FOUND`; practice: `PRACTICE_STUDENT_ONLY` (403), `PRACTICE_MODE_INVALID`, `NOT_A_NOUN`, `SENTENCE_EMPTY`, `SENTENCE_TOO_LONG` |
 | Documents | `DOCUMENT_NOT_FOUND`, `DOCUMENT_INVALID_BLOCK` (+ `pointer`), `DOCUMENT_DUPLICATE_ID` (+ `pointer`), `DOCUMENT_TOO_LARGE`, `DOCUMENT_CONFLICT` (409, + `currentRevision`), `DOCUMENT_VERSION_NOT_FOUND` |
 | AI / Nachbereitung | `AI_NOT_CONFIGURED` (503), `AI_RATE_LIMITED` (429), `AI_JOB_NOT_FOUND`, `AI_JOB_NOT_READY`, `AI_JOB_LESSON_MISMATCH`, `NACHBEREITUNG_NO_ATTENDEES`, `PROMPT_TEMPLATE_NOT_FOUND`, `PROMPT_TEMPLATE_DUPLICATE`; job-only: `AI_OUTPUT_INVALID`, `AI_PROVIDER_ERROR`, `AI_TIMEOUT`, `AI_INTERRUPTED` |
 | Library / groups | `TOPIC_NOT_FOUND`, `TOPIC_DUPLICATE`, `TOPIC_HAS_CHILDREN`, `TOPIC_HAS_CONTENT` (409, + `usage`), `TOPIC_CYCLE`, `TOPIC_MERGE_INVALID`, `GRAMMAR_TOPIC_NOT_FOUND`, `GRAMMAR_TOPIC_DUPLICATE`, `GRAMMAR_TOPIC_HAS_CONTENT` (409, + `usage`), `GRAMMAR_TOPIC_MERGE_INVALID`, `GRAMMAR_ORDER_INVALID`, `GROUP_NOT_FOUND`, `STUDENT_NOT_LINKED` |

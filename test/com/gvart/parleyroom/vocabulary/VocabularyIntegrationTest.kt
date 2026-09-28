@@ -305,25 +305,6 @@ class VocabularyIntegrationTest : IntegrationTest() {
         assertEquals("VOCABULARY_WORD_NOT_FOUND", missing.body<ProblemDetail>().code)
     }
 
-    @Test
-    fun `review schedules the next review on the FSRS columns`() = testApp {
-        val client = createJsonClient(this)
-        quickAdd(client, getTeacherToken(client))
-        val studentToken = getStudentToken(client)
-        val id = studentWords(client, studentToken).single().id
-
-        val first = client.post("/api/v1/vocabulary/$id/review") { bearerAuth(studentToken) }.body<StudentVocabResponse>()
-        assertEquals(1, first.reps)
-        assertEquals(StudentVocabStatus.LEARNING, first.status)
-        assertNotNull(first.lastReview)
-        assertTrue(first.due!!.isAfter(OffsetDateTime.now().plusDays(1)))
-
-        repeat(4) { client.post("/api/v1/vocabulary/$id/review") { bearerAuth(studentToken) } }
-        val learned = client.get("/api/v1/vocabulary/$id") { bearerAuth(studentToken) }.body<StudentVocabResponse>()
-        assertEquals(5, learned.reps)
-        assertEquals(StudentVocabStatus.LEARNED, learned.status)
-    }
-
     // -- Display settings --
 
     @Test

@@ -92,6 +92,16 @@ data class AiSuggestTagsOutput(
     val grammarTopics: List<AiGrammarTopic> = emptyList(),
 )
 
+/** SENTENCE_FEEDBACK model output. */
+@Serializable
+data class AiSentenceFeedback(
+    val isCorrect: Boolean,
+    val corrected: String,
+    val explanation: String,
+    val explanationTranslation: String? = null,
+    val usesWord: Boolean,
+)
+
 data class Issue(val pointer: String, val message: String)
 
 /** A validation failure of model output; the issues are fed back to the model on retry. */
@@ -191,6 +201,28 @@ object AiOutputParser {
             topics = output.topics.map { it.copy(name = it.name.trim(), parentName = it.parentName?.trim()?.ifEmpty { null }) }
                 .distinctBy { it.name.lowercase() },
             grammarTopics = output.grammarTopics.map { it.copy(name = it.name.trim()) }.distinctBy { it.name.lowercase() },
+        )
+    }
+
+    const val MAX_FEEDBACK_LINE = 300
+    const val MAX_CORRECTED = 1_000
+
+    /** [translationRequested]: the prompt asked for `explanationTranslation`; otherwise it is dropped. */
+    fun parseSentenceFeedback(text: String, translationRequested: Boolean): AiSentenceFeedback {
+        val output = decode<AiSentenceFeedback>(text)
+        val issues = mutableListOf<Issue>()
+        fun line(pointer: String, value: String?) {
+            if (value.isNullOrBlank()) issues += Issue(pointer, "must not be empty")
+            else if (value.trim().length > MAX_FEEDBACK_LINE || '\n' in value.trim()) issues += Issue(pointer, "must be one line of at most $MAX_FEEDBACK_LINE characters")
+        }
+        if (output.corrected.isBlank() || output.corrected.length > MAX_CORRECTED) issues += Issue("/corrected", "must be 1..$MAX_CORRECTED characters")
+        line("/explanation", output.explanation)
+        if (translationRequested) line("/explanationTranslation", output.explanationTranslation)
+        if (issues.isNotEmpty()) throw AiOutputInvalid(issues)
+        return output.copy(
+            corrected = output.corrected.trim(),
+            explanation = output.explanation.trim(),
+            explanationTranslation = if (translationRequested) output.explanationTranslation?.trim() else null,
         )
     }
 
