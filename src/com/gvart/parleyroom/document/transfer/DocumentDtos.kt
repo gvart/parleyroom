@@ -12,17 +12,30 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import java.time.OffsetDateTime
 
-/** Full replace of a document's content and tags (the autosave target). */
-@Serializable
+/** A document's content and tags, as written by create and update. */
 data class DocumentInput(
+    val title: String,
+    val level: LanguageLevel?,
+    val topicIds: List<String>,
+    val grammarTopicIds: List<String>,
+    val audience: DocumentAudience,
+    val blocks: JsonArray,
+)
+
+/** PUT body: the full document plus the revision the client based its edit on. */
+@Serializable
+data class UpdateDocumentRequest(
     val title: String,
     val level: LanguageLevel? = null,
     val topicIds: List<String> = emptyList(),
     val grammarTopicIds: List<String> = emptyList(),
     val audience: DocumentAudience,
     val blocks: JsonArray,
+    val revision: Int,
 ) {
     fun validate(): ValidationResult = validateTitle(title)
+
+    fun toInput() = DocumentInput(title, level, topicIds, grammarTopicIds, audience, blocks)
 }
 
 @Serializable
@@ -74,6 +87,7 @@ data class DocumentResponse(
     val groupIds: List<String> = emptyList(),
     val lessonIds: List<String> = emptyList(),
     val createdFromLessonId: String? = null,
+    val revision: Int,
     val blocks: JsonArray,
     val vocab: List<DocumentVocabEntry> = emptyList(),
     @Serializable(with = OffsetDateTimeSerializer::class)
@@ -95,6 +109,7 @@ data class DocumentSummary(
     val groupIds: List<String> = emptyList(),
     val lessonIds: List<String> = emptyList(),
     val createdFromLessonId: String? = null,
+    val revision: Int,
     val blockCount: Int,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
@@ -139,6 +154,7 @@ data class DocumentVersionSummary(
     val reason: DocumentVersionReason,
     val title: String,
     val blockCount: Int,
+    val createdBy: String? = null,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
 )
@@ -150,6 +166,8 @@ data class DocumentVersionResponse(
     val number: Int,
     val reason: DocumentVersionReason,
     val title: String,
+    val blockCount: Int,
+    val createdBy: String? = null,
     val blocks: JsonArray,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
@@ -160,6 +178,7 @@ data class DocumentVersionResponse(
 data class LessonDocumentRef(
     val id: String,
     val title: String,
+    val revision: Int,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val updatedAt: OffsetDateTime,
 )

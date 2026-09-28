@@ -13,9 +13,6 @@ import com.gvart.parleyroom.document.data.DocumentTopicTable
 import com.gvart.parleyroom.document.transfer.DocumentResponse
 import com.gvart.parleyroom.document.transfer.DocumentSummary
 import com.gvart.parleyroom.document.transfer.DocumentVocabEntry
-import com.gvart.parleyroom.group.data.GroupMemberTable
-import com.gvart.parleyroom.lesson.data.LessonStudentStatus
-import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserRole
@@ -36,8 +33,11 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
+import java.time.OffsetDateTime
 import java.util.UUID
 
 /** Access rules and response rendering for documents. Must be called inside a transaction. */
@@ -73,24 +73,14 @@ class DocumentSupport {
         return row
     }
 
-    /** Shared with the student directly, via one of their groups, or linked to a lesson they are confirmed on. */
-    fun readableByStudent(studentId: UUID): Set<UUID> {
-        val direct = DocumentStudentTable.select(DocumentStudentTable.documentId)
-            .where { DocumentStudentTable.studentId eq studentId }
-            .map { it[DocumentStudentTable.documentId].value }
-        val groupIds = GroupMemberTable.select(GroupMemberTable.groupId)
-            .where { GroupMemberTable.studentId eq studentId }
-            .map { it[GroupMemberTable.groupId].value }
-        val viaGroups = if (groupIds.isEmpty()) emptyList() else DocumentGroupTable.select(DocumentGroupTable.documentId)
-            .where { DocumentGroupTable.groupId inList groupIds }
-            .map { it[DocumentGroupTable.documentId].value }
-        val lessonIds = LessonStudentTable.select(LessonStudentTable.lessonId)
-            .where { (LessonStudentTable.studentId eq studentId) and (LessonStudentTable.status eq LessonStudentStatus.CONFIRMED) }
-            .map { it[LessonStudentTable.lessonId].value }
-        val viaLessons = if (lessonIds.isEmpty()) emptyList() else DocumentLessonTable.select(DocumentLessonTable.documentId)
-            .where { DocumentLessonTable.lessonId inList lessonIds }
-            .map { it[DocumentLessonTable.documentId].value }
-        return (direct + viaGroups + viaLessons).toSet()
+    fun readableByStudent(studentId: UUID): Set<UUID> = DocumentAccess.readableByStudent(studentId)
+
+    /** Every write to a document bumps its revision so editors and live viewers notice. */
+    fun bumpRevision(documentId: UUID) {
+        DocumentTable.update({ DocumentTable.id eq documentId }) {
+            it[revision] = DocumentTable.revision + 1
+            it[updatedAt] = OffsetDateTime.now()
+        }
     }
 
     fun toResponse(row: ResultRow, principal: UserPrincipal): DocumentResponse {
@@ -110,6 +100,7 @@ class DocumentSupport {
             groupIds = if (isStudent) emptyList() else links.groups(id),
             lessonIds = links.lessons(id),
             createdFromLessonId = row[DocumentTable.createdFromLessonId]?.value?.toString(),
+            revision = row[DocumentTable.revision],
             blocks = if (isStudent) stripSolutions(blocks) else blocks,
             vocab = renderVocab(blocks, row, principal),
             createdAt = row[DocumentTable.createdAt],
@@ -134,6 +125,7 @@ class DocumentSupport {
                 groupIds = if (isStudent) emptyList() else links.groups(id),
                 lessonIds = links.lessons(id),
                 createdFromLessonId = row[DocumentTable.createdFromLessonId]?.value?.toString(),
+                revision = row[DocumentTable.revision],
                 blockCount = row[DocumentTable.blocks].size,
                 createdAt = row[DocumentTable.createdAt],
                 updatedAt = row[DocumentTable.updatedAt],

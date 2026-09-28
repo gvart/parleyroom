@@ -11,14 +11,15 @@ import com.gvart.parleyroom.document.service.DocumentBlockValidator
 import com.gvart.parleyroom.document.service.DocumentService
 import com.gvart.parleyroom.document.service.DocumentVersionService
 import com.gvart.parleyroom.document.transfer.CreateDocumentRequest
-import com.gvart.parleyroom.document.transfer.DocumentInput
 import com.gvart.parleyroom.document.transfer.DocumentPageResponse
 import com.gvart.parleyroom.document.transfer.DocumentResponse
 import com.gvart.parleyroom.document.transfer.DocumentShareRequest
+import com.gvart.parleyroom.document.transfer.DocumentSummary
 import com.gvart.parleyroom.document.transfer.DocumentVersionResponse
 import com.gvart.parleyroom.document.transfer.DocumentVersionSummary
 import com.gvart.parleyroom.document.transfer.DuplicateDocumentRequest
 import com.gvart.parleyroom.document.transfer.LinkLessonDocumentRequest
+import com.gvart.parleyroom.document.transfer.UpdateDocumentRequest
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
@@ -97,17 +98,19 @@ fun Application.configureDocumentRouting() {
                         }
                     }
 
-                    put<DocumentInput> {
+                    put<UpdateDocumentRequest> {
                         call.respond(HttpStatusCode.OK, documentService.updateDocument(call.getPathUUID(), it, call.requirePrincipal()))
                     }.describe {
                         summary = "Replace document"
-                        description = "Full replace of title, tags and blocks (the autosave target). Snapshots the previous " +
-                                "state when the latest version is at least 10 minutes old."
+                        description = "Full replace of title, tags and blocks (the autosave target). `revision` must be the " +
+                                "current one (409 DOCUMENT_CONFLICT otherwise). Snapshots the previous state when the latest " +
+                                "version is at least 10 minutes old."
                         parameters { path("id") { description = "Document UUID" } }
-                        requestBody { schema = jsonSchema<DocumentInput>() }
+                        requestBody { schema = jsonSchema<UpdateDocumentRequest>() }
                         responses {
                             HttpStatusCode.OK { schema = jsonSchema<DocumentResponse>() }
                             HttpStatusCode.BadRequest { description = "DOCUMENT_INVALID_BLOCK"; schema = jsonSchema<ProblemDetail>() }
+                            HttpStatusCode.Conflict { description = "DOCUMENT_CONFLICT (with currentRevision)"; schema = jsonSchema<ProblemDetail>() }
                         }
                     }
 
@@ -195,6 +198,15 @@ fun Application.configureDocumentRouting() {
             }
 
             route("/api/v1/lessons/{id}/documents") {
+                get {
+                    call.respond(HttpStatusCode.OK, documentService.lessonDocuments(call.getPathUUID(), call.requirePrincipal()))
+                }.describe {
+                    summary = "List lesson documents"
+                    description = "Documents linked to the lesson that the caller can read. Lesson participants and admins."
+                    parameters { path("id") { description = "Lesson UUID" } }
+                    responses { HttpStatusCode.OK { schema = jsonSchema<List<DocumentSummary>>() } }
+                }
+
                 post<LinkLessonDocumentRequest> {
                     documentService.linkLesson(call.getPathUUID(), UUID.fromString(it.documentId), call.requirePrincipal())
                     call.respond(HttpStatusCode.NoContent)

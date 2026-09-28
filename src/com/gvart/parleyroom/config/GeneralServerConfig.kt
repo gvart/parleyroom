@@ -10,7 +10,7 @@ import com.gvart.parleyroom.availability.transfer.ReplaceWeeklyAvailabilityReque
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.document.transfer.CreateDocumentRequest
-import com.gvart.parleyroom.document.transfer.DocumentInput
+import com.gvart.parleyroom.document.transfer.UpdateDocumentRequest
 import com.gvart.parleyroom.document.transfer.DuplicateDocumentRequest
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
@@ -190,7 +190,7 @@ fun Application.generalConfig() {
         validate<GroupRequest> { it.validate() }
         validate<UpdateLessonContentRequest> { it.validate() }
         validate<CreateDocumentRequest> { it.validate() }
-        validate<DocumentInput> { it.validate() }
+        validate<UpdateDocumentRequest> { it.validate() }
         validate<DuplicateDocumentRequest> { it.validate() }
     }
 
@@ -226,7 +226,11 @@ fun Application.generalConfig() {
         }
 
         exception<ConflictException> { call, cause ->
-            call.respond(HttpStatusCode.Conflict, ProblemDetail.of(HttpStatusCode.Conflict, cause.message, cause.code ?: "CONFLICT"))
+            call.respond(
+                HttpStatusCode.Conflict,
+                ProblemDetail.of(HttpStatusCode.Conflict, cause.message, cause.code ?: "CONFLICT")
+                    .copy(currentRevision = cause.currentRevision),
+            )
         }
 
         exception<IllegalArgumentException> { call, cause ->

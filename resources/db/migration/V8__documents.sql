@@ -14,6 +14,8 @@ CREATE TABLE documents
     -- Validated against resources/document-blocks.schema.json on every write.
     blocks                 JSONB             NOT NULL DEFAULT '[]',
     created_from_lesson_id UUID              REFERENCES lessons (id) ON DELETE SET NULL,
+    -- Optimistic concurrency: bumped by every write, PUT must send the revision it read.
+    revision               INT               NOT NULL DEFAULT 1,
     created_at             TIMESTAMPTZ       NOT NULL DEFAULT now(),
     updated_at             TIMESTAMPTZ       NOT NULL DEFAULT now()
 );

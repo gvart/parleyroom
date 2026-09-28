@@ -4,6 +4,7 @@ import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.document.transfer.DocumentResponse
+import com.gvart.parleyroom.document.transfer.DocumentSummary
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
@@ -69,7 +70,14 @@ class LessonDocumentLinkIntegrationTest : IntegrationTest() {
 
         val refs = getLesson(client, lesson.id, token).documents
         assertEquals(listOf(document.id to "Nachbereitung"), refs.map { it.id to it.title })
-        assertEquals(listOf(document.id), getLesson(client, lesson.id, getStudentToken(client)).documents.map { it.id })
+        val studentToken = getStudentToken(client)
+        assertEquals(listOf(document.id), getLesson(client, lesson.id, studentToken).documents.map { it.id })
+
+        val listed = client.get("/api/v1/lessons/${lesson.id}/documents") { bearerAuth(studentToken) }
+        assertEquals(HttpStatusCode.OK, listed.status)
+        assertEquals(listOf(document.id), listed.body<List<DocumentSummary>>().map { it.id })
+        val outsider = client.get("/api/v1/lessons/${lesson.id}/documents") { bearerAuth(getStudent2Token(client)) }
+        assertEquals(HttpStatusCode.Forbidden, outsider.status)
     }
 
     @Test
@@ -89,11 +97,12 @@ class LessonDocumentLinkIntegrationTest : IntegrationTest() {
         val heading = """[{"id":"${UUID.randomUUID()}","type":"heading","text":"Neu","level":2}]"""
         client.put("/api/v1/documents/$documentId") {
             bearerAuth(token)
-            setBody(TextContent("""{"title":"Live","audience":"STUDENT","blocks":$heading}""", ContentType.Application.Json))
+            setBody(TextContent("""{"title":"Live","audience":"STUDENT","blocks":$heading,"revision":1}""", ContentType.Application.Json))
         }
 
-        val after = getLesson(client, lesson.id, studentToken).documents.single().updatedAt
-        assertTrue(after.isAfter(before))
+        val after = getLesson(client, lesson.id, studentToken).documents.single()
+        assertTrue(after.updatedAt.isAfter(before))
+        assertEquals(2, after.revision)
         val live = client.get("/api/v1/documents/$documentId") { bearerAuth(studentToken) }.body<DocumentResponse>()
         assertEquals("Neu", live.blocks.single().toString().substringAfter("\"text\":\"").substringBefore("\""))
     }

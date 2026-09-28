@@ -43,6 +43,7 @@ class DocumentVersionService(
                     reason = it[DocumentVersionTable.reason],
                     title = it[DocumentVersionTable.title],
                     blockCount = it[DocumentVersionTable.blocks].size,
+                    createdBy = it[DocumentVersionTable.createdBy]?.value?.toString(),
                     createdAt = it[DocumentVersionTable.createdAt],
                 )
             }
@@ -57,6 +58,8 @@ class DocumentVersionService(
             number = row[DocumentVersionTable.number],
             reason = row[DocumentVersionTable.reason],
             title = row[DocumentVersionTable.title],
+            blockCount = row[DocumentVersionTable.blocks].size,
+            createdBy = row[DocumentVersionTable.createdBy]?.value?.toString(),
             blocks = row[DocumentVersionTable.blocks],
             createdAt = row[DocumentVersionTable.createdAt],
         )
@@ -69,8 +72,8 @@ class DocumentVersionService(
         DocumentTable.update({ DocumentTable.id eq documentId }) {
             it[title] = version[DocumentVersionTable.title]
             it[blocks] = version[DocumentVersionTable.blocks]
-            it[updatedAt] = OffsetDateTime.now()
         }
+        support.bumpRevision(documentId)
         support.toResponse(support.findDocument(documentId), principal)
     }
 

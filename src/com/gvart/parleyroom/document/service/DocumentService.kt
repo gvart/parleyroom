@@ -2,7 +2,10 @@ package com.gvart.parleyroom.document.service
 
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.transfer.PageRequest
+import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
+import com.gvart.parleyroom.common.transfer.exception.ConflictException
+import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.document.data.DocumentAudience
 import com.gvart.parleyroom.document.data.DocumentGrammarTopicTable
@@ -14,11 +17,15 @@ import com.gvart.parleyroom.document.data.DocumentTopicTable
 import com.gvart.parleyroom.document.data.DocumentVersionReason
 import com.gvart.parleyroom.document.transfer.CreateDocumentRequest
 import com.gvart.parleyroom.document.transfer.DocumentInput
+import com.gvart.parleyroom.document.transfer.DocumentSummary
+import com.gvart.parleyroom.document.transfer.UpdateDocumentRequest
 import com.gvart.parleyroom.document.transfer.DocumentPageResponse
 import com.gvart.parleyroom.document.transfer.DocumentResponse
 import com.gvart.parleyroom.document.transfer.DocumentShareRequest
 import com.gvart.parleyroom.document.transfer.DuplicateDocumentRequest
 import com.gvart.parleyroom.group.data.GroupTable
+import com.gvart.parleyroom.lesson.data.LessonStudentStatus
+import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.material.data.MaterialTable
 import com.gvart.parleyroom.topic.service.LibraryAccess
@@ -40,6 +47,7 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.inSubQuery
 import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.core.lowerCase
+import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -130,17 +138,23 @@ class DocumentService(
         support.toResponse(support.findDocument(id), principal)
     }
 
-    fun updateDocument(documentId: UUID, input: DocumentInput, principal: UserPrincipal): DocumentResponse = transaction {
+    /** Full replace, guarded by the revision the client read (optimistic concurrency). */
+    fun updateDocument(documentId: UUID, request: UpdateDocumentRequest, principal: UserPrincipal): DocumentResponse = transaction {
         val document = support.requireOwned(documentId, principal)
+        if (document[DocumentTable.revision] != request.revision) throw conflict(document[DocumentTable.revision])
+        val input = request.toInput()
         val tags = validateInput(principal.id, input)
         versions.snapshotForAutosave(document, principal)
-        DocumentTable.update({ DocumentTable.id eq documentId }) {
+        val updated = DocumentTable.update({ (DocumentTable.id eq documentId) and (DocumentTable.revision eq request.revision) }) {
             it[title] = input.title.trim()
             it[level] = input.level
             it[audience] = input.audience
             it[blocks] = input.blocks
+            it[revision] = DocumentTable.revision + 1
             it[updatedAt] = OffsetDateTime.now()
         }
+        // A concurrent write got in between the read and this update.
+        if (updated == 0) throw conflict(support.findDocument(documentId)[DocumentTable.revision])
         replaceTags(documentId, tags)
         support.toResponse(support.findDocument(documentId), principal)
     }
@@ -191,7 +205,8 @@ class DocumentService(
             documentId, studentIds - sharedStudents)
         insertLinks(DocumentGroupTable, DocumentGroupTable.documentId, DocumentGroupTable.groupId, DocumentGroupTable.sharedAt,
             documentId, groupIds - sharedGroups)
-        support.toResponse(document, principal)
+        support.bumpRevision(documentId)
+        support.toResponse(support.findDocument(documentId), principal)
     }
 
     fun unshare(documentId: UUID, request: DocumentShareRequest, principal: UserPrincipal): DocumentResponse = transaction {
@@ -204,7 +219,40 @@ class DocumentService(
         if (groupIds.isNotEmpty()) DocumentGroupTable.deleteWhere {
             (DocumentGroupTable.documentId eq documentId) and (DocumentGroupTable.groupId inList groupIds)
         }
-        support.toResponse(document, principal)
+        support.bumpRevision(documentId)
+        support.toResponse(support.findDocument(documentId), principal)
+    }
+
+    /** Linked documents the caller can read: the lesson's teacher and admins see all, confirmed students their readable ones. */
+    fun lessonDocuments(lessonId: UUID, principal: UserPrincipal): List<DocumentSummary> = transaction {
+        val lesson = LessonTable.findByIdOrThrow(lessonId, "Lesson")
+        val linked = DocumentLessonTable.select(DocumentLessonTable.documentId)
+            .where { DocumentLessonTable.lessonId eq lessonId }
+            .map { it[DocumentLessonTable.documentId].value }
+        val visible = when (principal.role) {
+            UserRole.ADMIN -> linked
+            UserRole.TEACHER -> {
+                if (lesson[LessonTable.teacherId].value != principal.id) throw ForbiddenException("Not your lesson")
+                linked
+            }
+            UserRole.STUDENT -> {
+                val confirmed = LessonStudentTable.selectAll()
+                    .where {
+                        (LessonStudentTable.lessonId eq lessonId) and (LessonStudentTable.studentId eq principal.id) and
+                                (LessonStudentTable.status eq LessonStudentStatus.CONFIRMED)
+                    }
+                    .empty().not()
+                if (!confirmed) throw ForbiddenException("Only participants of this lesson can see its documents")
+                val readable = support.readableByStudent(principal.id)
+                linked.filter { it in readable }
+            }
+        }
+        if (visible.isEmpty()) return@transaction emptyList()
+        val rows = DocumentTable.selectAll()
+            .where { DocumentTable.id inList visible }
+            .orderBy(DocumentTable.updatedAt, SortOrder.DESC)
+            .toList()
+        support.toSummaries(rows, principal)
     }
 
     /** Links a document to a lesson: both must belong to the same teacher. */
@@ -343,6 +391,12 @@ class DocumentService(
         }
         return copy(blocks) as JsonArray
     }
+
+    private fun conflict(currentRevision: Int) = ConflictException(
+        "Document was changed in the meantime (current revision $currentRevision)",
+        code = "DOCUMENT_CONFLICT",
+        currentRevision = currentRevision,
+    )
 
     private fun escapeLike(value: String): String =
         value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

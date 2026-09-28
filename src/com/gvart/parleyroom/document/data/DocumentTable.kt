@@ -24,6 +24,7 @@ object DocumentTable : UUIDTable("documents") {
     val audience = pgEnum<DocumentAudience>("audience", "DOCUMENT_AUDIENCE")
     val blocks = jsonb<JsonArray>("blocks", Json.Default)
     val createdFromLessonId = reference("created_from_lesson_id", LessonTable).nullable()
+    val revision = integer("revision").default(1)
     val createdAt = timestampWithTimeZone("created_at")
     val updatedAt = timestampWithTimeZone("updated_at")
 }

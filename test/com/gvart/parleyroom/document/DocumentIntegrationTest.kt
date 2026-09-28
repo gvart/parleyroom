@@ -63,8 +63,21 @@ class DocumentIntegrationTest : IntegrationTest() {
         """{"title":"$title","level":"B1","audience":"STUDENT","blocks":$blocks$extra}""",
     )
 
-    private suspend fun putDocument(client: HttpClient, token: String, id: String, title: String, blocks: String = allBlocks) =
-        client.sendJson("PUT", "/api/v1/documents/$id", token, """{"title":"$title","audience":"STUDENT","blocks":$blocks}""")
+    /** PUT based on the current revision unless [revision] is given. */
+    private suspend fun putDocument(
+        client: HttpClient,
+        token: String,
+        id: String,
+        title: String,
+        blocks: String = allBlocks,
+        revision: Int? = null,
+    ): HttpResponse {
+        val base = revision ?: client.get("/api/v1/documents/$id") { bearerAuth(token) }.body<DocumentResponse>().revision
+        return client.sendJson(
+            "PUT", "/api/v1/documents/$id", token,
+            """{"title":"$title","audience":"STUDENT","blocks":$blocks,"revision":$base}""",
+        )
+    }
 
     private suspend fun versions(client: HttpClient, token: String, id: String) =
         client.get("/api/v1/documents/$id/versions") { bearerAuth(token) }.body<List<DocumentVersionSummary>>()
@@ -167,6 +180,47 @@ class DocumentIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    fun `a stale revision is rejected with the current one`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val id = createDocument(client, token).body<DocumentResponse>().id
+
+        val first = putDocument(client, token, id, "Tab A", revision = 1)
+        assertEquals(2, first.body<DocumentResponse>().revision)
+
+        val stale = putDocument(client, token, id, "Tab B", revision = 1)
+        assertEquals(HttpStatusCode.Conflict, stale.status)
+        val problem = stale.body<ProblemDetail>()
+        assertEquals("DOCUMENT_CONFLICT", problem.code)
+        assertEquals(2, problem.currentRevision)
+        assertEquals("Tab A", client.get("/api/v1/documents/$id") { bearerAuth(token) }.body<DocumentResponse>().title)
+
+        val missing = client.sendJson("PUT", "/api/v1/documents/$id", token, """{"title":"x","audience":"STUDENT","blocks":[]}""")
+        assertEquals(HttpStatusCode.BadRequest, missing.status)
+
+        // Share, unshare and restore bump the revision too; unrelated errors carry no extension members.
+        val shared = client.sendJson("POST", "/api/v1/documents/$id/share", token, """{"studentIds":["$STUDENT_ID"]}""")
+        assertEquals(3, shared.body<DocumentResponse>().revision)
+        val unshared = client.sendJson("POST", "/api/v1/documents/$id/unshare", token, """{"studentIds":["$STUDENT_ID"]}""")
+        assertEquals(4, unshared.body<DocumentResponse>().revision)
+        val notFound = client.get("/api/v1/documents/${UUID.randomUUID()}") { bearerAuth(token) }.bodyAsText()
+        assertTrue("pointer" !in notFound && "currentRevision" !in notFound)
+    }
+
+    @Test
+    fun `half-finished blocks autosave`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val id = createDocument(client, token, blocks = "[]").body<DocumentResponse>().id
+        val draft = """[{"id":"${UUID.randomUUID()}","type":"free_sentences","purpose":"SPEAKING","interactive":true,
+            "items":[{"id":"${UUID.randomUUID()}","prompt":""}]},
+            {"id":"${UUID.randomUUID()}","type":"media","kind":"AUDIO","url":null,"questions":[]}]"""
+        val response = putDocument(client, token, id, "Entwurf", blocks = draft)
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        assertEquals("SPEAKING", response.body<DocumentResponse>().blocks[0].jsonObject["purpose"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `restore snapshots the current state and brings the version back`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
@@ -185,6 +239,8 @@ class DocumentIntegrationTest : IntegrationTest() {
 
         val history = versions(client, token, id)
         assertEquals(listOf(DocumentVersionReason.RESTORE, DocumentVersionReason.AUTOSAVE), history.map { it.reason })
+        assertTrue(history.all { it.createdBy == TEACHER_ID })
+        assertEquals(3, document.revision)
         assertEquals("Edited", history.first().title)
 
         val missing = client.get("/api/v1/documents/$id/versions/${UUID.randomUUID()}") { bearerAuth(token) }

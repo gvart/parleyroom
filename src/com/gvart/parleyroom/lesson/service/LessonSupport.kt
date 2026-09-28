@@ -258,13 +258,14 @@ class LessonSupport {
 
         val documentsByLesson = DocumentLessonTable
             .join(DocumentTable, JoinType.INNER, DocumentLessonTable.documentId, DocumentTable.id)
-            .select(DocumentLessonTable.lessonId, DocumentTable.id, DocumentTable.title, DocumentTable.updatedAt)
+            .select(DocumentLessonTable.lessonId, DocumentTable.id, DocumentTable.title, DocumentTable.revision, DocumentTable.updatedAt)
             .where { DocumentLessonTable.lessonId inList lessonIds }
             .orderBy(DocumentLessonTable.linkedAt)
             .groupBy({ it[DocumentLessonTable.lessonId].value }) {
                 LessonDocumentRef(
                     id = it[DocumentTable.id].value.toString(),
                     title = it[DocumentTable.title],
+                    revision = it[DocumentTable.revision],
                     updatedAt = it[DocumentTable.updatedAt],
                 )
             }
