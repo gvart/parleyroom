@@ -1,0 +1,22 @@
+test/com/gvart/parleyroom/goal/GoalIntegrationTest.kt
+  s_2b5907717bc9a2::t_9d297e0cc5c586 233-244
+  s_2b5907717bc9a2::t_b78fdc62ee1474 232
+src/com/gvart/parleyroom/admin/service/AdminService.kt
+  s_2b5907717bc9a2::t_5e57136ba033df 17,274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "3932542ddaabd6402d0be232ec4d04ab46b6dfa8",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
