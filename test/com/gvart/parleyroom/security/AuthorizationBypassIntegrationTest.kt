@@ -2,10 +2,7 @@ package com.gvart.parleyroom.security
 
 import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.homework.HomeworkFixtures
-import com.gvart.parleyroom.goal.transfer.CreateGoalRequest
 import com.gvart.parleyroom.goal.transfer.GoalResponse
-import com.gvart.parleyroom.goal.transfer.UpdateGoalProgressRequest
-import com.gvart.parleyroom.goal.transfer.UpdateGoalRequest
 import com.gvart.parleyroom.registration.transfer.InviteUserRequest
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.vocabulary.data.StudentVocabStatus
@@ -19,6 +16,7 @@ import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -35,71 +33,51 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
     @Test
     fun `student2 cannot GET another student's goal`() = testApp {
         val client = createJsonClient(this)
-        val goalId = createGoalAsStudent(client)
+        val goalId = createGoalAsTeacher(client)
 
         val response = client.get("/api/v1/goals/$goalId") {
             bearerAuth(getStudent2Token(client))
         }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertEquals(HttpStatusCode.NotFound, response.status)
     }
 
     @Test
     fun `student2 cannot UPDATE another student's goal`() = testApp {
         val client = createJsonClient(this)
-        val goalId = createGoalAsStudent(client)
+        val goalId = createGoalAsTeacher(client)
 
-        val response = client.put("/api/v1/goals/$goalId") {
+        val response = client.patch("/api/v1/goals/$goalId") {
             bearerAuth(getStudent2Token(client))
             contentType(ContentType.Application.Json)
-            setBody(UpdateGoalRequest(description = "Hijacked"))
+            setBody("""{ "note": "Hijacked" }""")
         }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertEquals(HttpStatusCode.NotFound, response.status)
     }
 
     @Test
-    fun `student2 cannot UPDATE PROGRESS of another student's goal`() = testApp {
+    fun `the student cannot UPDATE or DELETE their own goal`() = testApp {
         val client = createJsonClient(this)
-        val goalId = createGoalAsStudent(client)
+        val goalId = createGoalAsTeacher(client)
+        val token = getStudentToken(client)
 
-        val response = client.put("/api/v1/goals/$goalId/progress") {
-            bearerAuth(getStudent2Token(client))
+        val patch = client.patch("/api/v1/goals/$goalId") {
+            bearerAuth(token)
             contentType(ContentType.Application.Json)
-            setBody(UpdateGoalProgressRequest(progress = 99))
+            setBody("""{ "status": "ACHIEVED" }""")
         }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
-    }
-
-    @Test
-    fun `student2 cannot COMPLETE another student's goal`() = testApp {
-        val client = createJsonClient(this)
-        val goalId = createGoalAsStudent(client)
-
-        val response = client.post("/api/v1/goals/$goalId/complete") {
-            bearerAuth(getStudent2Token(client))
-        }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
-    }
-
-    @Test
-    fun `student2 cannot ABANDON another student's goal`() = testApp {
-        val client = createJsonClient(this)
-        val goalId = createGoalAsStudent(client)
-
-        val response = client.post("/api/v1/goals/$goalId/abandon") {
-            bearerAuth(getStudent2Token(client))
-        }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertEquals(HttpStatusCode.Forbidden, patch.status)
+        assertEquals(HttpStatusCode.Forbidden, client.delete("/api/v1/goals/$goalId") { bearerAuth(token) }.status)
     }
 
     @Test
     fun `student2 cannot DELETE another student's goal`() = testApp {
         val client = createJsonClient(this)
-        val goalId = createGoalAsStudent(client)
+        val goalId = createGoalAsTeacher(client)
 
         val response = client.delete("/api/v1/goals/$goalId") {
             bearerAuth(getStudent2Token(client))
         }
-        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertEquals(HttpStatusCode.NotFound, response.status)
     }
 
     // ---------- Vocabulary ----------
@@ -203,12 +181,11 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
 
     // ---------- Helpers ----------
 
-    private suspend fun createGoalAsStudent(client: HttpClient): String {
-        val token = getStudentToken(client)
+    private suspend fun createGoalAsTeacher(client: HttpClient): String {
         val resp = client.post("/api/v1/goals") {
-            bearerAuth(token)
+            bearerAuth(getTeacherToken(client))
             contentType(ContentType.Application.Json)
-            setBody(CreateGoalRequest(studentId = STUDENT_ID, description = "Owned by student", targetDate = "2026-12-01"))
+            setBody("""{ "studentId": "$STUDENT_ID", "type": "LEVEL", "targetLevel": "B1" }""")
         }
         assertEquals(HttpStatusCode.Created, resp.status)
         return resp.body<GoalResponse>().id
