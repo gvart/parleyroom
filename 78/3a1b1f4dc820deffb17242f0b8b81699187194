@@ -1,0 +1,33 @@
+src/com/gvart/parleyroom/library/service/LibraryService.kt
+  s_2b5907717bc9a2::t_5e57136ba033df 13,279-280,289,301
+src/com/gvart/parleyroom/progress/service/ProgressCalculator.kt
+  s_2b5907717bc9a2::t_2c90e4dee0c158 89,183
+  s_2b5907717bc9a2::t_5e57136ba033df 5
+test/com/gvart/parleyroom/library/LibraryIntegrationTest.kt
+  s_2b5907717bc9a2::t_b91ded908567e5 185-205
+  s_2b5907717bc9a2::t_3441c53765cf8c 184
+src/com/gvart/parleyroom/lesson/service/LessonAttendance.kt
+  s_2b5907717bc9a2::t_a8d5f74de80a1e 1-15
+test/com/gvart/parleyroom/progress/ProgressIntegrationTest.kt
+  s_2b5907717bc9a2::t_9d297e0cc5c586 125,132-133,139,151-175
+  s_2b5907717bc9a2::t_924994392bcded 176-177
+API.md
+  s_2b5907717bc9a2::t_2c90e4dee0c158 120,123-127,709,857-858
+  s_2b5907717bc9a2::t_24c1ad78e1ee52 859
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "783a1b1f4dc820deffb17242f0b8b81699187194",
+  "prompts": {},
+  "sessions": {
+    "s_2b5907717bc9a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed912ae6-ade7-403e-a7ef-847287e1442b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
