@@ -4,10 +4,12 @@ import com.gvart.parleyroom.topic.service.LibraryAccess
 import com.gvart.parleyroom.ai.transfer.AiStatusResponse
 import com.gvart.parleyroom.ai.config.AiRuntime
 import com.gvart.parleyroom.ai.data.PromptTemplateLessonType
+import com.gvart.parleyroom.ai.service.AiJobSummaries
 import com.gvart.parleyroom.ai.service.FillTranslationsService
 import com.gvart.parleyroom.ai.service.GenerationJobs
 import com.gvart.parleyroom.ai.service.LibrarySuggestionService
 import com.gvart.parleyroom.ai.service.PromptTemplateService
+import com.gvart.parleyroom.ai.transfer.AiJobSummary
 import com.gvart.parleyroom.ai.transfer.ApplyFillProposalsRequest
 import com.gvart.parleyroom.ai.transfer.FillMissingRequest
 import com.gvart.parleyroom.ai.transfer.GenerationJobResponse
@@ -49,6 +51,27 @@ fun Application.configureAiRouting() {
                     description = "Existing documents and materials of the lesson's level sharing its topics/grammar. No AI."
                     parameters { path("id") { description = "Lesson UUID" } }
                     responses { HttpStatusCode.OK { schema = jsonSchema<LibrarySuggestions>() } }
+                }
+            }
+
+            get("/api/v1/ai/jobs") {
+                val principal = call.requirePrincipal()
+                LibraryAccess.requireTeacher(principal)
+                val params = call.request.queryParameters
+                val limit = (params["limit"]?.toIntOrNull() ?: 20).coerceIn(1, 50)
+                call.respond(HttpStatusCode.OK, AiJobSummaries.list(principal.id, params["active"] == "true", limit))
+            }.describe {
+                summary = "List the teacher's AI jobs"
+                description = "The task tray: QUEUED/RUNNING jobs plus those finished in the last 24 h (only active ones with active=true), " +
+                        "newest first, named after their lesson / student / document / material. Queued and finished jobs are also " +
+                        "pushed on /api/v1/notifications/stream as {\"type\":\"AI_JOB_STARTED\"|\"AI_JOB_FINISHED\",\"job\":AiJobSummary}. Teacher only."
+                parameters {
+                    query("active") { description = "true: only QUEUED/RUNNING jobs"; required = false }
+                    query("limit") { description = "Max jobs (default 20, max 50)"; required = false }
+                }
+                responses {
+                    HttpStatusCode.OK { schema = jsonSchema<List<AiJobSummary>>() }
+                    HttpStatusCode.Forbidden { schema = jsonSchema<ProblemDetail>() }
                 }
             }
 
