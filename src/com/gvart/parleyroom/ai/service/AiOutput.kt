@@ -168,9 +168,11 @@ object AiOutputParser {
      * exercise and [MIN_TASKS]..[MAX_TASKS] tasks. Parts that were not asked for are ignored. A club bundle is its notes
      * document (NOTES_DOCUMENT). An item refine: exactly that one part. Other parts are ignored.
      * Every word must translate into each of [requiredLanguages] (the recipients' native languages).
+     * Without [requireWords] (words from materials) a words-only answer may be empty.
      */
     fun parseDraft(
         text: String, target: DraftTarget, kinds: Set<DraftKind> = DraftKind.entries.toSet(), requiredLanguages: List<String> = emptyList(),
+        requireWords: Boolean = true,
     ): ValidatedDraft {
         val output = decode<AiDraftOutput>(text)
         val issues = mutableListOf<Issue>()
@@ -201,7 +203,7 @@ object AiOutputParser {
             DraftTarget.BUNDLE -> {
                 if (DraftKind.WORDS in kinds) {
                     words = output.words
-                    if (kinds.size == 1 && words.isEmpty()) issues += Issue("/words", "give at least one word")
+                    if (requireWords && kinds.size == 1 && words.isEmpty()) issues += Issue("/words", "give at least one word")
                 }
                 if (DraftKind.HOMEWORK in kinds) {
                     val homework = output.homework
