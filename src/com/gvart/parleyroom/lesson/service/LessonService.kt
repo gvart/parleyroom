@@ -19,6 +19,7 @@ import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.security.UserPrincipal
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greaterEq
@@ -91,6 +92,7 @@ class LessonService(
 
         val total = baseQuery.count()
         val rows = baseQuery
+            .orderBy(LessonTable.scheduledAt to SortOrder.ASC, LessonTable.id to SortOrder.ASC)
             .limit(page.pageSize)
             .offset(page.offset)
             .toList()
