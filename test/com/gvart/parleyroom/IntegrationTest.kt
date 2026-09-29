@@ -107,6 +107,7 @@ abstract class IntegrationTest {
                 "application.openapi.enabled" to "false",
                 "vocabulary.review_reminder.enabled" to "false",
                 "vocabulary.review_reminder.interval" to "1h",
+                "lesson.auto_complete.enabled" to "false",
                 "storage.endpoint" to minioEndpoint,
                 "storage.region" to "us-east-1",
                 "storage.access_key" to "minioadmin",

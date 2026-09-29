@@ -38,6 +38,7 @@ import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
+import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.OffsetDateTime
 import java.util.UUID
@@ -48,6 +49,7 @@ class LessonLifecycleService(
     private val support: LessonSupport,
     private val availabilityValidator: AvailabilityValidator,
 ) {
+    private val log = LoggerFactory.getLogger(LessonLifecycleService::class.java)
 
     companion object {
         /** Students may dial in this many minutes before scheduledAt; teachers have no such gate. */
@@ -405,23 +407,66 @@ class LessonLifecycleService(
         if (lesson[LessonTable.teacherId].value != principal.id && principal.role != UserRole.ADMIN)
             throw ForbiddenException("Only the assigned teacher can complete this lesson")
 
-        if (lesson[LessonTable.status] != LessonStatus.IN_PROGRESS)
+        if (!markCompleted(lessonId, principal.id))
             throw BadRequestException("Only in-progress lessons can be completed", code = "LESSON_INVALID_STATE")
 
+        support.toResponse(support.findLesson(lessonId), principal)
+    }
+
+    /**
+     * Safety net for lessons left IN_PROGRESS (tab closed, crash): completes every lesson whose
+     * scheduled end is more than [grace] in the past, on behalf of its teacher, through the same
+     * path as a manual complete. Returns how many lessons this call completed.
+     */
+    fun autoCompleteStaleLessons(grace: Duration): Int {
+        val now = OffsetDateTime.now()
+        val stale = transaction {
+            LessonTable.selectAll()
+                .where { LessonTable.status eq LessonStatus.IN_PROGRESS }
+                .filter {
+                    val end = it[LessonTable.scheduledAt].plusMinutes(it[LessonTable.durationMinutes].toLong())
+                    end.plus(grace).isBefore(now)
+                }
+                .map { it[LessonTable.id].value to it[LessonTable.teacherId].value }
+        }
+
+        var completed = 0
+        for ((lessonId, teacherId) in stale) {
+            val done = runCatching { transaction { markCompleted(lessonId, teacherId) } }
+                .onFailure { log.warn("Failed to auto-complete lesson {}", lessonId, it) }
+                .getOrDefault(false)
+            if (done) {
+                videoTokenService.deleteRoom("lesson-$lessonId")
+                completed++
+            }
+        }
+        if (completed > 0) log.info("Auto-completed {} stale in-progress lessons", completed)
+        return completed
+    }
+
+    /**
+     * IN_PROGRESS -> COMPLETED with its event, activity and student notifications. The status guard
+     * in the UPDATE makes it a no-op (false) when the lesson is no longer in progress, so concurrent
+     * callers (a teacher click, another replica's job) complete it exactly once.
+     */
+    private fun markCompleted(lessonId: UUID, actorId: UUID): Boolean {
         val now = OffsetDateTime.now()
 
-        LessonTable.update({ LessonTable.id eq lessonId }) {
+        val updated = LessonTable.update({
+            (LessonTable.id eq lessonId) and (LessonTable.status eq LessonStatus.IN_PROGRESS)
+        }) {
             it[status] = LessonStatus.COMPLETED
             it[endedAt] = now
-            it[updatedBy] = principal.id
+            it[updatedBy] = actorId
             it[updatedAt] = now
         }
+        if (updated == 0) return false
 
         LessonEventTable.insert {
             it[LessonEventTable.lessonId] = lessonId
             it[eventType] = LessonEventType.LESSON_COMPLETED
-            it[actorId] = principal.id
-            it[oldStatus] = lesson[LessonTable.status]
+            it[LessonEventTable.actorId] = actorId
+            it[oldStatus] = LessonStatus.IN_PROGRESS
             it[newStatus] = LessonStatus.COMPLETED
         }
 
@@ -429,13 +474,12 @@ class LessonLifecycleService(
             LearningActivityRecorder.record(studentId, ActivityKind.LESSON_COMPLETED, lessonId)
             notificationService.createNotification(
                 userId = studentId,
-                actorId = principal.id,
+                actorId = actorId,
                 type = NotificationType.LESSON_COMPLETED,
                 referenceId = lessonId,
             )
         }
-
-        support.toResponse(support.findLesson(lessonId), principal)
+        return true
     }
 
     fun getVideoAccess(lessonId: UUID, principal: UserPrincipal): VideoAccess = transaction {
