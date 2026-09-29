@@ -230,4 +230,28 @@ class DocumentStudentAccessIntegrationTest : IntegrationTest() {
         post(client, "/api/v1/documents/$id/unshare", teacherToken, """{"studentIds":["$STUDENT_ID"]}""")
         assertEquals(HttpStatusCode.Forbidden, materialStatus())
     }
+
+    @Test
+    fun `students can open a file attached to a document they can read`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val materialId = transaction {
+            MaterialTable.insertAndGetId {
+                it[teacherId] = UUID.fromString(TEACHER_ID)
+                it[name] = "Arbeitsblatt.pdf"
+                it[type] = MaterialType.LINK
+                it[url] = "https://example.com/arbeitsblatt.pdf"
+                it[createdAt] = OffsetDateTime.now()
+            }.value
+        }
+        val blocks = """[{"id":"${UUID.randomUUID()}","type":"media","kind":"FILE","materialId":"$materialId","questions":[]}]"""
+        val id = post(client, "/api/v1/documents", teacherToken, """{"title":"Lesen","audience":"STUDENT","blocks":$blocks}""")
+            .body<DocumentResponse>().id
+        val studentToken = getStudentToken(client)
+        suspend fun materialStatus() = client.get("/api/v1/materials/$materialId") { bearerAuth(studentToken) }.status
+
+        assertEquals(HttpStatusCode.Forbidden, materialStatus())
+        post(client, "/api/v1/documents/$id/share", teacherToken, """{"studentIds":["$STUDENT_ID"]}""")
+        assertEquals(HttpStatusCode.OK, materialStatus())
+    }
 }

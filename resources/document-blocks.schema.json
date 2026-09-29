@@ -901,7 +901,8 @@
         "kind": {
           "enum": [
             "AUDIO",
-            "VIDEO"
+            "VIDEO",
+            "FILE"
           ]
         },
         "url": {
