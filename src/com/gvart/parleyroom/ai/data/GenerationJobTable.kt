@@ -36,6 +36,7 @@ object GenerationJobTable : UUIDTable("generation_jobs") {
     val startedAt = timestampWithTimeZone("started_at").nullable()
     val finishedAt = timestampWithTimeZone("finished_at").nullable()
     val publishedAt = timestampWithTimeZone("published_at").nullable()
+    val bundleId = reference("bundle_id", DraftBundleTable).nullable()
 }
 
 object PromptTemplateTable : UUIDTable("prompt_templates") {
