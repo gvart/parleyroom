@@ -1,0 +1,19 @@
+API.md
+  s_81525541fb2fd4::t_b19534abcfd838 1289-1291,1363-1366,1375-1376,1410-1411,1446,1450-1453,1596,1618
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "fc5571cec8097d3861b87c7ebdb6cd12d615fd3b",
+  "prompts": {},
+  "sessions": {
+    "s_81525541fb2fd4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f74100a-bf7e-4308-bddf-c605ea23cebe",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
