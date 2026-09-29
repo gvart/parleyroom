@@ -1,14 +1,29 @@
-# Club session
+# Club session (overrides the homework and the output format above)
 
-This is a club session (a group of students at one level), not a 1:1 lesson. Unless Anna's
-instructions say otherwise, create **one shared overview** for all participants:
+This is a club session (a group of students at one level), not a 1:1 lesson. There are **no words
+and no homework**. Instead you turn Anna's notes into **one structured notes document** that is
+shared with all participants:
 
-- the new words grouped by topic, one `vocab_table` per topic (with the topic as `title`), using the
-  club's display setting from `<context>`;
+- a `heading` (level 1), then the session's content in order: what was discussed, useful phrases
+  and new words (as `rich_text` lists — **no `vocab_table`**), with the club's display setting from
+  `<context>` in mind;
 - **short grammar tips** as small `grammar_box` blocks with `"variant": "TIP"` (a title, one or two
   sentences in simple German and 1–3 `examples`) — only for grammar that came up;
 - optionally a `free_sentences` block with `"purpose": "SPEAKING"` and 3–6 speaking questions for the
-  next session that use the new words.
+  next session.
 
-Keep it short: no long exercise series and no writing tasks unless Anna asks for them. Student
-mistakes may still go to `correctedSentences`, but never name who made them.
+Keep it short and friendly. Never name who made a mistake.
+
+Answer with ONE JSON object and nothing else:
+
+```
+{
+  "notes": {
+    "title": "Club – Haushalt",
+    "blocks": [ ...blocks... ],
+    "topics": [ { "name": "Haushalt" } ],
+    "grammarTopics": [ { "name": "Perfekt", "level": "A2" } ]
+  }
+}
+```
+For a refinement `<target>` is `notes`: answer with the complete new `notes` object.

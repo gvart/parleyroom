@@ -6,11 +6,14 @@ import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetPasswordRequest
 import com.gvart.parleyroom.admin.transfer.AdminUpdateUserRequest
 import com.gvart.parleyroom.ai.transfer.FillMissingRequest
-import com.gvart.parleyroom.ai.transfer.GenerateRequest
+import com.gvart.parleyroom.ai.transfer.ApplyFillProposalsRequest
+import com.gvart.parleyroom.ai.transfer.DocumentDraftInput
+import com.gvart.parleyroom.ai.transfer.GenerateDraftRequest
+import com.gvart.parleyroom.ai.transfer.PatchDraftItemRequest
+import com.gvart.parleyroom.ai.transfer.RefineDraftRequest
+import com.gvart.parleyroom.ai.transfer.SendDraftRequest
 import com.gvart.parleyroom.ai.transfer.PromptTemplateInput
-import com.gvart.parleyroom.ai.transfer.PublishRequest
 import com.gvart.parleyroom.ai.transfer.RefineRequest
-import com.gvart.parleyroom.ai.transfer.ReviewUpdateRequest
 import com.gvart.parleyroom.availability.transfer.CreateAvailabilityExceptionRequest
 import com.gvart.parleyroom.availability.transfer.ReplaceWeeklyAvailabilityRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
@@ -200,10 +203,13 @@ fun Application.generalConfig() {
         validate<CreateDocumentRequest> { it.validate() }
         validate<UpdateDocumentRequest> { it.validate() }
         validate<DuplicateDocumentRequest> { it.validate() }
-        validate<GenerateRequest> { it.validate() }
+        validate<GenerateDraftRequest> { it.validate() }
+        validate<PatchDraftItemRequest> { it.validate() }
+        validate<RefineDraftRequest> { it.validate() }
+        validate<SendDraftRequest> { it.validate() }
+        validate<ApplyFillProposalsRequest> { it.validate() }
+        validate<DocumentDraftInput> { it.validate() }
         validate<RefineRequest> { it.validate() }
-        validate<ReviewUpdateRequest> { it.validate() }
-        validate<PublishRequest> { it.validate() }
         validate<PromptTemplateInput> { it.validate() }
         validate<FillMissingRequest> { it.validate() }
     }

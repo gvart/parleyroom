@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.ai.service
 
-import com.gvart.parleyroom.ai.transfer.NachbereitungMode
+import com.gvart.parleyroom.ai.data.DraftMode
+import com.gvart.parleyroom.ai.transfer.DraftKind
 import com.gvart.parleyroom.document.service.DocumentBlockValidator
 
 /**
@@ -11,6 +12,7 @@ object Prompts {
 
     const val TASK_GENERATE = "generate"
     const val TASK_REFINE = "refine"
+    const val TASK_REFINE_DOCUMENT = "refine_document"
     const val TASK_FILL = "fill_translations"
     const val TASK_SUGGEST_TAGS = "suggest_tags"
     const val TASK_SENTENCE_FEEDBACK = "sentence_feedback"
@@ -29,39 +31,72 @@ object Prompts {
     private fun resource(name: String): String =
         Prompts::class.java.classLoader.getResource("ai/$name")!!.readText()
 
-    private val nachbereitungSystem: String by lazy {
-        resource("nachbereitung-system.md").replace("{{BLOCK_SCHEMA}}", DocumentBlockValidator.schemaText.trim())
+    private val blockRules: String by lazy {
+        resource("blocks.md").replace("{{BLOCK_SCHEMA}}", DocumentBlockValidator.schemaText.trim())
     }
+    private val draftSystem: String by lazy { resource("nachbereitung-system.md").replace("{{BLOCK_RULES}}", blockRules) }
     private val clubSystem: String by lazy { resource("nachbereitung-club.md") }
+    val documentRefineSystem: String by lazy { resource("document-refine-system.md").replace("{{BLOCK_RULES}}", blockRules) }
     val fillSystem: String by lazy { resource("fill-translations-system.md") }
     val suggestTagsSystem: String by lazy { resource("suggest-tags-system.md") }
     val sentenceFeedbackSystem: String by lazy { resource("sentence-feedback-system.md") }
 
-    fun nachbereitungSystem(mode: NachbereitungMode): String =
-        if (mode == NachbereitungMode.CLUB) nachbereitungSystem + "\n\n" + clubSystem else nachbereitungSystem
+    fun draftSystem(mode: DraftMode): String =
+        if (mode == DraftMode.CLUB) draftSystem + "\n\n" + clubSystem else draftSystem
 
-    fun generate(mode: NachbereitungMode, context: String, notes: String, prompt: String): String = buildString {
+    /** The `<target>` of a refine. */
+    fun targetName(target: DraftTarget): String = when (target) {
+        DraftTarget.BUNDLE -> "bundle"
+        DraftTarget.WORD -> "word"
+        DraftTarget.EXERCISE_DOCUMENT -> "document"
+        DraftTarget.TASK -> "task"
+        DraftTarget.NOTES_DOCUMENT -> "notes"
+    }
+
+    /** The `<produce>` section of a 1:1 generate / whole refine: "words", "homework" or "words, homework". */
+    fun produce(kinds: Set<DraftKind>): String = DraftKind.entries.filter { it in kinds }.joinToString(", ") { it.name.lowercase() }
+
+    fun generate(
+        mode: DraftMode, context: String, notes: String, pastNotes: String, prompt: String,
+        kinds: Set<DraftKind> = DraftKind.entries.toSet(),
+    ): String = buildString {
         section("task", TASK_GENERATE)
         section("mode", mode.name)
+        if (mode == DraftMode.ONE_ON_ONE) section("produce", produce(kinds))
         section("context", context)
-        section("notes", notes)
+        section("notes", notes.ifBlank { "(none)" })
+        section("past_lesson_notes", pastNotes.ifBlank { "(none)" })
         section("teacher_instructions", prompt.ifBlank { "(no special instructions: follow the defaults)" })
         append(exerciseNumbering)
     }
 
-    fun refine(mode: NachbereitungMode, context: String, notes: String, prompt: String, currentOutput: String, instruction: String): String =
-        buildString {
-            section("task", TASK_REFINE)
-            section("mode", mode.name)
-            section("context", context)
-            section("notes", notes)
-            section("teacher_instructions", prompt.ifBlank { "(none)" })
-            section("current_output", currentOutput)
-            section("refine_instruction", instruction)
-            append(exerciseNumbering).append('\n')
-            append("Apply the refine instruction to current_output and keep everything else as it is ")
-            append("(including the teacher's manual edits). Answer with the complete new JSON object.")
-        }
+    fun refine(
+        mode: DraftMode, target: DraftTarget, context: String, notes: String, pastNotes: String, prompt: String,
+        currentOutput: String, instruction: String, kinds: Set<DraftKind> = DraftKind.entries.toSet(),
+    ): String = buildString {
+        section("task", TASK_REFINE)
+        section("mode", mode.name)
+        section("target", targetName(target))
+        if (target == DraftTarget.BUNDLE) section("produce", produce(kinds))
+        section("context", context)
+        section("notes", notes.ifBlank { "(none)" })
+        section("past_lesson_notes", pastNotes.ifBlank { "(none)" })
+        section("teacher_instructions", prompt.ifBlank { "(none)" })
+        section("current_output", currentOutput)
+        section("refine_instruction", instruction)
+        append(exerciseNumbering).append('\n')
+        append("Apply the refine instruction to current_output and keep everything else as it is ")
+        append("(including the teacher's manual edits). Answer with the JSON object for the target only.")
+    }
+
+    fun refineDocument(level: String, libraryWords: String, currentDocument: String, instruction: String): String = buildString {
+        section("task", TASK_REFINE_DOCUMENT)
+        section("level", level)
+        section("library_words", libraryWords.ifBlank { "(none)" })
+        section("current_document", currentDocument)
+        section("refine_instruction", instruction)
+        append(exerciseNumbering)
+    }
 
     fun fill(entries: String, fields: List<String>): String = buildString {
         section("task", TASK_FILL)

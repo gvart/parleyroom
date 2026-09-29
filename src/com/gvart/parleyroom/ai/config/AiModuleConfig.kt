@@ -4,12 +4,14 @@ import com.gvart.parleyroom.ai.llm.FakeLlmGateway
 import com.gvart.parleyroom.ai.llm.KoogAnthropicGateway
 import com.gvart.parleyroom.ai.llm.LlmGateway
 import com.gvart.parleyroom.ai.routing.configureAiRouting
+import com.gvart.parleyroom.ai.routing.configureDraftRouting
+import com.gvart.parleyroom.ai.service.DocumentDraftService
+import com.gvart.parleyroom.ai.service.DraftBundleService
+import com.gvart.parleyroom.ai.service.DraftSendService
 import com.gvart.parleyroom.ai.service.FillTranslationsService
 import com.gvart.parleyroom.ai.service.GenerationJobRunner
 import com.gvart.parleyroom.ai.service.LessonContextService
 import com.gvart.parleyroom.ai.service.LibrarySuggestionService
-import com.gvart.parleyroom.ai.service.NachbereitungPublishService
-import com.gvart.parleyroom.ai.service.NachbereitungService
 import com.gvart.parleyroom.ai.service.PromptTemplateService
 import com.gvart.parleyroom.ai.service.SuggestTagsService
 import io.ktor.server.application.Application
@@ -47,8 +49,9 @@ fun Application.configureAiModule() {
         provide { AiRuntime(aiConfig, gateway) }
         provide { runner }
         provide(LessonContextService::class)
-        provide(NachbereitungService::class)
-        provide(NachbereitungPublishService::class)
+        provide(DraftBundleService::class)
+        provide(DraftSendService::class)
+        provide(DocumentDraftService::class)
         provide(PromptTemplateService::class)
         provide(LibrarySuggestionService::class)
         provide(FillTranslationsService::class)
@@ -56,4 +59,5 @@ fun Application.configureAiModule() {
     }
 
     configureAiRouting()
+    configureDraftRouting()
 }

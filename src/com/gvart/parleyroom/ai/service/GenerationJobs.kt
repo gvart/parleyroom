@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.ai.service
 
+import com.gvart.parleyroom.ai.config.AiRuntime
 import com.gvart.parleyroom.ai.data.GenerationJobStatus
 import com.gvart.parleyroom.ai.data.GenerationJobTable
 import com.gvart.parleyroom.ai.llm.LlmException
@@ -11,6 +12,7 @@ import com.gvart.parleyroom.ai.transfer.JobInput
 import com.gvart.parleyroom.ai.transfer.JobUsage
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
+import com.gvart.parleyroom.common.transfer.exception.ServiceUnavailableException
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.security.UserPrincipal
 import kotlinx.serialization.json.Json
@@ -18,6 +20,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import java.util.UUID
 
@@ -44,10 +47,17 @@ object GenerationJobs {
         return row
     }
 
+    fun get(jobId: UUID, principal: UserPrincipal): GenerationJobResponse = transaction {
+        toResponse(requireReadable(jobId, principal))
+    }
+
     fun requireSucceeded(row: ResultRow) {
         if (row[GenerationJobTable.status] != GenerationJobStatus.SUCCEEDED)
             throw ConflictException("The AI job has not succeeded", code = "AI_JOB_NOT_READY")
     }
+
+    fun requireGateway(ai: AiRuntime): LlmGateway =
+        ai.gateway ?: throw ServiceUnavailableException("AI is not configured on this server", code = "AI_NOT_CONFIGURED")
 
     fun input(row: ResultRow): JobInput = json.decodeFromJsonElement(row[GenerationJobTable.input])
 
@@ -61,6 +71,7 @@ object GenerationJobs {
             materialId = row[GenerationJobTable.materialId]?.value?.toString(),
             parentJobId = row[GenerationJobTable.parentJobId]?.value?.toString(),
             documentId = row[GenerationJobTable.documentId]?.value?.toString(),
+            bundleId = row[GenerationJobTable.bundleId]?.value?.toString(),
             input = input(row),
             result = row[GenerationJobTable.result],
             error = row[GenerationJobTable.errorCode]?.let { JobError(it, row[GenerationJobTable.errorMessage].orEmpty()) },

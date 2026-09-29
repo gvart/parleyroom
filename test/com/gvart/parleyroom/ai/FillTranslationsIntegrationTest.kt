@@ -6,7 +6,10 @@ import com.gvart.parleyroom.ai.data.GenerationJobKind
 import com.gvart.parleyroom.ai.data.GenerationJobStatus
 import com.gvart.parleyroom.ai.llm.FakeLlmGateway
 import com.gvart.parleyroom.ai.transfer.FillMissingRequest
-import com.gvart.parleyroom.ai.transfer.FillTranslationsResult
+import com.gvart.parleyroom.ai.transfer.ApplyFillProposalsRequest
+import com.gvart.parleyroom.ai.transfer.FillProposalDecision
+import com.gvart.parleyroom.ai.transfer.FillProposalStatus
+import com.gvart.parleyroom.ai.transfer.FillProposalsResult
 import com.gvart.parleyroom.ai.transfer.GenerationJobResponse
 import com.gvart.parleyroom.ai.transfer.MissingFieldsResponse
 import com.gvart.parleyroom.common.transfer.ProblemDetail
@@ -16,6 +19,7 @@ import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
@@ -41,7 +45,7 @@ class FillTranslationsIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `missing fields are listed per student and filled without overwriting`() = testApp {
+    fun `missing fields are listed per student and filled only after approval`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
         val haus = client.entry(token, """{ "lemma": "Haus", "article": "DAS", "wordType": "NOUN", "translations": { "en": "house" } }""")
@@ -62,16 +66,44 @@ class FillTranslationsIntegrationTest : IntegrationTest() {
         assertEquals(GenerationJobStatus.SUCCEEDED, job.status)
         assertEquals(GenerationJobKind.FILL_TRANSLATIONS, job.kind)
         assertNull(job.lessonId)
-        val result = Json.decodeFromJsonElement<FillTranslationsResult>(job.result!!)
+        val result = Json.decodeFromJsonElement<FillProposalsResult>(job.result!!)
         assertEquals(listOf(gehen.id), result.skipped)
-        assertEquals(setOf(haus.id, baum.id), result.updated.map { it.entryId }.toSet())
+        assertEquals(FillProposalStatus.PENDING, result.status)
+        assertEquals(
+            setOf(Triple(haus.id, "ru", "Haus (ru)"), Triple(haus.id, "de_explanation", "Erklärung: Haus"), Triple(baum.id, "ru", "Baum (ru)"),
+                Triple(baum.id, "de_explanation", "Erklärung: Baum")),
+            result.proposals.map { Triple(it.entryId, it.field, it.proposedValue) }.toSet(),
+        )
+        assertTrue(result.proposals.all { it.currentValue == null })
+
+        // Nothing is written before the teacher approves.
+        val unchanged = client.get("/api/v1/vocab-entries/${haus.id}") { bearerAuth(token) }.body<VocabEntryResponse>()
+        assertNull(unchanged.translations["ru"])
+        assertNull(unchanged.explanationDe)
+
+        // Apply Haus/ru as proposed and Haus/explanation with the teacher's own text; Baum stays empty.
+        val hausRu = result.proposals.single { it.entryId == haus.id && it.field == "ru" }
+        val hausDe = result.proposals.single { it.entryId == haus.id && it.field == "de_explanation" }
+        val applied = client.post("/api/v1/ai/jobs/${job.id}/fill-proposals/apply") {
+            contentType(ContentType.Application.Json); bearerAuth(token)
+            setBody(ApplyFillProposalsRequest(listOf(FillProposalDecision(hausRu.id), FillProposalDecision(hausDe.id, "Ein Gebäude zum Wohnen."))))
+        }
+        assertEquals(HttpStatusCode.OK, applied.status)
+        val appliedResult = Json.decodeFromJsonElement<FillProposalsResult>(applied.body<GenerationJobResponse>().result!!)
+        assertEquals(FillProposalStatus.APPLIED, appliedResult.status)
+        assertEquals(setOf(hausRu.id, hausDe.id), appliedResult.applied.toSet())
 
         val filled = client.get("/api/v1/vocab-entries/${haus.id}") { bearerAuth(token) }.body<VocabEntryResponse>()
         assertEquals("Haus (ru)", filled.translations["ru"])
         assertEquals("house", filled.translations["en"], "existing fields are kept")
-        assertEquals("Erklärung: Haus", filled.explanationDe)
+        assertEquals("Ein Gebäude zum Wohnen.", filled.explanationDe)
+        val baumAfter = client.get("/api/v1/vocab-entries/${baum.id}") { bearerAuth(token) }.body<VocabEntryResponse>()
+        assertNull(baumAfter.translations["ru"], "unselected proposals are dropped")
         val untouched = client.get("/api/v1/vocab-entries/${gehen.id}") { bearerAuth(token) }.body<VocabEntryResponse>()
         assertEquals("идти", untouched.translations["ru"])
+
+        val again = client.post("/api/v1/ai/jobs/${job.id}/fill-proposals/reject") { bearerAuth(token) }
+        assertEquals("AI_PROPOSALS_RESOLVED", again.body<ProblemDetail>().code)
 
         // Only the words themselves go to the model.
         val sent = FakeLlmGateway.received.single().messages.single().text
@@ -82,6 +114,37 @@ class FillTranslationsIntegrationTest : IntegrationTest() {
         val after = client.get("/api/v1/students/$STUDENT_ID/vocab/missing-fields?fields=ru,de_explanation") { bearerAuth(token) }
             .body<MissingFieldsResponse>()
         assertEquals(0, after.count)
+    }
+
+    @Test
+    fun `rejected proposals change nothing and a field filled meanwhile is not overwritten`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val haus = client.entry(token, """{ "lemma": "Haus", "article": "DAS", "wordType": "NOUN" }""")
+
+        val rejectedJob = client.awaitJob(token, client.fill(token, FillMissingRequest(listOf(haus.id), listOf("ru"))).body<GenerationJobResponse>().id)
+        val rejected = client.post("/api/v1/ai/jobs/${rejectedJob.id}/fill-proposals/reject") { bearerAuth(token) }
+        assertEquals(FillProposalStatus.REJECTED, Json.decodeFromJsonElement<FillProposalsResult>(rejected.body<GenerationJobResponse>().result!!).status)
+        assertNull(client.get("/api/v1/vocab-entries/${haus.id}") { bearerAuth(token) }.body<VocabEntryResponse>().translations["ru"])
+
+        val job = client.awaitJob(token, client.fill(token, FillMissingRequest(listOf(haus.id), listOf("ru"))).body<GenerationJobResponse>().id)
+        val proposal = Json.decodeFromJsonElement<FillProposalsResult>(job.result!!).proposals.single()
+        client.put("/api/v1/vocab-entries/${haus.id}") {
+            contentType(ContentType.Application.Json); bearerAuth(token)
+            setBody("""{ "lemma": "Haus", "article": "DAS", "wordType": "NOUN", "translations": { "ru": "дом" } }""")
+        }
+        val applied = client.post("/api/v1/ai/jobs/${job.id}/fill-proposals/apply") {
+            contentType(ContentType.Application.Json); bearerAuth(token)
+            setBody(ApplyFillProposalsRequest(listOf(FillProposalDecision(proposal.id))))
+        }.body<GenerationJobResponse>()
+        assertEquals(listOf(proposal.id), Json.decodeFromJsonElement<FillProposalsResult>(applied.result!!).stale)
+        assertEquals("дом", client.get("/api/v1/vocab-entries/${haus.id}") { bearerAuth(token) }.body<VocabEntryResponse>().translations["ru"])
+
+        val unknown = client.post("/api/v1/ai/jobs/${job.id}/fill-proposals/apply") {
+            contentType(ContentType.Application.Json); bearerAuth(getStudentToken(client))
+            setBody(ApplyFillProposalsRequest(listOf(FillProposalDecision(proposal.id))))
+        }
+        assertEquals(HttpStatusCode.NotFound, unknown.status, "other users cannot apply")
     }
 
     @Test

@@ -29,7 +29,7 @@ PUT    /api/v1/grammar-topics/order      Body: { level: A1..C2 | null, ids: [uui
 ```
 GrammarTopic: `{ id, teacherId, name, level?, category?, explanation?, examples, position, createdAt }`.
 `position` orders the checklist **within a level** (0-based, per teacher + level). A new grammar
-topic (POST, or created by Nachbereitung publish) is appended at the end of its level; a PUT
+topic (POST, or created by an AI draft Send) is appended at the end of its level; a PUT
 that changes `level` moves it to the end of the new level. Reorder: `ids` must be **exactly** the
 teacher's grammar topics of that `level` (`null` = the ones without level), each once, else 400
 `GRAMMAR_ORDER_INVALID`; positions become the list index.
@@ -179,7 +179,7 @@ VocabEntryInput:
 `translations` is keyed by language code; supported codes are `ru`, `en`
 (`vocabulary/service/VocabDisplay.kt`; others -> 400 `VOCAB_LANGUAGE_UNSUPPORTED`).
 
-**Assign targets** (quick-add below; Nachbereitung publish uses the lesson rule): `studentIds` ∪ current members of `groupId`; if both are empty and `lessonId` is set,
+**Assign targets** (quick-add below; AI draft Send passes the selected recipients explicitly): `studentIds` ∪ current members of `groupId`; if both are empty and `lessonId` is set,
 the lesson's confirmed attendees (`lesson_students`, e.g. a club session's participants). With `lessonId`, the entry is also linked to the lesson's words.
 Students who already have the word are counted in `skipped`.
 
@@ -952,7 +952,8 @@ Per-lesson override of the vocab display setting for words students received in 
 ### Lesson notes (one field)
 `lessons.raw_notes` is the only lesson note: plain text, written by the teacher. The live classroom
 autosaves it with `PATCH /lessons/{id}/content { rawNotes }` (debounced; `""` clears), the recap shows
-it, and the Nachbereitung panel prefills and edits the same value. Students never see it.
+it, and the AI follow-up (`GET …/draft-context`) prefills the same value; AI generation and Send never
+write it. Students never see it.
 Removed with V15: the `lesson_documents` table (rich-text `teacherNotes`, `studentNotes`,
 `teacherWentWell`, `teacherWorkingOn`, `studentReflection`, `studentHardToday`),
 `PUT /lessons/{id}/sync`, `POST /lessons/{id}/reflect` and the `/complete` request body.
@@ -1150,7 +1151,7 @@ Snapshots are taken of the state **before** a change:
 - `SHARE`: on every `share` (the state that was shared);
 - `RESTORE`: on restore, the current state before it is overwritten;
 - `DUPLICATE`: on duplicate, a snapshot of the source;
-- `AI_REFINE`: before an AI refine replaces a Nachbereitung draft (so Anna can restore her version).
+- `AI_REFINE`: before a published AI draft revision replaces the content (so Anna can restore her version).
 Only the newest 30 versions per document are kept.
 
 ### Lessons
@@ -1176,20 +1177,30 @@ edits via `PUT /documents/{id}` (in any lesson status).
 
 ---
 
-## Nachbereitung — AI post-lesson flow (`/api/v1/lessons/{id}/nachbereitung`, `/api/v1/ai`)
+## AI drafts — human in the loop (`/api/v1/ai`, `…/draft-bundles`, `…/draft-context`)
 
-Anna's raw notes + her free-text prompt → server adds context → AI (Koog, default model
-`claude-sonnet-5`) → **validated JSON** → an unshared draft document + a vocab review list →
-Anna reviews / refines → one transactional **publish**. Everything here is **teacher only**
-(the lesson's teacher; admins may read jobs). Students never see jobs or drafts.
+AI is the primary way to create words and homework, but **nothing AI-generated reaches a student
+without the teacher's explicit Send**. The model's output lands in a teacher-only **draft bundle**
+(`ai_draft_bundles` + `ai_draft_items`). Real student rows (`student_vocab`, `assignments` /
+`homework`, `document_students`, lesson links) are created **only** by
+`POST /api/v1/ai/draft-bundles/{id}/send`, so no student-facing endpoint needs to filter anything.
+The same rule covers AI fill-missing (proposals → apply) and AI refine of existing documents (a
+draft revision → publish). Everything here is **teacher only** (admins may read bundles and jobs).
+
+Flow (follow-up page / "New homework" / "Add words"):
+```
+GET  …/draft-context            → form: notes, context, past lessons, open draft
+POST …/draft-bundles            → 202 bundle (job QUEUED) — poll GET /api/v1/ai/draft-bundles/{id}
+PATCH/DELETE items, approve-all, refine (optional)
+POST /api/v1/ai/draft-bundles/{id}/send   → words + homework + document shares, one transaction
+```
 
 ### Configuration
 
 ```
 GET /api/v1/ai/status -> { available: bool }    teacher only (students / admins 403)
 ```
-`available` is false when no provider is configured; the portal then hides AI buttons (generate,
-fill-missing, material tag suggestions).
+`available` is false when no provider is configured; the portal then hides AI buttons.
 
 ```
 ai.provider  = anthropic | fake          AI_PROVIDER        (default anthropic)
@@ -1206,271 +1217,341 @@ offline provider used by all backend tests and the portal E2E (see below).
 ### Generation jobs
 
 Jobs are persisted (`generation_jobs`) and run in-process on coroutines (single backend pod).
-Clients **poll** `GET /api/v1/ai/jobs/{id}` (suggested every 2 s) until `SUCCEEDED` / `FAILED`.
-On startup every `QUEUED` / `RUNNING` job left by a previous process is marked `FAILED` with
-`AI_INTERRUPTED`. A teacher may have at most `max_active_jobs_per_teacher` jobs `QUEUED`+`RUNNING`
-(more → **429 `AI_RATE_LIMITED`**); beyond the global cap jobs wait in `QUEUED`.
+Clients **poll** (suggested every 2 s) until `SUCCEEDED` / `FAILED` — for drafts simply poll the
+bundle (`bundle.job`). On startup every `QUEUED` / `RUNNING` job left by a previous process is
+marked `FAILED` with `AI_INTERRUPTED`. A teacher may have at most `max_active_jobs_per_teacher` jobs
+`QUEUED`+`RUNNING` (more → **429 `AI_RATE_LIMITED`**); beyond the global cap jobs wait in `QUEUED`.
 
 ```
 GenerationJob {
   id, kind: GENERATE | REFINE | FILL_TRANSLATIONS | SUGGEST_TAGS,
   status: QUEUED | RUNNING | SUCCEEDED | FAILED,
-  lessonId: uuid | null,            // null for FILL_TRANSLATIONS / SUGGEST_TAGS
-  materialId: uuid | null,          // SUGGEST_TAGS only (deleting the material deletes its jobs)
-  parentJobId: uuid | null,         // REFINE: the job it refines
-  documentId: uuid | null,          // the draft document (GENERATE/REFINE, set on success)
-  input: {                          // what the teacher sent
-    notes?, prompt?, promptTemplateId?,       // GENERATE
-    instruction?,                             // REFINE
-    entryIds?, fields?                        // FILL_TRANSLATIONS
-  },                                          // SUGGEST_TAGS: {}
-  result: NachbereitungResult | FillTranslationsResult | SuggestTagsResult | null,   // only when SUCCEEDED
-  error: { code, message } | null,  // only when FAILED; message is short English debug text, never model output
-  model: "claude-sonnet-5" | "fake" | null,
-  attempts: 0..2,                   // model calls made (1 + at most one validation retry)
-  usage: { inputTokens, outputTokens } | null,
-  createdAt, startedAt?, finishedAt?, publishedAt?
-}
-```
-Job error codes (in `error.code`, not HTTP statuses): `AI_OUTPUT_INVALID` (still invalid after
-the retry, or cut off at the output limit), `AI_PROVIDER_ERROR` (provider/network error), `AI_RATE_LIMITED` (provider 429),
-`AI_TIMEOUT`, `AI_INTERRUPTED` (server restarted), `DOCUMENT_NOT_FOUND` (REFINE: draft deleted meanwhile),
-`MATERIAL_NOT_FOUND` (SUGGEST_TAGS: material gone before the job ran).
-
-```
-GET  /api/v1/ai/jobs/{id}                  -> GenerationJob          404 AI_JOB_NOT_FOUND (also for other teachers' jobs)
-```
-
-### Panel state
-
-```
-GET /api/v1/lessons/{id}/nachbereitung -> NachbereitungState
-```
-```
-NachbereitungState {
-  lessonId, mode: ONE_ON_ONE | CLUB,
-  aiAvailable: bool,                   // false -> generate/refine return 503 AI_NOT_CONFIGURED
-  notes: string | null,                // lesson.raw_notes (the notes the live classroom saved)
-  prompt: string | null,               // lesson.prompt_used
-  context: ContextSummary,             // what the server will add (shown read-only in the panel)
-  latestJob: GenerationJob | null,     // newest GENERATE/REFINE of this lesson in any status (QUEUED/RUNNING
-                                       // too, so the panel resumes polling after a reload), with result
-  draftDocumentId: uuid | null,        // draft of the latest successful job
-  publishedAt: ISO8601 | null          // last shared publish of this lesson (library-only saves don't count)
-}
-ContextSummary {
-  level: A1..C2 | null,
-  display: { fields, allowTranslationToggle }, displaySource: LESSON | STUDENT | LEVEL_DEFAULT,
-  lessonOverrideActive: bool,          // = displaySource == LESSON
-  knownWordCount,                      // words the context sends (1:1: the student's words from this teacher)
-  coveredGrammar: [{ id, name, level }],
-  grammarGaps: {                       // P8: what the model is told to target (same lists as the prompt)
-    needsWork: [string],               // grammar topic names, checklist order, ≤ 30
-    notCovered: [string],              // ≤ 30
-    needsWorkCount, notCoveredCount    // uncapped totals
+  lessonId: uuid | null,            // lesson-scope drafts only
+  materialId: uuid | null,          // SUGGEST_TAGS only
+  parentJobId: null,                // legacy
+  documentId: uuid | null,          // REFINE of a document (see "Document draft revisions")
+  bundleId: uuid | null,            // GENERATE / REFINE of a draft bundle
+  input: {
+    notes?, prompt?, promptTemplateId?, pastLessonIds?, topicIds?, grammarTopicIds?,   // GENERATE
+    instruction?, itemId?,                                                              // REFINE
+    entryIds?, fields?                                                                  // FILL_TRANSLATIONS
   },
-  libraryTopicCount, libraryGrammarTopicCount,
-  attendees: [{ id, firstName, lastName }],   // who publish targets (1:1: the student; club: confirmed attendees)
-  attendeeCount
+  result: object | null,            // only when SUCCEEDED. GENERATE/REFINE of a bundle: { bundleId, itemCount }
+                                    // (the items are in the bundle); document REFINE: { documentId, draft: true };
+                                    // FILL_TRANSLATIONS: FillProposalsResult; SUGGEST_TAGS: SuggestTagsResult
+  error: { code, message } | null,  // only when FAILED; message is short English debug text, never model output
+  model, attempts: 0..2, usage: { inputTokens, outputTokens } | null,
+  createdAt, startedAt?, finishedAt?, publishedAt? (legacy, always null now)
 }
 ```
-**Mode**: `CLUB` when the lesson has a `groupId` or its type is `SPEAKING_CLUB` / `READING_CLUB`,
-else `ONE_ON_ONE`. A 1:1 lesson needs exactly one CONFIRMED student and a club lesson at least one
-(else 400 `NACHBEREITUNG_NO_ATTENDEES` on generate).
+Job error codes (in `error.code`): `AI_OUTPUT_INVALID` (still invalid after the retry, or cut off
+at the output limit), `AI_PROVIDER_ERROR`, `AI_RATE_LIMITED` (provider 429), `AI_TIMEOUT`,
+`AI_INTERRUPTED`, `DOCUMENT_NOT_FOUND` (document refine: deleted meanwhile),
+`AI_DRAFT_ITEM_NOT_FOUND` (item refine: item deleted meanwhile), `MATERIAL_NOT_FOUND`
+(SUGGEST_TAGS), `INTERNAL_ERROR`.
+
+```
+GET /api/v1/ai/jobs/{id}   -> GenerationJob     404 AI_JOB_NOT_FOUND (also for other teachers' jobs)
+```
+
+### Data model
+
+```
+ai_draft_bundles  id, teacher_id, scope LESSON|STUDENT, lesson_id?, student_id?, mode ONE_ON_ONE|CLUB,
+                  status DRAFT|SENT|DISCARDED, input jsonb (GenerateDraftRequest), send_result jsonb?, sent_at?
+                  at most ONE open (DRAFT) bundle per lesson and per (teacher, student)
+ai_draft_items    id, bundle_id, kind WORD|EXERCISE_DOCUMENT|TASK|NOTES_DOCUMENT, position, approved bool,
+                  payload jsonb (DraftWord | DraftDocument | DraftTask)
+generation_jobs.bundle_id   the bundle a GENERATE / REFINE works on
+document_drafts   document_id (PK), title, blocks, base_revision, job_id, created_by   (one per document)
+```
+Items are JSON rows (not real library rows) so editing a draft never touches the library, and a
+discarded draft leaves nothing behind. Send is the only writer of student-visible data.
+
+**Scope**: `LESSON` = the post-lesson follow-up (recipients = the lesson's CONFIRMED attendees);
+`STUDENT` = out-of-lesson "new homework" / "add words" for one of the teacher's students.
+**Mode**: `CLUB` when the lesson has a `groupId` or its type is not `ONE_ON_ONE` (student scope is
+always `ONE_ON_ONE`). 1:1 → words + homework; club → **a notes document only** (no words, no
+homework). A 1:1 lesson needs exactly one CONFIRMED student and a club at least one (400
+`NACHBEREITUNG_NO_ATTENDEES`).
+
+### Shapes
+
+```
+DraftTopic        { id?: uuid, name, parentName? }     // id = existing library topic; without id Send finds-or-creates by name
+DraftGrammarTopic { id?: uuid, name, level? }          // same for grammar topics
+
+DraftWord {
+  entry: VocabEntryInput,          // lemma, article, plural, wordType, forms, government, translations,
+                                   // explanationDe, exampleSentence, level, synonyms, sourceLessonId
+                                   // (entry.topicIds is ignored — tags live in `topics`)
+  topics: [DraftTopic], grammarTopics: [DraftGrammarTopic],
+  libraryEntryId: uuid | null,     // read-only: library entry with the same lower(lemma)+article+wordType (recomputed on every edit)
+  matched: bool,                   // read-only: = libraryEntryId != null. Send assigns that library entry AS IS and ignores
+                                   // the draft's display fields, so the UI should show them read-only (lemma/article/type stay editable)
+  alreadyAssigned: bool            // read-only: every recipient already has that entry
+}
+DraftDocument {                    // EXERCISE_DOCUMENT (homework) or NOTES_DOCUMENT (club)
+  title, blocks: [Block],          // real document blocks (uuids), see "Documents"; NO vocab_table
+  topics, grammarTopics,
+  level: A1..C2 | null             // level of the document created at Send (default: learner level)
+}
+DraftTask { title, instructions, responseType: TEXT | AUDIO | VIDEO | FILE, topics, grammarTopics }
+
+DraftItem {
+  id, kind: WORD | EXERCISE_DOCUMENT | TASK | NOTES_DOCUMENT, position, approved: bool,
+  word?: DraftWord, document?: DraftDocument, task?: DraftTask,     // the one matching `kind`
+  matchedEntry?: VocabEntry,       // WORD with a match: the library version Send will reuse (show a diff)
+  createdAt, updatedAt
+}
+
+DraftBundle {
+  id, scope, mode, status: DRAFT | SENT | DISCARDED, lessonId?, studentId?,
+  input: GenerateDraftRequest,     // what the teacher asked for
+  job: GenerationJob | null,       // latest GENERATE / REFINE of this bundle (poll while QUEUED/RUNNING)
+  items: [DraftItem],              // order: words, exercise document, tasks, notes document
+  approvedCount,
+  recipients: [{ id, firstName, lastName }],   // Send's default targets (attendees / the student)
+  sendResult: SendResult | null,
+  createdAt, updatedAt, sentAt?
+}
+DraftBundleSummary {
+  id, scope, mode, status, lessonId?, lessonTitle?, lessonScheduledAt?, student?: { id, firstName, lastName },
+  itemCount, approvedCount, job: GenerationJob | null, createdAt, updatedAt, sentAt?
+}
+```
+
+### Context for the form
+
+```
+GET /api/v1/lessons/{id}/draft-context          -> DraftContext   lesson teacher / admin
+GET /api/v1/students/{studentId}/draft-context  -> DraftContext   teacher of the student (403 otherwise)
+```
+```
+DraftContext {
+  scope, mode, aiAvailable, lessonId?, studentId?,
+  notes: string | null,              // lesson scope: lessons.raw_notes (the single notes source)
+  context: ContextSummary,           // what the server adds with the default sources
+  pastLessons: [PastLesson],         // picker: earlier COMPLETED lessons of the same learner(s) with notes, newest first, ≤ 20
+  openBundle: DraftBundleSummary | null
+}
+PastLesson { id, title, scheduledAt, notesPreview }     // notes as plain text, first 300 chars
+ContextSummary {
+  level, display: { fields, allowTranslationToggle }, displaySource: LESSON | STUDENT | LEVEL_DEFAULT,
+  lessonOverrideActive, knownWordCount,
+  coveredGrammar: [{ id, name, level }],
+  grammarGaps: { needsWork: [string], notCovered: [string], needsWorkCount, notCoveredCount },
+  libraryTopicCount, libraryGrammarTopicCount,
+  attendees: [{ id, firstName, lastName }], attendeeCount,
+  goals: [string],                   // 1:1: the student's ACTIVE goals, e.g. "Exam telc (B1) by 2026-12-01"
+  weakWords: [string],               // 1:1: ≤ 30 words with FSRS lapses ≥ 1 or difficulty ≥ 7, worst first
+  pastLessons: [PastLesson],         // past notes the prompt includes (default: the latest one)
+  focusTopics: [string], focusGrammarTopics: [string]
+}
+```
 
 ### Generate
 
 ```
-POST /api/v1/lessons/{id}/nachbereitung/generate
-Body: { notes: string, prompt: string, promptTemplateId?: uuid }  -> 202 GenerationJob (QUEUED)
+POST /api/v1/lessons/{id}/draft-bundles          Body: GenerateDraftRequest -> 202 DraftBundle
+POST /api/v1/students/{studentId}/draft-bundles  Body: GenerateDraftRequest -> 202 DraftBundle
+GenerateDraftRequest {
+  notes?: string,                // ≤ 20 000. Lesson scope default: lessons.raw_notes. Never written to the lesson.
+  prompt: string = "",           // ≤ 10 000
+  promptTemplateId?: uuid,       // the template's text is put BEFORE prompt (404 PROMPT_TEMPLATE_NOT_FOUND)
+  pastLessonIds?: [uuid],        // ≤ 5; null = the latest earlier lesson with notes, [] = none
+  topicIds?: [uuid], grammarTopicIds?: [uuid],  // library focus (≤ 20 each; 404 TOPIC_NOT_FOUND / GRAMMAR_TOPIC_NOT_FOUND)
+  kinds?: [WORDS | HOMEWORK]     // what to generate (non-empty). Lesson scope default: both. Student scope: REQUIRED
+                                 // (400 AI_DRAFT_KINDS_REQUIRED): "Add words" -> [WORDS], "New homework" -> [HOMEWORK].
+                                 // Ignored for clubs (always the notes document). Stored in bundle.input.kinds.
+}
 ```
-`notes` non-blank ≤ 20 000 chars, `prompt` ≤ 10 000 (may be blank: defaults apply) → 400
-`VALIDATION_FAILED`. `promptTemplateId` is only recorded (the client inserts the template text
-into `prompt` itself; 404 `PROMPT_TEMPLATE_NOT_FOUND` if not the teacher's). Nothing is written to
-the lesson until publish. Any lesson status is allowed.
+Creates the open draft of this lesson / student or **reuses it** (its items are replaced when the
+job succeeds; 409 `AI_DRAFT_BUSY` while a job of that draft runs). A new bundle whose job could not
+be queued (429) is removed again. Needs at least one source (notes, past notes, prompt/template or
+focus) → else 400 `AI_DRAFT_NOTHING_TO_GENERATE`. `pastLessonIds` must be earlier COMPLETED
+lessons of the same student (1:1) / group (club) → else 400 `AI_DRAFT_PAST_LESSON_INVALID`.
 
-**Context the server appends** (Anna never types it). Built at request time, stored in nothing but
-the prompt:
-| | 1:1 | Club |
-|---|---|---|
-| level | student level, else lesson level | group level, else lesson level |
-| display setting | lesson override > teacher–student setting > level default | lesson override > level default |
-| known words | lemmas (+article) of the student's words from this teacher, newest 300 | lemmas linked to earlier lessons of the same group (or, without a group, the attendees' common words), newest 300 |
-| covered grammar | grammar topics of the teacher's earlier lessons the student attended (CONFIRMED) | grammar topics of earlier lessons of the group |
-| grammar gaps (P8) | the student's **effective** progress status (see Student progress) for the teacher's grammar topics **of the context level**: names with `NEEDS_WORK` and names with `NOT_COVERED` | per topic, the effective status of every confirmed attendee; a topic is listed when `NEEDS_WORK` for ≥ ⌈n/2⌉ attendees (resp. `NOT_COVERED` for ≥ ⌈n/2⌉) |
-| library | the teacher's topic tree as paths (`Alltag > Haushalt`, ≤ 300) and grammar topic names with level (≤ 300) | same |
+**One job generates what `kinds` asks for** (1:1; only those parts are required and kept):
+- **Words**: lemma + display fields, matched against the teacher's library (`libraryEntryId`), each
+  with AI-suggested topic / grammar tags (matched to library ids by name where possible).
+- **Homework**: exactly **one exercise document** (existing block types, validated by
+  `DocumentBlockValidator` + the strict completeness profile, at least one interactive exercise,
+  no `vocab_table`) and **1–3 tasks** (title, instructions, responseType TEXT/AUDIO/VIDEO/FILE), each
+  with suggested tags.
+- **Club**: one structured **notes document** only.
+All items start **unapproved**.
 
-**Grammar gaps** (brief §2 "homework targets what the student is missing", §5.1): computed at request
-time over the whole history (the current lesson counts if it is already tagged and held), in
-checklist order (position, name), each list capped at 30 names; no level → no gaps. The prompt gets two
-lines under "Grammar the student(s) still need to work on (weak homework results)" and "Grammar of
-level X not covered yet"; the system prompt asks the model to prefer these when Anna's
-instructions leave room (her instructions always win). Only names go to the model — no counts per
-student, no names/ids.
+**Context sent to the model**: level; display setting; known words (≤ 300); 1:1 also weak words and
+goals; covered grammar (earlier completed lessons); grammar gaps (P8, see Student progress);
+focus topics / grammar; the teacher's library topic paths and grammar names (≤ 300); the current
+notes (`<notes>`) and the selected past lessons' notes (`<past_lesson_notes>`, headed by date only).
+**Privacy**: the model never receives names, e-mails or any id (uuids are never sent; tags go by
+name and are mapped back server-side). Covered by a test that captures the fake provider's prompt.
 
-**Privacy**: the model never receives student/teacher names, e-mails or any id (uuids are never
-sent; topics/grammar are sent by name and mapped back server-side). Notes and prompt are sent as
-Anna wrote them (HTML notes are converted to the same plain text as the prefill). Covered by a test that captures the fake provider's prompt.
-
-**System prompt**: `resources/ai/nachbereitung-system.md` (+ `nachbereitung-club.md` for clubs,
-`fill-translations-system.md`), editable without code changes. Rules: correct German (articles,
-plural, capitalisation, verb forms, government), correct RU/EN translations, explanations in simple
-German, Anna's instructions win over defaults, exercise types are not fixed (use `free_form` when
-nothing fits), a club gets one overview (words by topic, short grammar tips as `grammar_box` TIP,
-optional speaking questions as `free_sentences` SPEAKING).
+**System prompts**: `resources/ai/nachbereitung-system.md` (+ `nachbereitung-club.md` for clubs,
+`blocks.md` shared block rules, `document-refine-system.md`, `fill-translations-system.md`),
+editable without code changes.
 
 ### AI output (model → server, never sent to clients as is)
 
-The model must return one JSON object (schema embedded in the system prompt; the server
-validates, it does not trust the model):
 ```json
 {
-  "vocab": [{ "key": "v1", "lemma": "Gießkanne", "article": "DIE", "plural": "Gießkannen",
-              "wordType": "NOUN", "forms": null, "government": null,
-              "translations": { "ru": "лейка", "en": "watering can" },
-              "explanationDe": "…", "exampleSentence": "…", "level": "A2", "synonyms": [],
-              "topicName": "Haushalt" }],
-  "document": { "title": "Haushalt – Wortschatz und Übungen", "blocks": [AiBlock] },
-  "suggestedTopics": [{ "name": "Haushalt", "parentName": "Alltag" }],
-  "suggestedGrammarTopics": [{ "name": "Reflexive Verben", "level": "A2" }],
-  "correctedSentences": [{ "incorrect": "Darum muss du dicht kümmern", "correct": "Darum musst du dich kümmern" }]
+  "words": [{ "lemma": "Gießkanne", "article": "DIE", "plural": "Gießkannen", "wordType": "NOUN",
+              "translations": { "ru": "лейка", "en": "watering can" }, "explanationDe": "…",
+              "exampleSentence": "…", "level": "A2", "synonyms": [],
+              "topics": [{ "name": "Haushalt", "parentName": "Alltag" }], "grammarTopics": [] }],
+  "homework": {
+    "document": { "title": "…", "blocks": [AiBlock], "topics": [..], "grammarTopics": [{ "name": "Perfekt", "level": "A2" }] },
+    "tasks": [{ "title": "Sprachnachricht", "instructions": "…", "responseType": "AUDIO", "topics": [], "grammarTopics": [] }]
+  }
 }
 ```
-`AiBlock` = a document block (schema above) with two differences, so the model never invents
-uuids or library ids: every `id` (block/item/option/question) is any short unique string
-(`"b1"`, `"o2"`; `correctOptionIds` reference them), and `vocab_table` has `vocabKeys: ["v1", …]`
-instead of `rows`. The server then assigns fresh uuids (remapping `correctOptionIds`), turns each
-`vocab_table` into `rows: []` and remembers `vocabTables: [{ blockId, vocabKeys }]`.
+The user message has `<produce>` = `words`, `homework` or `words, homework`; the answer contains
+only those parts (`words` only → at least one word). Club: `{ "notes": { "title", "blocks", "topics", "grammarTopics" } }`. An item refine answers with
+only that part (`{ "words": [one] }`, `{ "homework": { "document" } }`, `{ "homework": { "tasks": [one] } }`,
+`{ "notes" }`). `AiBlock` = a document block with short string ids (`"b1"`, `"o2"`; the server
+assigns uuids and remaps `correctOptionIds`).
 
-**Validation** (all must pass): JSON parses; shape above; `vocab` ≤ 150 items, each a valid
-`VocabEntryInput` (article only for nouns, supported translation languages, unique keys);
-`document.title` non-blank ≤ 255; blocks pass `DocumentBlockValidator.validate` (the published
-schema) **and** `completenessIssues` is empty; every `vocabKeys` entry exists. On failure the
-server retries **once**, sending the model its previous answer plus the list of problems
-(JSON pointers + messages, ≤ 30). Still invalid → job `FAILED` / `AI_OUTPUT_INVALID`.
+**Validation**: JSON parses; ≤ 150 words, each a valid `VocabEntryInput` (article only for nouns,
+languages ru/en), no word twice (dedupe key); tags ≤ 5 each, names 1..255; documents: title
+1..255, schema + completeness, no `vocab_table`, the homework document answerable in the app;
+1–3 tasks with title 1..255 and instructions 1..5000. On failure the server retries **once** with the
+problems (JSON pointers + messages, ≤ 30); still invalid → job `FAILED` / `AI_OUTPUT_INVALID` and
+the draft keeps its previous items.
 
-### Result (server → client)
-
-On success (GENERATE) the server creates an **unshared draft document**: owner = teacher,
-`audience` STUDENT (1:1) or GROUP (club), `level` = context level, `createdFromLessonId` = the
-lesson but **not yet linked** to it (a linked document is readable by confirmed attendees, so the
-link is only made at publish), tags = matched existing topics/grammar. The portal edits it with the normal document
-endpoints (autosave `PUT`, versions).
-```
-NachbereitungResult {
-  documentId: uuid,
-  vocab: [ReviewVocabItem],
-  vocabTables: [{ blockId: uuid, vocabKeys: ["v1", …] }],     // filled with entry ids at publish
-  topics: [{ key: "t1", name, parentName?, existingId: uuid | null }],
-  grammarTopics: [{ key: "g1", name, level?, existingId: uuid | null }],
-  correctedSentences: [{ incorrect, correct }],
-  publishedEntries: { "v1": "entry uuid" }                     // filled by publish
-  savedToLibraryAt: ISO8601 | null                             // last library-only publish (share = false)
-}
-ReviewVocabItem {
-  key: "v1",
-  entry: VocabEntryInput,             // topicIds = matched existing topic ids
-  topicKey: "t1" | null,              // suggested topic (from topics[]) — for new proposals
-  matchedEntryId: uuid | null,        // same lemma+article+wordType already in the library
-  matchedEntry: VocabEntry | null,    // the library version, so the UI can show a diff
-  alreadyAssigned: bool,              // 1:1: the student has it; club: every attendee has it
-  selected: bool                      // UI default: !alreadyAssigned
-}
-```
-Matching: vocab by the library dedupe key (lower(lemma) + article + wordType); topics by name
-(case-insensitive; with `parentName` the one under that parent wins); grammar by name
-(case-insensitive, unique per teacher). Nothing is created in the library before publish.
+### Read, edit, approve
 
 ```
-PUT /api/v1/ai/jobs/{id}/review   Body: { vocab: [ReviewVocabItem] } -> GenerationJob
+GET    /api/v1/ai/draft-bundles?status=DRAFT|SENT|DISCARDED&lessonId=&studentId=   -> [DraftBundleSummary]  newest first, ≤ 100
+GET    /api/v1/ai/draft-bundles/{id}                        -> DraftBundle       404 AI_DRAFT_NOT_FOUND
+PATCH  /api/v1/ai/draft-bundles/{id}/items/{itemId}         -> DraftItem
+       Body: { approved?: bool, word?: DraftWord, document?: DraftDocument, task?: DraftTask }
+DELETE /api/v1/ai/draft-bundles/{id}/items/{itemId}         -> 204
+POST   /api/v1/ai/draft-bundles/{id}/approve-all            -> DraftBundle
+DELETE /api/v1/ai/draft-bundles/{id}                        -> 204  (discard: status DISCARDED, nothing sent)
 ```
-Optional: persists the review table edits (checkboxes, inline edits) into the job result so they
-survive a refresh. Keys must exist in the result (400 `VALIDATION_FAILED`). Job must be SUCCEEDED
-(409 `AI_JOB_NOT_READY`).
+`status=DRAFT` is the dashboard's "Follow-up pending" list. PATCH: any subset; the content field
+(at most one) must match the item's kind (400 `AI_DRAFT_ITEM_KIND_MISMATCH`) and replaces its
+content (tags included). Editing does **not** change `approved`. Word edits re-run the library match.
+Documents are schema-validated (400 `DOCUMENT_BLOCK_INVALID` with pointer), may not contain
+`vocab_table`, and the exercise document must keep an interactive exercise (400
+`AI_DRAFT_DOCUMENT_INVALID`). Tag ids must be the teacher's (404 `TOPIC_NOT_FOUND` /
+`GRAMMAR_TOPIC_NOT_FOUND`). Writes on a SENT / DISCARDED draft → 409 `AI_DRAFT_NOT_EDITABLE`; while
+a job of the draft runs → 409 `AI_DRAFT_BUSY`. Unknown item → 404 `AI_DRAFT_ITEM_NOT_FOUND`.
 
 ### Refine
 
 ```
-POST /api/v1/ai/jobs/{id}/refine   Body: { instruction: string (1..4 000) } -> 202 GenerationJob (kind REFINE)
+POST /api/v1/ai/draft-bundles/{id}/refine   Body: { instruction (1..4 000), itemId?: uuid, kinds?: [WORDS | HOMEWORK] } -> 202 DraftBundle
 ```
-`{id}` = a SUCCEEDED GENERATE/REFINE job of the teacher (409 `AI_JOB_NOT_READY` otherwise).
-Input to the model: the same context, the previous result's vocab/topics, the **current** draft
-blocks (read at run time, converted back to AiBlock form incl. `vocabKeys`, so Anna's manual edits
-are kept) and the instruction. Output schema as above. On success the draft is updated through the
-normal document update path: snapshot (reason `AI_REFINE`), blocks + title replaced, `revision`
-+1 (an open editor gets 409 `DOCUMENT_CONFLICT` on its next autosave and reloads). Words that already had
-vocab_table rows (published, or added by hand) keep their rows; the refined result's
-`publishedEntries` (key → entry id) carries them over. The new job's
-`result` is the full new result (same `documentId`).
+Queues a REFINE job. The model gets the same context plus the **current** items (the teacher's
+edits included) in the output format, and the instruction. With `itemId` only that item is sent and
+replaced (other items keep their approval). Without it the draft's `kinds` are regenerated
+(`kinds` in the body, default `bundle.input.kinds`): only items of those kinds are sent and
+replaced, the others stay untouched (club: the notes document). `kinds` together with `itemId` → 400
+`VALIDATION_FAILED`. Refined items
+are **unapproved**. 409 `AI_DRAFT_EMPTY` (nothing generated yet), `AI_DRAFT_BUSY`,
+`AI_DRAFT_NOT_EDITABLE`.
 
-**Exercise numbers**: the app numbers exercise blocks "Übung 1, 2, …" when rendering (never stored):
-only the types `gap_fill, multiple_choice, error_correction, free_sentences, writing_task, reading,
-media, exam_part, free_form` count, in document order (`heading, rich_text, vocab_table,
-grammar_box` do not). Generate and refine prompts tell the model this (`Prompts.EXERCISE_BLOCK_TYPES`,
-kept identical to the portal's `isExercise`), so it writes no numbers into titles and maps "Mach
-Übung 2 leichter" to the right block.
+**Exercise numbers**: the app numbers exercise blocks "Übung 1, 2, …" (types `gap_fill,
+multiple_choice, error_correction, free_sentences, writing_task, reading, media, exam_part,
+free_form`, kept identical to the portal's `isExercise`); prompts tell the model so "Mach Übung 2
+leichter" maps to the right block.
 
-### Publish
+### Send
 
 ```
-POST /api/v1/lessons/{id}/nachbereitung/publish -> 200 PublishResult
+POST /api/v1/ai/draft-bundles/{id}/send  -> 200 SendResult
 Body: {
-  jobId: uuid,                                // a SUCCEEDED GENERATE/REFINE job of this lesson
-  vocab: [{ key, matchedEntryId?: uuid, entry?: VocabEntryInput, topicKeys?: ["t1"] }],   // only selected items
-  topics: [{ key, name, parentId?: uuid, parentKey?: "t2" }],       // accepted NEW topic proposals
-  grammarTopics: [{ key, name, level? }],                          // accepted NEW grammar proposals
-  topicIds?: [uuid], grammarTopicIds?: [uuid],                      // existing ones to tag lesson + document with
-  correctedSentences?: [{ incorrect, correct }],                    // replaces the lesson's list when present
-  share: true                                                       // false = library-only save (see below)
+  studentIds?: [uuid],     // subset of bundle.recipients (deselect attendees); default all
+  dueDate?: "YYYY-MM-DD",  // default today + 7
+  title?: string,          // assignment title; default the exercise document's title, else the first task's
+  instructions?: string    // assignment instructions
 }
 ```
-One transaction:
-1. **Topics / grammar**: find-or-create each accepted proposal (topic: same name under the same
-   parent; grammar: same name). `topicKeys` / `parentKey` resolve to them.
-2. **Vocab**: `matchedEntryId` → use that library entry as is (must be the teacher's, 404
-   `VOCAB_ENTRY_NOT_FOUND`); else `entry` (required, validated like `POST /vocab-entries`) →
-   find-or-create by the dedupe key, `sourceLessonId` = lesson, topics = `entry.topicIds` + resolved
-   `topicKeys`. With `share: true` each entry is assigned to the student (1:1) or to every CONFIRMED
-   attendee (club) with `lessonId` = lesson, and linked to the lesson's words. Existing assignments are
-   skipped. With `share: false` entries are only found or created in the library: not assigned and not
-   linked to the lesson.
-3. **Lesson content**: `raw_notes` / `prompt_used` = the job's notes/prompt; topics / grammar =
-   current ∪ `topicIds` ∪ created; words = current ∪ published (`share: true` only); corrected
-   sentences replaced if sent.
-4. **Document**: each `vocabTables[].blockId` still present in the draft gets `rows` for its
-   published keys (unpublished keys dropped, existing rows kept, no duplicates); tags = the lesson's
-   topics/grammar; saved via the update path (revision +1). With `share: true` it is linked to the lesson
-   and shared with the student (1:1) or the group (club with a group) or the confirmed attendees
-   (club without group); `share: false` leaves it unlinked, in the library only.
-5. `share: true` sets `publishedAt` on the job (and so `NachbereitungState.publishedAt`); `share: false`
-   leaves it untouched and sets `result.savedToLibraryAt` instead, so the panel still offers
-   "Veröffentlichen" (not "Erneut veröffentlichen") after a library-only save.
+**One transaction**, only the **approved** items (row lock on the bundle):
+1. **Words** → `quickAdd` for each: find-or-create by the dedupe key (an existing library entry is
+   reused **as is**), topics = the word's topic tags (resolved: existing id, else find-or-create by
+   name, under `parentName` if that topic exists), `sourceLessonId` = the lesson; assigned to the
+   recipients (existing assignments skipped) and linked to the lesson's words.
+2. **Documents** (exercise and/or notes) → created in the teacher's library (level, tags: the
+   document's tags; the exercise document also gets the approved tasks' tags and the approved words'
+   grammar tags), `createdFromLessonId` = the lesson, **shared with each recipient**
+   (`document_students`), and linked to the lesson only when no attendee was deselected.
+3. **Homework** → if an exercise document and/or tasks are approved: ONE assignment (`lessonId` =
+   the lesson, due date, recipients) with items `DOCUMENT` (the exercise document) + one `TASK` per
+   approved task. The usual `HOMEWORK_ASSIGNED` notification goes to every recipient.
+4. **Lesson** (lesson scope) → the approved items' topic / grammar tags are added to the lesson's
+   tags. **`lessons.raw_notes` is never written.**
+5. The bundle becomes `SENT` with `sendResult`; unapproved items stay in it (not sent).
 
-**Library-only** (`share: false`, "Nur in Bibliothek speichern"): words, topics and the filled, tagged
-document land in the teacher's library and the lesson content (notes, prompt, tags) is updated, but no
-student gets words (no student-vocab rows, nothing in their practice queue) and the document is not
-linked to the lesson or shared. Publishing the same job later with `share: true` assigns and shares
-everything; find-or-create reuses what the library-only save created.
-
-**Idempotent**: publishing the same (or a newer) job again creates nothing twice — find-or-create
-everywhere, existing assignments/links/shares/rows are skipped; it simply re-applies edits.
-
+**Idempotent**: a repeated Send (also a concurrent one) returns the stored `sendResult` without
+doing anything. **Atomic**: any failure (e.g. 400 `STUDENT_NOT_LINKED`, an invalid document)
+rolls everything back and the bundle stays `DRAFT`.
 ```
-PublishResult {
-  documentId, revision,
-  wordsCreated, wordsReused,            // library entries created / found (matchedEntryId or dedupe key)
-  wordsAssigned,                        // new student-vocab rows (already assigned ones are not counted)
-  recipients: int, recipientIds: [uuid],   // who received words / the document (0 / [] when share = false)
-  topicsCreated, grammarTopicsCreated,
-  vocab: [{ key, entryId, reused: bool }],
-  topics: [{ key, id, reused: bool }], grammarTopics: [{ key, id, reused: bool }],
-  publishedAt,                          // time of this publish
-  shared: bool                          // = request.share; false: nothing assigned, linked or shared
+SendResult {
+  bundleId, sentAt, recipientIds: [uuid],
+  words: [{ itemId, entryId, reused }], wordsAssigned,     // new student_vocab rows
+  exerciseDocumentId?, notesDocumentId?, assignmentId?,
+  sentItemIds: [uuid], skippedItemIds: [uuid],             // approved / not approved
+  topicsCreated, grammarTopicsCreated
 }
 ```
-Errors: 404 `AI_JOB_NOT_FOUND`, 409 `AI_JOB_NOT_READY`, 400 `AI_JOB_LESSON_MISMATCH` (job of
-another lesson), 400 `VALIDATION_FAILED` (unknown `key`, `entry` missing without `matchedEntryId`),
-404 `DOCUMENT_NOT_FOUND` (draft deleted), plus the vocab/topic codes above.
+Errors: 400 `AI_DRAFT_NOTHING_APPROVED`, `AI_DRAFT_RECIPIENT_INVALID` (not a recipient),
+`AI_DRAFT_NO_RECIPIENTS`, `VALIDATION_FAILED` (dueDate), 409 `AI_DRAFT_NOT_EDITABLE` (discarded),
+`AI_DRAFT_BUSY`, 404 `AI_DRAFT_NOT_FOUND`.
+
+### Document draft revisions (AI refine of an existing document)
+
+```
+POST   /api/v1/documents/{id}/ai-refine       Body: { instruction (1..4 000) } -> 202 GenerationJob (kind REFINE, documentId)
+GET    /api/v1/documents/{id}/draft           -> DocumentDraft     404 DOCUMENT_DRAFT_NOT_FOUND
+PUT    /api/v1/documents/{id}/draft           Body: { title, blocks } -> DocumentDraft   (manual edits, schema-validated)
+POST   /api/v1/documents/{id}/draft/publish   -> DocumentResponse
+DELETE /api/v1/documents/{id}/draft           -> 204
+DocumentDraft { documentId, title, blocks, baseRevision, currentRevision, jobId?, createdAt, updatedAt }
+```
+Owner only (others 403/404 like the document endpoints). **Mechanism**: the refined title + blocks go
+to `document_drafts` (one per document; a second refine builds on the pending draft and replaces it),
+never to `documents`, so students keep reading the published content — shared or not. **Publish** =
+snapshot of the current content (version reason `AI_REFINE`), then the draft replaces title + blocks
+through the normal update path (full validation, `revision` +1, tags kept), and the draft is deleted.
+Publish overwrites edits made to the document after the draft was made (`currentRevision !=
+baseRevision` tells the UI to warn); the snapshot keeps them. Vocab tables are sent to the model as
+keys (`w1: die Gießkanne`) and mapped back to their library rows.
+
+### Fill missing translations — proposals (brief §5.3)
+
+```
+POST /api/v1/vocab-entries/fill-missing   Body: { entryIds: [uuid] (1..100), fields: [ru | en | de_explanation] (≥1) }
+-> 202 GenerationJob (kind FILL_TRANSLATIONS)
+```
+Entries must be the teacher's (404 `VOCAB_ENTRY_NOT_FOUND`). The model gets only lemma, article,
+plural, wordType, forms, government, example sentence and level. The job **only proposes** values
+for empty fields — `vocab_entries` are shared by every student who has the word, so nothing is
+written until the teacher applies:
+```
+FillProposalsResult {
+  proposals: [{ id: "p1", entryId, lemma, field: ru | en | de_explanation, currentValue: null, proposedValue }],
+  skipped: [entryId],                     // nothing missing, no model call
+  status: PENDING | APPLIED | REJECTED,
+  applied: [proposalId], stale: [proposalId],   // after apply
+  resolvedAt?
+}
+POST /api/v1/ai/jobs/{id}/fill-proposals/apply    Body: { proposals: [{ id, value?: string }] } -> GenerationJob
+POST /api/v1/ai/jobs/{id}/fill-proposals/reject   -> GenerationJob
+```
+Apply writes the selected proposals (`value` = the teacher's own text instead of the proposal);
+a field that is no longer empty is **not overwritten** and reported in `stale`; unselected proposals
+are dropped. Both resolve the job (a second apply/reject → 409 `AI_PROPOSALS_RESOLVED`); unknown ids
+→ 400 `VALIDATION_FAILED`; not a FILL_TRANSLATIONS SUCCEEDED job → 409 `AI_JOB_NOT_READY`.
+
+```
+GET /api/v1/students/{studentId}/vocab/missing-fields?fields=ru,en,de_explanation -> { count, entryIds: [uuid] }
+```
+Teacher only (the student must be theirs, else 403). Entries of the calling teacher's library assigned
+to that student that lack **any** of the requested fields. Feed `entryIds` (in chunks of 100) to `fill-missing`.
 
 ### Prompt templates (`/api/v1/prompt-templates`, teacher only)
 
@@ -1484,75 +1565,68 @@ DELETE /api/v1/prompt-templates/{id}   -> 204
 `PromptTemplateInput = { name (1..100), text (1..10 000), level?: A1..C2, lessonType?: ONE_ON_ONE | CLUB }`;
 `PromptTemplate` = input + `id, teacherId, createdAt, updatedAt`. Name unique per teacher
 (case-insensitive, 409 `PROMPT_TEMPLATE_DUPLICATE`); other teachers' → 404 `PROMPT_TEMPLATE_NOT_FOUND`.
+Pass `promptTemplateId` to generate: the server puts the template's text before `prompt`.
 
 ### Library suggestions (no AI)
 
 ```
 GET /api/v1/lessons/{id}/library-suggestions -> LibrarySuggestions
 ```
-Tags considered: the lesson's topics/grammar ∪ `existingId`s of the latest successful job's
-suggestions. Matches the teacher's documents (excluding ones created from this lesson) and
+Tags considered: the lesson's topics/grammar ∪ the library ids among the tags of the lesson's latest
+(not discarded) draft. Matches the teacher's documents (excluding ones created from this lesson) and
 materials whose level equals the context level (or is null) and that share ≥ 1 tag, ranked by
 overlap, ≤ 10 each.
 ```
 LibrarySuggestions {
   level,
-  summary: [{ kind: TOPIC | GRAMMAR, id, name, level?, documentCount, materialCount }],  // "3 B1 exercises on …"
+  summary: [{ kind: TOPIC | GRAMMAR, id, name, level?, documentCount, materialCount }],
   documents: [{ document: DocumentSummary, matchedTopicIds, matchedGrammarTopicIds }],
   materials: [{ material: MaterialResponse, matchedTopicIds, matchedGrammarTopicIds }]
 }
 ```
-Suggestions only — nothing is assigned.
-
-### Fill missing translations (brief §5.3)
-
-```
-POST /api/v1/vocab-entries/fill-missing   Body: { entryIds: [uuid] (1..100), fields: [ru | en | de_explanation] (≥1) }
--> 202 GenerationJob (kind FILL_TRANSLATIONS)
-```
-Entries must be the teacher's (404 `VOCAB_ENTRY_NOT_FOUND`). The model gets only lemma, article,
-plural, wordType, forms, government, example sentence and level. Only **empty** fields are filled
-(never overwritten); entries with nothing missing are skipped without a model call.
-`FillTranslationsResult = { updated: [{ entryId, filled: ["ru", …] }], skipped: [entryId] }`.
-
-```
-GET /api/v1/students/{studentId}/vocab/missing-fields?fields=ru,en,de_explanation -> { count, entryIds: [uuid] }
-```
-Teacher only (the student must be theirs, else 403). Entries of the calling teacher's library assigned
-to that student that lack **any** of the requested fields (`fields` required, same codes as the display
-setting, 400 `VOCAB_DISPLAY_FIELD_UNSUPPORTED`). Feed `entryIds` (in chunks of 100) to `fill-missing`.
 
 ### Fake provider (`ai.provider = fake`)
 
-Deterministic, offline, no key. Derives output from the notes: each non-empty note line without
-digits becomes a vocab item (`der/die/das X` → noun with that article; a capitalised single word →
-noun, article by suffix; a lowercase word ending in `-en` → verb; else phrase), translations
-`ru`/`en` = `"<lemma> (ru)"` / `"<lemma> (en)"`, explanation `"Erklärung: <lemma>"`. Document: a
-heading, a `vocab_table` with all keys, a `gap_fill` and a `multiple_choice` on the first word,
-and (club) a `grammar_box` TIP + `free_sentences` SPEAKING. Suggests topic `Alltag` and grammar
-`Perfekt`. Output always passes the strict profile. Test markers in the prompt/instruction:
-`[fake:invalid-once]` (first answer invalid → retry succeeds), `[fake:invalid]` (always invalid →
-`AI_OUTPUT_INVALID`), `[fake:error]` (→ `AI_PROVIDER_ERROR`), `[fake:rate-limit]` (→ `AI_RATE_LIMITED`),
-`[fake:delay=<ms>]`, `[fake:empty-once]` (first answer empty → retry succeeds), `[fake:truncated]`
-(answer cut off at the output limit → `AI_OUTPUT_INVALID` without a retry). Tests can read the prompts it received (in-process only, no endpoint).
+Deterministic, offline, no key. Words come from the notes (or, when `<notes>` is empty, from the
+past lesson notes): each non-empty line without digits becomes a word (`der/die/das X` → noun with
+that article; a capitalised single word → noun, article by suffix; a lowercase word ending in `-en`
+→ verb; else phrase), translations `"<lemma> (ru)"` / `"<lemma> (en)"`, explanation
+`"Erklärung: <lemma>"`, topic tag `Alltag`. Homework: a document (heading, `gap_fill`,
+`multiple_choice` on the first noun; tags Alltag / Perfekt) and 2 tasks (AUDIO "Sprachnachricht",
+TEXT "Kurzer Text"); only the parts in `<produce>`. Club: a notes document (heading, word list, `grammar_box` TIP,
+`free_sentences` SPEAKING). Refine: a word gets `exampleSentence = "Überarbeitet: <instruction>"`, a
+task gets `" (überarbeitet: <instruction>)"` appended, a document gets a rich-text block
+"Überarbeitet: …" and " (überarbeitet)" in its title. Test markers in the prompt: `[fake:invalid-once]`,
+`[fake:invalid]`, `[fake:error]`, `[fake:rate-limit]`, `[fake:delay=<ms>]`, `[fake:empty-once]`,
+`[fake:truncated]`.
 
 ### Error codes
 
 | Code | Status | Notes |
 |---|---|---|
-| `AI_NOT_CONFIGURED` | 503 | no provider key; starting a job (generate, refine, fill-missing) |
+| `AI_NOT_CONFIGURED` | 503 | no provider key; starting a job |
 | `AI_RATE_LIMITED` | 429 | too many active jobs for this teacher (also a job error code for provider 429) |
 | `AI_JOB_NOT_FOUND` | 404 | |
-| `AI_JOB_NOT_READY` | 409 | refine/review/publish on a job that is not SUCCEEDED (or wrong kind) |
-| `AI_JOB_LESSON_MISMATCH` | 400 | publish with a job of another lesson |
-| `AI_OUTPUT_INVALID` | – | job `error.code`: model output still invalid after one retry |
-| `AI_PROVIDER_ERROR` | – | job `error.code`: provider/network error |
-| `AI_TIMEOUT` | – | job `error.code`: exceeded `ai.job_timeout` |
-| `AI_INTERRUPTED` | – | job `error.code`: server restarted while the job was queued/running |
-| `INTERNAL_ERROR` | – | job `error.code`: unexpected server error while running the job |
+| `AI_JOB_NOT_READY` | 409 | proposals of a job that is not a SUCCEEDED fill-missing job |
+| `AI_PROPOSALS_RESOLVED` | 409 | proposals already applied / rejected |
+| `AI_DRAFT_NOT_FOUND` | 404 | also for other teachers' drafts |
+| `AI_DRAFT_ITEM_NOT_FOUND` | 404 | |
+| `AI_DRAFT_NOT_EDITABLE` | 409 | write on a SENT / DISCARDED draft |
+| `AI_DRAFT_BUSY` | 409 | a job of this draft is QUEUED / RUNNING |
+| `AI_DRAFT_EMPTY` | 409 | refine before anything was generated |
+| `AI_DRAFT_NOTHING_TO_GENERATE` | 400 | no notes, past notes, prompt or focus |
+| `AI_DRAFT_KINDS_REQUIRED` | 400 | student-scope generate without `kinds` |
+| `AI_DRAFT_PAST_LESSON_INVALID` | 400 | not an earlier COMPLETED lesson of the learner(s) |
+| `AI_DRAFT_ITEM_KIND_MISMATCH` | 400 | PATCH content does not match the item kind |
+| `AI_DRAFT_DOCUMENT_INVALID` | 400 | vocab_table in a draft document / homework document without an interactive exercise |
+| `AI_DRAFT_NOTHING_APPROVED` | 400 | Send without approved items |
+| `AI_DRAFT_RECIPIENT_INVALID` | 400 | `studentIds` not among the draft's recipients |
+| `AI_DRAFT_NO_RECIPIENTS` | 400 | empty recipient selection |
+| `DOCUMENT_DRAFT_NOT_FOUND` | 404 | the document has no draft revision |
 | `NACHBEREITUNG_NO_ATTENDEES` | 400 | 1:1 without exactly one confirmed student / club without attendees |
 | `PROMPT_TEMPLATE_NOT_FOUND` | 404 | |
 | `PROMPT_TEMPLATE_DUPLICATE` | 409 | |
+| `AI_OUTPUT_INVALID`, `AI_PROVIDER_ERROR`, `AI_TIMEOUT`, `AI_INTERRUPTED`, `INTERNAL_ERROR` | – | job `error.code` only |
 
 ---
 
@@ -1630,7 +1704,7 @@ boundary):
 - `LINK`, `AUDIO`, `VIDEO` and any other file type: name only (links are never fetched).
 
 Plus the teacher's library as names (topic paths `Alltag > Haushalt` and grammar names with level,
-≤ 300 each, same as Nachbereitung) so the model reuses existing names. **Privacy**: nothing else
+≤ 300 each, same as AI drafts) so the model reuses existing names. **Privacy**: nothing else
 from the database is sent — no student or teacher names, e-mails, ids, lesson data or share
 targets. The extracted text is sent as uploaded (it may contain whatever Anna put in the file).
 Covered by a test that captures the fake provider's prompt.
@@ -1652,7 +1726,7 @@ SuggestTagsResult {
   source: { kind: PDF | DOCX | TEXT | NAME_ONLY, chars: int, truncated: bool }   // what was sent
 }
 ```
-Matching = the Nachbereitung matching (topics by name case-insensitive, `parentName` breaks ties;
+Matching = the AI draft matching (topics by name case-insensitive, `parentName` breaks ties;
 grammar by name). **Fake provider**: level = first `A1`..`C2` token in the text (else null); skill
 `READING` for PDF/DOCX/TEXT, else null; topics = library topics whose name occurs in the text,
 else `Alltag`; grammar = library grammar names occurring in the text, else `Perfekt`; the
@@ -1710,7 +1784,7 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 | Progress / goals | `GOAL_NOT_FOUND`, `GOAL_INVALID` (+ `pointer`), `GRAMMAR_OVERRIDE_INVALID` (+ `pointer`) |
 | Vocabulary | `VOCABULARY_WORD_NOT_FOUND`, `VOCAB_ENTRY_NOT_FOUND`, `VOCAB_ENTRY_DUPLICATE`, `VOCAB_LANGUAGE_UNSUPPORTED`, `VOCAB_DISPLAY_FIELD_UNSUPPORTED`, `TEACHER_STUDENT_NOT_FOUND`; practice: `PRACTICE_STUDENT_ONLY` (403), `PRACTICE_MODE_INVALID`, `NOT_A_NOUN`, `SENTENCE_EMPTY`, `SENTENCE_TOO_LONG`, `PRACTICE_SENTENCE_LIMIT` (429, + `resetsAt`) |
 | Documents | `DOCUMENT_NOT_FOUND`, `DOCUMENT_INVALID_BLOCK` (+ `pointer`), `DOCUMENT_DUPLICATE_ID` (+ `pointer`), `DOCUMENT_TOO_LARGE`, `DOCUMENT_CONFLICT` (409, + `currentRevision`), `DOCUMENT_VERSION_NOT_FOUND` |
-| AI / Nachbereitung | `AI_NOT_CONFIGURED` (503), `AI_RATE_LIMITED` (429), `AI_JOB_NOT_FOUND`, `AI_JOB_NOT_READY`, `AI_JOB_LESSON_MISMATCH`, `NACHBEREITUNG_NO_ATTENDEES`, `PROMPT_TEMPLATE_NOT_FOUND`, `PROMPT_TEMPLATE_DUPLICATE`; job-only: `AI_OUTPUT_INVALID`, `AI_PROVIDER_ERROR`, `AI_TIMEOUT`, `AI_INTERRUPTED` |
+| AI drafts | `AI_NOT_CONFIGURED` (503), `AI_RATE_LIMITED` (429), `AI_JOB_NOT_FOUND`, `AI_JOB_NOT_READY`, `AI_PROPOSALS_RESOLVED`, `AI_DRAFT_*` (see AI drafts), `DOCUMENT_DRAFT_NOT_FOUND`, `NACHBEREITUNG_NO_ATTENDEES`, `PROMPT_TEMPLATE_NOT_FOUND`, `PROMPT_TEMPLATE_DUPLICATE`; job-only: `AI_OUTPUT_INVALID`, `AI_PROVIDER_ERROR`, `AI_TIMEOUT`, `AI_INTERRUPTED` |
 | Library / groups | `TOPIC_NOT_FOUND`, `TOPIC_DUPLICATE`, `TOPIC_HAS_CHILDREN`, `TOPIC_HAS_CONTENT` (409, + `usage`), `TOPIC_CYCLE`, `TOPIC_MERGE_INVALID`, `GRAMMAR_TOPIC_NOT_FOUND`, `GRAMMAR_TOPIC_DUPLICATE`, `GRAMMAR_TOPIC_HAS_CONTENT` (409, + `usage`), `GRAMMAR_TOPIC_MERGE_INVALID`, `GRAMMAR_ORDER_INVALID`, `GROUP_NOT_FOUND`, `STUDENT_NOT_LINKED` |
 
 ---
