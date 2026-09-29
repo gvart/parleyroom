@@ -131,6 +131,8 @@ class LessonService(
                 students = emptyList(),
                 maxParticipants = null,
                 pendingReschedule = null,
+                cancelReason = null,
+                cancelledBy = null,
                 topics = emptyList(),
                 grammarTopics = emptyList(),
                 vocab = emptyList(),

@@ -232,7 +232,7 @@ fun Application.configureLessonRouting() {
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Cancel lesson"
-                        description = "Cancels a lesson. Any participant (teacher, student, or admin) can cancel. Cannot cancel completed or already cancelled lessons."
+                        description = "Cancels a lesson. Any participant (teacher, student, or admin) can cancel. Cannot cancel completed or already cancelled lessons. The optional reason is stored and returned as cancelReason (with cancelledBy, cancelledAt). The other participants' LESSON_CANCELLED notification is held back for the 10-second un-cancel window."
                         requestBody {
                             schema = jsonSchema<CancelLessonRequest>()
                         }
@@ -260,6 +260,44 @@ fun Application.configureLessonRouting() {
                             }
                             HttpStatusCode.NotFound {
                                 description = "Lesson not found"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
+                        }
+                    }
+
+                    post("/uncancel") {
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
+
+                        val result = lifecycleService.uncancelLesson(id, principal)
+                        call.respond(HttpStatusCode.OK, result)
+                    }.describe {
+                        summary = "Undo lesson cancellation"
+                        description = "Restores a cancelled lesson to the status it had before. Only whoever cancelled it, within 10 seconds of cancelling. The held-back LESSON_CANCELLED notifications are dropped."
+                        parameters {
+                            path("id") {
+                                description = "UUID of the lesson"
+                            }
+                        }
+                        responses {
+                            HttpStatusCode.OK {
+                                description = "Lesson restored"
+                                schema = jsonSchema<LessonResponse>()
+                            }
+                            HttpStatusCode.BadRequest {
+                                description = "LESSON_INVALID_STATE: lesson is not cancelled"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
+                            HttpStatusCode.Forbidden {
+                                description = "Caller did not cancel this lesson"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
+                            HttpStatusCode.NotFound {
+                                description = "Lesson not found"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
+                            HttpStatusCode.Conflict {
+                                description = "UNCANCEL_WINDOW_EXPIRED, or AVAILABILITY_OVERLAP if the slot was booked meanwhile"
                                 schema = jsonSchema<ProblemDetail>()
                             }
                         }

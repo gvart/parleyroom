@@ -16,6 +16,9 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import com.gvart.parleyroom.lesson.transfer.CancelLessonRequest
 import com.gvart.parleyroom.lesson.transfer.PendingRescheduleResponse
+import com.gvart.parleyroom.common.transfer.ProblemDetail
+import com.gvart.parleyroom.notification.data.NotificationType
+import com.gvart.parleyroom.notification.transfer.NotificationPageResponse
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
 import io.ktor.client.request.patch
@@ -1398,6 +1401,154 @@ class LessonIntegrationTest : IntegrationTest() {
         }
 
         assertEquals(HttpStatusCode.Forbidden, response.status)
+    }
+
+    private suspend fun cancel(client: HttpClient, token: String, lessonId: String, reason: String? = null) =
+        client.post("/api/v1/lessons/$lessonId/cancel") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(token)
+            setBody(CancelLessonRequest(reason = reason))
+        }
+
+    private suspend fun cancelNotificationsFor(client: HttpClient, token: String, lessonId: String) =
+        client.get("/api/v1/notifications") { bearerAuth(token) }
+            .body<NotificationPageResponse>().notifications
+            .filter { it.type == NotificationType.LESSON_CANCELLED && it.referenceId == lessonId }
+
+    /** Moves a cancellation (and its held-back notifications) past the undo window. */
+    private fun expireUndoWindow(lessonId: String) = transaction {
+        exec("UPDATE lessons SET cancelled_at = cancelled_at - INTERVAL '1 minute' WHERE id = '$lessonId'")
+        exec("UPDATE notifications SET deliver_after = now() - INTERVAL '1 second' WHERE reference_id = '$lessonId'")
+    }
+
+    @Test
+    fun `cancel reason is stored and returned to participants`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        val cancelled = cancel(client, teacherToken, lesson.id, reason = "Sick").body<LessonResponse>()
+
+        assertEquals("Sick", cancelled.cancelReason)
+        assertEquals(TEACHER_ID, cancelled.cancelledBy)
+        assertNotNull(cancelled.cancelledAt)
+
+        val seenByStudent = client.get("/api/v1/lessons/${lesson.id}") { bearerAuth(studentToken) }.body<LessonResponse>()
+        assertEquals(LessonStatus.CANCELLED, seenByStudent.status)
+        assertEquals("Sick", seenByStudent.cancelReason)
+        assertEquals(TEACHER_ID, seenByStudent.cancelledBy)
+    }
+
+    @Test
+    fun `cancel notification is held back until the undo window passes`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        cancel(client, teacherToken, lesson.id)
+
+        assertTrue(cancelNotificationsFor(client, studentToken, lesson.id).isEmpty())
+
+        expireUndoWindow(lesson.id)
+
+        assertEquals(1, cancelNotificationsFor(client, studentToken, lesson.id).size)
+    }
+
+    @Test
+    fun `canceller can undo within the window`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        cancel(client, teacherToken, lesson.id, reason = "Oops")
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/uncancel") { bearerAuth(teacherToken) }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val restored = response.body<LessonResponse>()
+        assertEquals(LessonStatus.CONFIRMED, restored.status)
+        assertNull(restored.cancelReason)
+        assertNull(restored.cancelledBy)
+        assertNull(restored.cancelledAt)
+
+        // The held-back notification is dropped, not delivered later.
+        expireUndoWindow(lesson.id)
+        assertTrue(cancelNotificationsFor(client, studentToken, lesson.id).isEmpty())
+    }
+
+    @Test
+    fun `undo restores the status the lesson had before`() = testApp {
+        val client = createJsonClient(this)
+        val studentToken = getStudentToken(client)
+
+        val request = createLesson(client, studentToken).body<LessonResponse>()
+        assertEquals(LessonStatus.REQUEST, request.status)
+        cancel(client, studentToken, request.id)
+
+        val restored = client.post("/api/v1/lessons/${request.id}/uncancel") { bearerAuth(studentToken) }
+            .body<LessonResponse>()
+
+        assertEquals(LessonStatus.REQUEST, restored.status)
+    }
+
+    @Test
+    fun `undo fails after the window`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        cancel(client, teacherToken, lesson.id)
+        expireUndoWindow(lesson.id)
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/uncancel") { bearerAuth(teacherToken) }
+
+        assertEquals(HttpStatusCode.Conflict, response.status)
+        assertEquals("UNCANCEL_WINDOW_EXPIRED", response.body<ProblemDetail>().code)
+    }
+
+    @Test
+    fun `only the canceller can undo`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        cancel(client, teacherToken, lesson.id)
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/uncancel") { bearerAuth(studentToken) }
+
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+    }
+
+    @Test
+    fun `undo of a lesson that is not cancelled is rejected`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/uncancel") { bearerAuth(teacherToken) }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertEquals("LESSON_INVALID_STATE", response.body<ProblemDetail>().code)
+    }
+
+    @Test
+    fun `undo is refused when the slot was booked meanwhile`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        cancel(client, teacherToken, lesson.id)
+        assertEquals(HttpStatusCode.Created, createLesson(client, teacherToken).status)
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/uncancel") { bearerAuth(teacherToken) }
+
+        assertEquals(HttpStatusCode.Conflict, response.status)
+        assertEquals("AVAILABILITY_OVERLAP", response.body<ProblemDetail>().code)
     }
 
     @Test
