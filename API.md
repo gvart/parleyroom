@@ -229,9 +229,9 @@ StudentVocab:
 
 ### Display setting (translation / explanation)
 
-`fields` ⊆ `ru | en | de_explanation` (combinable) + `allowTranslationToggle`.
+`fields` ⊆ `ru | uk | en | de_explanation` (combinable) + `allowTranslationToggle`.
 Resolution per word: **lesson override** (applies to the student's words whose `lessonId` is that lesson) > **teacher–student
-setting** > **level default** (no level / A1–A2: `["ru"]`, toggle off; B1+: `["de_explanation"]`,
+setting** > **level default** (no level / A1–A2: `[<the student's nativeLanguage>]` (ru when unset), toggle off; B1+: `["de_explanation"]`,
 toggle on).
 
 For **students**, `translations` / `explanationDe` only contain allowed fields; when the toggle is
@@ -243,9 +243,10 @@ GET    /api/v1/students/{studentId}/vocab-settings?teacherId=   (teacher, the st
 PUT    /api/v1/students/{studentId}/vocab-settings   Body: { fields, allowTranslationToggle }   teacher only
 DELETE /api/v1/students/{studentId}/vocab-settings   back to the level default                  teacher only
 PUT    /api/v1/students/{studentId}/level            Body: { level }                            teacher only
--> { studentId, teacherId, level?, fields, allowTranslationToggle, isDefault }
+PUT    /api/v1/students/{studentId}/native-language  Body: { nativeLanguage }                   teacher only
+-> { studentId, teacherId, level?, nativeLanguage?, fields, allowTranslationToggle, isDefault }
 ```
-Unknown fields -> 400 `VOCAB_DISPLAY_FIELD_UNSUPPORTED`. `teacherId` is only needed by a student/admin
+Unknown fields -> 400 `VOCAB_DISPLAY_FIELD_UNSUPPORTED`; a native language outside `ru | uk | en` -> 400 `UNSUPPORTED_NATIVE_LANGUAGE`. `teacherId` is only needed by a student/admin
 when the student has several teachers (defaults to the earliest).
 
 ### Practice: flashcards, article trainer, own sentences (brief §5.7)
@@ -399,8 +400,7 @@ Sentence:
 - **Synchronous** call through the shared provider abstraction (no job), timeout
   `practice.sentence_timeout` = 30 s. Model output is validated JSON with one retry (as for jobs).
 - `explanation`: one short line in simple German. `explanationTranslation` only when the student's
-  level is A1/A2 (or unset) **and** the word's display setting contains a translation language
-  (the first one in `fields`); otherwise null.
+  level is A1/A2 (or unset), in the student's `nativeLanguage`; otherwise null.
 - `usesWord`: the sentence uses the target word (any inflected form). `isCorrect` concerns grammar
   and spelling; `corrected` equals the input when correct.
 - Validation: trimmed, 1..300 chars → 400 `SENTENCE_EMPTY` / `SENTENCE_TOO_LONG`.
@@ -1346,8 +1346,17 @@ ContextSummary {
   goals: [string],                   // 1:1: the student's ACTIVE goals, e.g. "Exam telc (B1) by 2026-12-01"
   weakWords: [string],               // 1:1: ≤ 30 words with FSRS lapses ≥ 1 or difficulty ≥ 7, worst first
   pastLessons: [PastLesson],         // past notes the prompt includes (default: the latest one)
-  focusTopics: [string], focusGrammarTopics: [string]
+  focusTopics: [string], focusGrammarTopics: [string],
+  translationLanguages: [string]     // recipients' native languages (club: the union, ru|uk|en order); ru when none set
 }
+```
+
+**Native languages.** Every generated word must have a translation in each of
+`translationLanguages` (validated; missing ones are fed back as `/words/i/translations` issues and
+retried). A1–A2 homework instructions are German plus a short hint in those languages; B1+ German
+only. A club's notes document glosses new words in the attendees' languages.
+
+```
 ```
 
 ### Generate
@@ -1775,7 +1784,7 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 |---|---|
 | Auth | `INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `INVALID_REFRESH_TOKEN`, `REFRESH_TOKEN_EXPIRED` |
 | Telegram | `TELEGRAM_NOT_LINKED`, `TELEGRAM_ALREADY_LINKED`, `TELEGRAM_NOT_CONFIGURED`, `TELEGRAM_AUTH_INVALID`, `TELEGRAM_AUTH_EXPIRED` |
-| Users | `USER_NOT_FOUND`, `TEACHER_NOT_FOUND`, `EMAIL_ALREADY_EXISTS`, `UNSUPPORTED_LOCALE`, `AVATAR_INVALID`, `AVATAR_NOT_FOUND`, `ADMIN_SELF_ACTION` |
+| Users | `USER_NOT_FOUND`, `TEACHER_NOT_FOUND`, `EMAIL_ALREADY_EXISTS`, `UNSUPPORTED_LOCALE`, `UNSUPPORTED_NATIVE_LANGUAGE`, `NATIVE_LANGUAGE_STUDENTS_ONLY`, `AVATAR_INVALID`, `AVATAR_NOT_FOUND`, `ADMIN_SELF_ACTION` |
 | Registration / reset | `INVITATION_ALREADY_PENDING`, `REGISTRATION_LINK_INVALID`, `REGISTRATION_LINK_EXPIRED`, `REGISTRATION_LINK_USED`, `RESET_TOKEN_INVALID`, `RESET_TOKEN_EXPIRED`, `RESET_TOKEN_USED` |
 | Lessons | `LESSON_NOT_FOUND`, `LESSON_INVALID_STATE`, `LESSON_FULL`, `LESSON_NOT_JOINABLE`, `LESSON_ALREADY_STARTED`, `LESSON_NOT_STARTED`, `ALREADY_PARTICIPANT`, `STUDENT_NOT_IN_LESSON`, `JOIN_REQUEST_ALREADY_PENDING`, `JOIN_REQUEST_NOT_FOUND`, `RESCHEDULE_ALREADY_PENDING`, `RESCHEDULE_NOT_FOUND`, `VIDEO_ROOM_NOT_READY` |
 | Availability | `AVAILABILITY_SLOT_BLOCKED`, `AVAILABILITY_MIN_NOTICE`, `AVAILABILITY_OVERLAP`, `AVAILABILITY_BUFFER_CONFLICT`, `AVAILABILITY_EXCEPTION_NOT_FOUND` |
@@ -1789,11 +1798,26 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 
 ---
 
-## User locale
+## User locale and native language
 
-`UserResponse.locale` is the user's interface language (`en` | `de`, default `en`).
-Set it with `PATCH /api/v1/users/me { "locale": "de" }` (admins: `PATCH /api/v1/admin/users/{id}`).
+`UserResponse` (also `UserListResponse.users[]`, `AdminUserResponse`) carries:
+- `locale`: the interface language, `ru` | `de` | `en`. New users get `ru`; existing users kept theirs.
+- `localeConfirmedAt`: ISO timestamp or null. Null means the client shows the one-time language
+  picker; saving it sends `PATCH /api/v1/users/me { "locale": "…", "confirmLocale": true }`, which
+  sets it to now.
+- `nativeLanguage`: `ru` | `uk` | `en` — the language a student gets translations and explanations
+  in (vocab display default, sentence feedback, AI drafts). Students default to `ru`; teachers and
+  admins usually have null.
+
+Set `locale` with `PATCH /api/v1/users/me { "locale": "de" }` (admins: `PATCH /api/v1/admin/users/{id}`).
 Unsupported values return 400 `UNSUPPORTED_LOCALE`.
+
+`nativeLanguage` is set on invite (`POST /api/v1/registration/invite { email, role: STUDENT, nativeLanguage? }`,
+default `ru`, applied on registration) or admin create (`POST /api/v1/admin/users`, students default `ru`), and
+changed by the student (`PATCH /api/v1/users/me { "nativeLanguage": "uk" }`), their teacher
+(`PUT /api/v1/students/{studentId}/native-language`) or an admin (`PATCH /api/v1/admin/users/{id}`).
+Values outside `ru | uk | en` return 400 `UNSUPPORTED_NATIVE_LANGUAGE`. A teacher or admin sending
+`nativeLanguage` on `PATCH /api/v1/users/me` gets 400 `NATIVE_LANGUAGE_STUDENTS_ONLY` (nothing is updated).
 
 `PATCH /api/v1/users/me` does **not** change `level`: sending it returns 400 `VALIDATION_FAILED`
 ("level can't be changed here; it is set by the teacher") and nothing is updated. Teachers set a
