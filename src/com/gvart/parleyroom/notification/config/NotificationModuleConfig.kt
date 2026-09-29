@@ -15,7 +15,12 @@ fun Application.configureNotificationModule() {
         provide(NotificationService::class)
     }
 
-    monitor.subscribe(ApplicationStopped) { sseManager.shutdown() }
+    val notificationService: NotificationService by dependencies
+
+    monitor.subscribe(ApplicationStopped) {
+        sseManager.shutdown()
+        notificationService.shutdown()
+    }
 
     configureNotificationRouting()
 }

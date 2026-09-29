@@ -36,4 +36,5 @@ object NotificationTable : UUIDTable("notifications") {
     val referenceId = javaUUID("reference_id").nullable()
     val viewed = bool("viewed").default(false)
     val createdAt = timestampWithTimeZone("created_at")
+    val deliverAfter = timestampWithTimeZone("deliver_after").nullable()
 }

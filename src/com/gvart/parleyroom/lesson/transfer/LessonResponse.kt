@@ -30,6 +30,11 @@ data class LessonResponse(
     @Serializable(with = OffsetDateTimeSerializer::class)
     val startedAt: OffsetDateTime? = null,
     val pendingReschedule: PendingRescheduleResponse? = null,
+    /** Set while status is CANCELLED. */
+    val cancelReason: String? = null,
+    val cancelledBy: String? = null,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val cancelledAt: OffsetDateTime? = null,
     /** Block documents linked to the lesson; clients refetch one when its updatedAt changes. */
     val documents: List<LessonDocumentRef> = emptyList(),
     /** The teacher's plain-text lesson notes (live classroom + Nachbereitung). Teacher-only: null for students. */

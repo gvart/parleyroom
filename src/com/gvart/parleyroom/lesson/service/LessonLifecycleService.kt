@@ -29,6 +29,7 @@ import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.video.service.VideoTokenService
 import com.gvart.parleyroom.video.transfer.VideoAccess
 import com.gvart.parleyroom.video.transfer.VideoParticipantRole
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
@@ -51,6 +52,9 @@ class LessonLifecycleService(
     companion object {
         /** Students may dial in this many minutes before scheduledAt; teachers have no such gate. */
         const val EARLY_JOIN_MINUTES: Long = 10
+
+        /** How long the canceller can undo a cancellation; the other side is notified after it. */
+        val UNCANCEL_WINDOW: Duration = Duration.ofSeconds(10)
     }
 
     fun createLesson(request: CreateLessonRequest, principal: UserPrincipal): LessonResponse = transaction {
@@ -244,6 +248,9 @@ class LessonLifecycleService(
 
         LessonTable.update({ LessonTable.id eq lessonId }) {
             it[status] = LessonStatus.CANCELLED
+            it[cancelReason] = request.reason
+            it[cancelledBy] = principal.id
+            it[cancelledAt] = now
             it[updatedBy] = principal.id
             it[updatedAt] = now
         }
@@ -263,6 +270,7 @@ class LessonLifecycleService(
                 actorId = principal.id,
                 type = NotificationType.LESSON_CANCELLED,
                 referenceId = lessonId,
+                deliverAfter = now.plus(UNCANCEL_WINDOW),
             )
         }
 
@@ -271,6 +279,60 @@ class LessonLifecycleService(
             .single()
             .let { support.toResponse(it, principal) }
         response to currentStatus
+    }
+
+    /**
+     * Undoes a cancellation: only the canceller, only within [UNCANCEL_WINDOW]. Restores the
+     * status the lesson had before and drops the not-yet-delivered cancel notifications.
+     * Reschedule proposals resolved by the cancel stay resolved.
+     */
+    fun uncancelLesson(lessonId: UUID, principal: UserPrincipal): LessonResponse = transaction {
+        val lesson = support.findLessonForUpdate(lessonId)
+
+        if (lesson[LessonTable.status] != LessonStatus.CANCELLED)
+            throw BadRequestException("Only cancelled lessons can be restored", code = "LESSON_INVALID_STATE")
+
+        if (lesson[LessonTable.cancelledBy]?.value != principal.id)
+            throw ForbiddenException("Only whoever cancelled the lesson can undo it")
+
+        val now = OffsetDateTime.now()
+        val cancelledAt = lesson[LessonTable.cancelledAt]
+        if (cancelledAt == null || cancelledAt.plus(UNCANCEL_WINDOW).isBefore(now))
+            throw ConflictException("The undo window for this cancellation has passed", code = "UNCANCEL_WINDOW_EXPIRED")
+
+        val restoredStatus = LessonEventTable.selectAll()
+            .where { (LessonEventTable.lessonId eq lessonId) and (LessonEventTable.eventType eq LessonEventType.LESSON_CANCELLED) }
+            .orderBy(LessonEventTable.createdAt, SortOrder.DESC)
+            .first()[LessonEventTable.oldStatus]!!
+
+        // The slot may have been booked while the lesson was cancelled.
+        support.checkTeacherOverlap(
+            lesson[LessonTable.teacherId].value,
+            lesson[LessonTable.scheduledAt],
+            lesson[LessonTable.durationMinutes],
+            excludeLessonId = lessonId,
+        )
+
+        LessonTable.update({ LessonTable.id eq lessonId }) {
+            it[status] = restoredStatus
+            it[cancelReason] = null
+            it[cancelledBy] = null
+            it[LessonTable.cancelledAt] = null
+            it[updatedBy] = principal.id
+            it[updatedAt] = now
+        }
+
+        LessonEventTable.insert {
+            it[LessonEventTable.lessonId] = lessonId
+            it[eventType] = LessonEventType.STATUS_CHANGE
+            it[actorId] = principal.id
+            it[oldStatus] = LessonStatus.CANCELLED
+            it[newStatus] = restoredStatus
+        }
+
+        notificationService.withdrawUndelivered(lessonId, NotificationType.LESSON_CANCELLED)
+
+        support.toResponse(support.findLesson(lessonId), principal)
     }
 
     fun startLesson(lessonId: UUID, principal: UserPrincipal): StartLessonResponse = transaction {
