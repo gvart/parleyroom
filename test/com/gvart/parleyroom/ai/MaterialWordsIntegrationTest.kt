@@ -4,6 +4,7 @@ import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.ai.data.DraftItemKind
 import com.gvart.parleyroom.ai.data.GenerationJobStatus
 import com.gvart.parleyroom.ai.llm.FakeLlmGateway
+import com.gvart.parleyroom.ai.service.MaterialSources
 import com.gvart.parleyroom.ai.service.Prompts
 import com.gvart.parleyroom.ai.transfer.DraftBundleResponse
 import com.gvart.parleyroom.ai.transfer.DraftContextResponse
@@ -202,6 +203,40 @@ class MaterialWordsIntegrationTest : IntegrationTest() {
             setBody(GenerateDraftRequest(kinds = listOf(DraftKind.WORDS), materialIds = listOf(text)))
         }
         assertEquals(HttpStatusCode.Forbidden, notMine.status)
+    }
+
+    @Test
+    fun `a word-list PDF alone is enough to extract words`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        // One word per line (a typical vocabulary sheet), no notes, no past lessons, no prompt.
+        val list = client.material(token, "Wortliste", "wortliste.pdf", "application/pdf", pdf("Gießkanne", "Teekanne", "gießen"))
+        val bundle = client.wordsFrom(token, list)
+        assertEquals(listOf("Gießkanne", "Teekanne", "gießen"), bundle.lemmas())
+    }
+
+    @Test
+    fun `a material with nothing new gives an empty draft, not a failed job`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        seedStudentVocab(STUDENT, "Garten")
+        val known = client.material(token, "Bekannt", "bekannt.txt", "text/plain", "Im Garten.".toByteArray())
+        val bundle = client.wordsFrom(token, known)
+        assertEquals(emptyList(), bundle.items)
+        assertEquals(listOf("Bekannt"), bundle.materials.map { it.name })
+    }
+
+    @Test
+    fun `many materials stay within the word limit`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val ids = (1..5).map { m ->
+            val nouns = (1..45).joinToString("\n") { "Ding${('a' + m)}${"x".repeat(it)}" }
+            client.material(token, "Liste $m", "liste$m.txt", "text/plain", nouns.toByteArray())
+        }
+        val bundle = client.wordsFrom(token, *ids.toTypedArray())
+        assertEquals(MaterialSources.MAX_WORDS, bundle.lemmas().size)
+        assertTrue("at most ${MaterialSources.MAX_WORDS} in total" in Prompts.section(lastPrompt(), "material_rules")!!)
     }
 
     @Test

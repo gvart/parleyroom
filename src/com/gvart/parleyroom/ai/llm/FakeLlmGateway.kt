@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.ai.llm
 
 import com.gvart.parleyroom.ai.service.LessonContext
+import com.gvart.parleyroom.ai.service.MaterialSources
 import com.gvart.parleyroom.ai.service.Prompts
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
@@ -371,13 +372,15 @@ class FakeLlmGateway : LlmGateway {
 
         /**
          * Words from `<materials>`: per material (headed "Material n: …") at most 40 distinct nouns
-         * (capitalised, not sentence-initial) and verbs (`-en`), skipping [exclude] (lower-case lemmas).
+         * (capitalised; not the first word of a sentence, but a word-list line counts) and verbs (`-en`),
+         * skipping [exclude] (lower-case lemmas), at most [MaterialSources.MAX_WORDS] in total.
          */
         fun vocabFromMaterials(materials: String, exclude: Set<String>, level: String?, languages: List<String> = emptyList()): List<JsonObject> {
             val seen = exclude.toMutableSet()
             return materials.split(MATERIAL_HEADER).drop(1).flatMap { block ->
                 block.substringAfter('\n').split(SENTENCE_END).flatMap { sentence ->
-                    sentence.split(NON_LETTER).filter { it.isNotEmpty() }.drop(1).mapNotNull { token ->
+                    val tokens = sentence.split(NON_LETTER).filter { it.isNotEmpty() }
+                    tokens.drop(if (tokens.size >= 3) 1 else 0).mapNotNull { token ->
                         when {
                             token.length < 4 || token.lowercase() in STOP_WORDS -> null
                             token.first().isUpperCase() -> Triple(token, "NOUN", articleFor(token))
@@ -385,8 +388,8 @@ class FakeLlmGateway : LlmGateway {
                             else -> null
                         }
                     }
-                }.filter { seen.add(it.first.lowercase()) }.take(40)
-            }.map { (lemma, type, article) -> word(lemma, type, article, level, languages) }
+                }.filter { seen.add(it.first.lowercase()) }.take(MaterialSources.WORDS_PER_MATERIAL)
+            }.take(MaterialSources.MAX_WORDS).map { (lemma, type, article) -> word(lemma, type, article, level, languages) }
         }
 
         /** Lower-case lemmas of `<exclude_words>` ("die Gießkanne" -> "gießkanne"). */

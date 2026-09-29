@@ -73,6 +73,8 @@ class MaterialSources(private val storage: StorageService) {
     companion object {
         const val MAX_MATERIALS = 5
         const val WORDS_PER_MATERIAL = 40
+        /** All materials together: ~110 output tokens per word keeps the answer within the draft's output budget. */
+        const val MAX_WORDS = 100
         /** All materials of one generation together (~15k input tokens). */
         const val TOTAL_CHARS = 60_000
         const val MAX_EXCLUDE_WORDS = 2_000

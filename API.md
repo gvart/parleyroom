@@ -1398,7 +1398,9 @@ teacher's uploaded worksheets / articles become the **main source**. Rules:
   characters** (short ones keep their text, long ones split the rest). A cut material is marked in
   the prompt and in `bundle.materials[].truncated`.
 - The model gets the text in `<materials>` (headed by the material names) and is asked for the most
-  useful words for the student's level, **≤ 40 per material** (≤ 150 in total). Words the student
+  useful words for the student's level, **≤ 40 per material** (≤ 100 in total, to fit the output
+  budget). Nothing new in the materials is a valid answer: the job SUCCEEDS with no items (the
+  "at least one word" rule does not apply to material drafts). Words the student
   already has (any `student_vocab` row, by lemma or library entry) are listed in `<exclude_words>`
   and **dropped server-side** after generation too. Library matching and native-language
   translations work as for every draft. With materials `pastLessonIds: null` means **none** (past

@@ -148,7 +148,7 @@ class DraftBundleService(
 
     /** Materials a student draft extracts words from, and the words the student already has. */
     private data class MaterialContext(val sources: List<MaterialSource>, val studentWords: StudentWords) {
-        val maxWords get() = minOf(MaterialSources.WORDS_PER_MATERIAL * sources.size, AiOutputParser.MAX_WORDS)
+        val maxWords get() = minOf(MaterialSources.WORDS_PER_MATERIAL * sources.size, MaterialSources.MAX_WORDS)
 
         fun prompt() = MaterialPrompt(MaterialSources.promptText(sources), maxWords, studentWords.display)
 
@@ -221,7 +221,8 @@ class DraftBundleService(
         val request = Prompts.generate(ctx.mode, ctx.toPromptText(), HtmlText.toPlainText(notes), ctx.pastNotesText(), instructions, kinds,
             materials?.prompt())
         val completion = GenerationJobs.completeValidated(gateway, Prompts.draftSystem(ctx.mode), request, MAX_TOKENS) {
-            AiOutputParser.parseDraft(it, target, kinds, ctx.translationLanguages)
+            // A material may hold nothing new for the student: no words is a valid answer then.
+            AiOutputParser.parseDraft(it, target, kinds, ctx.translationLanguages, requireWords = materials == null)
         }
         return transaction {
             val count = if (lockDraft(bundleId)) {
@@ -286,7 +287,7 @@ class DraftBundleService(
         val request = Prompts.refine(refine.ctx.mode, refine.target, refine.ctx.toPromptText(), HtmlText.toPlainText(refine.notes),
             refine.ctx.pastNotesText(), refine.prompt, refine.current, instruction, kinds, materials?.prompt())
         val completion = GenerationJobs.completeValidated(gateway, Prompts.draftSystem(refine.ctx.mode), request, MAX_TOKENS) {
-            AiOutputParser.parseDraft(it, refine.target, kinds, refine.ctx.translationLanguages)
+            AiOutputParser.parseDraft(it, refine.target, kinds, refine.ctx.translationLanguages, requireWords = materials == null)
         }
         return transaction {
             val ctx = refine.ctx
