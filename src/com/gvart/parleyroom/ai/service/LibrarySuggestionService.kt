@@ -1,8 +1,8 @@
 package com.gvart.parleyroom.ai.service
 
-import com.gvart.parleyroom.ai.data.GenerationJobKind
-import com.gvart.parleyroom.ai.data.GenerationJobStatus
-import com.gvart.parleyroom.ai.data.GenerationJobTable
+import com.gvart.parleyroom.ai.data.DraftBundleTable
+import com.gvart.parleyroom.ai.data.DraftItemTable
+import com.gvart.parleyroom.ai.data.DraftStatus
 import com.gvart.parleyroom.ai.transfer.LibrarySuggestions
 import com.gvart.parleyroom.ai.transfer.SuggestedDocument
 import com.gvart.parleyroom.ai.transfer.SuggestedMaterial
@@ -33,6 +33,10 @@ import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import java.util.UUID
 
 /** "You already have 3 B1 exercises on …": library documents and materials matching a lesson. No AI. */
@@ -112,18 +116,19 @@ class LibrarySuggestionService(
     }
 
     /** Existing library ids the latest successful Nachbereitung job matched. */
+    /** Library ids among the tags of the lesson's latest (not discarded) AI draft. */
     private fun latestSuggestions(lessonId: UUID, grammar: Boolean): List<UUID> {
-        val row = GenerationJobTable.selectAll()
-            .where {
-                (GenerationJobTable.lessonId eq lessonId) and (GenerationJobTable.status eq GenerationJobStatus.SUCCEEDED) and
-                        (GenerationJobTable.kind neq GenerationJobKind.FILL_TRANSLATIONS)
-            }
-            .orderBy(GenerationJobTable.createdAt, SortOrder.DESC)
+        val bundleId = DraftBundleTable.select(DraftBundleTable.id)
+            .where { (DraftBundleTable.lessonId eq lessonId) and (DraftBundleTable.status neq DraftStatus.DISCARDED) }
+            .orderBy(DraftBundleTable.createdAt, SortOrder.DESC)
             .limit(1)
-            .singleOrNull() ?: return emptyList()
-        val result = NachbereitungService.nachbereitungResult(row)
-        val ids = if (grammar) result.grammarTopics.mapNotNull { it.existingId } else result.topics.mapNotNull { it.existingId }
-        return ids.map(UUID::fromString)
+            .singleOrNull()?.get(DraftBundleTable.id)?.value ?: return emptyList()
+        val tags = DraftItemTable.selectAll().where { DraftItemTable.bundleId eq bundleId }.flatMap { row ->
+            val payload = row[DraftItemTable.payload].jsonObject
+            (payload[if (grammar) "grammarTopics" else "topics"] as? JsonArray).orEmpty()
+                .mapNotNull { ((it as? JsonObject)?.get("id") as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+        }
+        return tags.distinct().mapNotNull { runCatching { UUID.fromString(it) }.getOrNull() }
     }
 
     private fun tagMap(pairs: List<Pair<UUID, UUID>>): Map<UUID, Set<UUID>> =

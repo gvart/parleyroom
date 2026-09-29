@@ -18,7 +18,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Deterministic offline provider for tests and E2E. Reads the tagged sections of the prompt and
- * answers with plausible output derived from the notes that always passes validation.
+ * answers with plausible output derived from the notes (or, without notes, the past lesson notes)
+ * that always passes validation.
  *
  * Markers anywhere in the first user message: `[fake:invalid-once]`, `[fake:invalid]`,
  * `[fake:error]`, `[fake:rate-limit]`, `[fake:delay=<ms>]`, `[fake:empty-once]`, `[fake:truncated]`;
@@ -42,13 +43,14 @@ class FakeLlmGateway : LlmGateway {
         if ("[fake:rate-limit]" in request) throw LlmException("AI_RATE_LIMITED", "The AI provider is rate limiting requests")
         // Output budget spent before any text (e.g. on thinking): an empty answer.
         if ("[fake:empty-once]" in request && messages.size == 1) return LlmReply("", inputTokens = 1, outputTokens = maxTokens)
-        if ("[fake:truncated]" in request) return LlmReply("""{"vocab": [{"key": "v1", "lemma": "Hau""", inputTokens = 1, outputTokens = maxTokens, truncated = true)
+        if ("[fake:truncated]" in request) return LlmReply("""{"words": [{"lemma": "Hau""", inputTokens = 1, outputTokens = maxTokens, truncated = true)
         val invalid = "[fake:invalid]" in request || ("[fake:invalid-once]" in request && !isRetry)
 
         val output = when (Prompts.section(request, "task")) {
             Prompts.TASK_FILL -> fill(request)
             Prompts.TASK_SUGGEST_TAGS -> suggestTags(request, invalid)
             Prompts.TASK_REFINE -> refine(request, invalid)
+            Prompts.TASK_REFINE_DOCUMENT -> refineDocument(request, invalid)
             Prompts.TASK_SENTENCE_FEEDBACK -> sentenceFeedback(request, invalid)
             else -> generate(request, invalid)
         }
@@ -56,76 +58,131 @@ class FakeLlmGateway : LlmGateway {
         return LlmReply(text, inputTokens = (system.length + request.length) / 4, outputTokens = text.length / 4)
     }
 
+    /** 1:1: words from the notes (or, without notes, the past lesson notes) + homework; club: a notes document. */
     private fun generate(request: String, invalid: Boolean): JsonObject {
         val club = Prompts.section(request, "mode") == "CLUB"
         val level = Prompts.section(request, "context")?.lineSequence()
             ?.firstOrNull { it.startsWith("Level: ") }?.removePrefix("Level: ")?.takeIf { it.length == 2 }
-        val vocab = vocabFromNotes(Prompts.section(request, "notes").orEmpty(), level)
-        val first = vocab.firstOrNull()
-        val noun = vocab.firstOrNull { it["wordType"]?.jsonPrimitive?.content == "NOUN" }
+        val notes = Prompts.section(request, "notes").orEmpty().takeIf { it != NONE }.orEmpty()
+        val source = notes.ifBlank {
+            Prompts.section(request, "past_lesson_notes").orEmpty().takeIf { it != NONE }.orEmpty()
+                .lines().filterNot { it.startsWith("Lesson on ") }.joinToString("\n")
+        }
+        val words = vocabFromNotes(source, level)
+        if (club) return buildJsonObject { put("notes", clubNotes(words, invalid)) }
 
+        val first = words.firstOrNull()
+        val noun = words.firstOrNull { it["wordType"]?.jsonPrimitive?.content == "NOUN" }
+        val word = first?.get("lemma")?.jsonPrimitive?.content ?: "Deutsch"
         val blocks = buildJsonArray {
-            add(buildJsonObject { put("id", "b1"); put("type", "heading"); put("level", 1); put("text", "Nachbereitung") })
+            add(buildJsonObject { put("id", "b1"); put("type", "heading"); put("level", 1); put("text", "Übungen") })
             add(buildJsonObject {
-                put("id", "b2"); put("type", "vocab_table"); put("title", "Alltag")
-                put("vocabKeys", JsonArray(vocab.map { it["key"]!! }))
+                put("id", "b2"); put("type", "gap_fill"); put("interactive", true)
+                put("instructions", "Ergänze die Sätze.")
+                putJsonArray("wordBox") { add(JsonPrimitive(word)) }
+                putJsonArray("items") {
+                    add(buildJsonObject {
+                        put("id", "b2i1")
+                        put("text", if (invalid) "Heute lernen wir etwas." else "Heute lernen wir: ___.")
+                        putJsonObject("solution") { putJsonArray("answers") { add(buildJsonArray { add(JsonPrimitive(word)) }) } }
+                    })
+                }
             })
-            if (club) {
-                add(buildJsonObject {
-                    put("id", "b3"); put("type", "grammar_box"); put("variant", "TIP"); put("title", "Tipp: Perfekt")
-                    put("content", richText("Bewegung und Veränderung: Perfekt mit „sein“."))
-                    putJsonArray("examples") { add(JsonPrimitive("Ich bin zu Hause geblieben.")) }
-                })
-                add(buildJsonObject {
-                    put("id", "b4"); put("type", "free_sentences"); put("interactive", false); put("purpose", "SPEAKING")
-                    put("instructions", "Sprecht über diese Fragen.")
-                    putJsonArray("items") {
-                        add(buildJsonObject { put("id", "b4i1"); put("prompt", "Was machst du gern im Haushalt?") })
-                        add(buildJsonObject { put("id", "b4i2"); put("prompt", "Wer kümmert sich bei dir um die Blumen?") })
-                    }
-                })
-            } else {
-                val word = first?.get("lemma")?.jsonPrimitive?.content ?: "Deutsch"
-                add(buildJsonObject {
-                    put("id", "b3"); put("type", "gap_fill"); put("interactive", true)
-                    put("instructions", "Ergänze die Sätze.")
-                    putJsonArray("wordBox") { add(JsonPrimitive(word)) }
-                    putJsonArray("items") {
-                        add(buildJsonObject {
-                            put("id", "b3i1")
-                            put("text", if (invalid) "Heute lernen wir etwas." else "Heute lernen wir: ___.")
-                            putJsonObject("solution") { putJsonArray("answers") { add(buildJsonArray { add(JsonPrimitive(word)) }) } }
-                        })
-                    }
-                })
-                add(articleQuestion(noun))
-            }
+            add(articleQuestion(noun))
         }
         return buildJsonObject {
-            put("vocab", JsonArray(vocab))
-            putJsonObject("document") { put("title", if (club) "Club – Überblick" else "Nachbereitung – Wortschatz und Übungen"); put("blocks", blocks) }
-            putJsonArray("suggestedTopics") { add(buildJsonObject { put("name", "Alltag") }) }
-            putJsonArray("suggestedGrammarTopics") {
-                add(buildJsonObject { put("name", "Perfekt"); level?.let { put("level", it) } })
+            put("words", JsonArray(words))
+            putJsonObject("homework") {
+                putJsonObject("document") {
+                    put("title", "Hausaufgabe – Wortschatz und Übungen")
+                    put("blocks", blocks)
+                    putJsonArray("topics") { add(buildJsonObject { put("name", "Alltag") }) }
+                    putJsonArray("grammarTopics") { add(buildJsonObject { put("name", "Perfekt"); level?.let { put("level", it) } }) }
+                }
+                putJsonArray("tasks") {
+                    add(buildJsonObject {
+                        put("title", "Sprachnachricht"); put("instructions", "Erzähle in einer Minute, was du heute gelernt hast.")
+                        put("responseType", "AUDIO"); putJsonArray("topics") { add(buildJsonObject { put("name", "Alltag") }) }
+                    })
+                    add(buildJsonObject {
+                        put("title", "Kurzer Text"); put("instructions", "Schreibe fünf Sätze mit den neuen Wörtern.")
+                        put("responseType", "TEXT"); putJsonArray("grammarTopics") { add(buildJsonObject { put("name", "Perfekt") }) }
+                    })
+                }
             }
-            putJsonArray("correctedSentences") {}
         }
     }
 
-    /** Keeps the current output (incl. manual edits) and appends a note with the instruction. */
+    private fun clubNotes(words: List<JsonObject>, invalid: Boolean): JsonObject = buildJsonObject {
+        put("title", "Club – Überblick")
+        putJsonArray("blocks") {
+            add(buildJsonObject { put("id", "b1"); put("type", "heading"); put("level", 1); put("text", "Club – Überblick") })
+            val lemmas = words.joinToString(", ") { it["lemma"]!!.jsonPrimitive.content }.ifEmpty { "keine" }
+            add(buildJsonObject {
+                put("id", "b2"); put("type", "rich_text")
+                put("content", if (invalid) JsonPrimitive("not rich text") else richText("Neue Wörter: $lemmas"))
+            })
+            add(buildJsonObject {
+                put("id", "b3"); put("type", "grammar_box"); put("variant", "TIP"); put("title", "Tipp: Perfekt")
+                put("content", richText("Bewegung und Veränderung: Perfekt mit „sein“."))
+                putJsonArray("examples") { add(JsonPrimitive("Ich bin zu Hause geblieben.")) }
+            })
+            add(buildJsonObject {
+                put("id", "b4"); put("type", "free_sentences"); put("interactive", false); put("purpose", "SPEAKING")
+                put("instructions", "Sprecht über diese Fragen.")
+                putJsonArray("items") {
+                    add(buildJsonObject { put("id", "b4i1"); put("prompt", "Was machst du gern im Haushalt?") })
+                    add(buildJsonObject { put("id", "b4i2"); put("prompt", "Wer kümmert sich bei dir um die Blumen?") })
+                }
+            })
+        }
+        putJsonArray("topics") { add(buildJsonObject { put("name", "Alltag") }) }
+        putJsonArray("grammarTopics") { add(buildJsonObject { put("name", "Perfekt") }) }
+    }
+
+    /** Keeps the current output (incl. manual edits) and marks the target as refined with the instruction. */
     private fun refine(request: String, invalid: Boolean): JsonObject {
         val current = Json.parseToJsonElement(Prompts.section(request, "current_output")!!).jsonObject
-        val document = current["document"]!!.jsonObject
+        val instruction = Prompts.section(request, "refine_instruction").orEmpty()
+        fun refinedDocument(document: JsonObject): JsonObject {
+            val blocks = document["blocks"]!!.jsonArray + buildJsonObject {
+                put("id", "refined"); put("type", "rich_text")
+                put("content", if (invalid) JsonPrimitive("not rich text") else richText("Überarbeitet: $instruction"))
+            }
+            val title = document["title"]!!.jsonPrimitive.content
+            return JsonObject(document + mapOf(
+                "title" to JsonPrimitive(if (title.endsWith("(überarbeitet)")) title else "$title (überarbeitet)"),
+                "blocks" to JsonArray(blocks),
+            ))
+        }
+        fun withHomework(change: (JsonObject) -> JsonObject) =
+            JsonObject(current + ("homework" to change(current["homework"]!!.jsonObject)))
+        return when (Prompts.section(request, "target")) {
+            "word" -> {
+                val word = current["words"]!!.jsonArray.single().jsonObject
+                buildJsonObject { put("words", buildJsonArray { add(JsonObject(word + ("exampleSentence" to JsonPrimitive("Überarbeitet: $instruction")))) }) }
+            }
+            "task" -> withHomework { homework ->
+                val task = homework["tasks"]!!.jsonArray.single().jsonObject
+                val text = task["instructions"]!!.jsonPrimitive.content
+                buildJsonObject { put("tasks", buildJsonArray { add(JsonObject(task + ("instructions" to JsonPrimitive("$text (überarbeitet: $instruction)")))) }) }
+            }
+            "notes" -> buildJsonObject { put("notes", refinedDocument(current["notes"]!!.jsonObject)) }
+            else -> withHomework { homework -> JsonObject(homework + ("document" to refinedDocument(homework["document"]!!.jsonObject))) }
+        }
+    }
+
+    /** Appends a note block with the instruction to the current document. */
+    private fun refineDocument(request: String, invalid: Boolean): JsonObject {
+        val document = Json.parseToJsonElement(Prompts.section(request, "current_document")!!).jsonObject
         val instruction = Prompts.section(request, "refine_instruction").orEmpty()
         val blocks = document["blocks"]!!.jsonArray + buildJsonObject {
             put("id", "refined"); put("type", "rich_text")
             put("content", if (invalid) JsonPrimitive("not rich text") else richText("Überarbeitet: $instruction"))
         }
-        val title = document["title"]!!.jsonPrimitive.content
-        return JsonObject(current + ("document" to buildJsonObject {
-            put("title", if (title.endsWith("(überarbeitet)")) title else "$title (überarbeitet)")
-            put("blocks", JsonArray(blocks))
-        }))
+        return buildJsonObject {
+            putJsonObject("document") { put("title", document["title"]!!.jsonPrimitive.content + " (überarbeitet)"); put("blocks", JsonArray(blocks)) }
+        }
     }
 
     private fun fill(request: String): JsonObject {
@@ -243,6 +300,7 @@ class FakeLlmGateway : LlmGateway {
         val received: MutableList<Call> = CopyOnWriteArrayList()
 
         private val WHITESPACE = Regex("\\s+")
+        private const val NONE = "(none)"
 
         /** One word per note line without digits: `der X` / capitalised word -> noun, `-en` -> verb, else phrase. */
         fun vocabFromNotes(notes: String, level: String?): List<JsonObject> {
@@ -263,9 +321,8 @@ class FakeLlmGateway : LlmGateway {
                     else Triple(lemma, type, article)
                 }
                 .take(30)
-                .mapIndexed { i, (lemma, type, article) ->
+                .map { (lemma, type, article) ->
                     buildJsonObject {
-                        put("key", "v${i + 1}")
                         put("lemma", lemma)
                         article?.let { put("article", it) }
                         put("wordType", type)
@@ -273,7 +330,7 @@ class FakeLlmGateway : LlmGateway {
                         put("explanationDe", "Erklärung: $lemma")
                         put("exampleSentence", "Beispiel mit $lemma.")
                         level?.let { put("level", it) }
-                        put("topicName", "Alltag")
+                        putJsonArray("topics") { add(buildJsonObject { put("name", "Alltag") }) }
                     }
                 }
                 .toList()

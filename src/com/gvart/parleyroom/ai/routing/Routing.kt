@@ -5,22 +5,16 @@ import com.gvart.parleyroom.ai.transfer.AiStatusResponse
 import com.gvart.parleyroom.ai.config.AiRuntime
 import com.gvart.parleyroom.ai.data.PromptTemplateLessonType
 import com.gvart.parleyroom.ai.service.FillTranslationsService
+import com.gvart.parleyroom.ai.service.GenerationJobs
 import com.gvart.parleyroom.ai.service.LibrarySuggestionService
-import com.gvart.parleyroom.ai.service.NachbereitungPublishService
-import com.gvart.parleyroom.ai.service.NachbereitungService
 import com.gvart.parleyroom.ai.service.PromptTemplateService
+import com.gvart.parleyroom.ai.transfer.ApplyFillProposalsRequest
 import com.gvart.parleyroom.ai.transfer.FillMissingRequest
-import com.gvart.parleyroom.ai.transfer.GenerateRequest
 import com.gvart.parleyroom.ai.transfer.GenerationJobResponse
 import com.gvart.parleyroom.ai.transfer.LibrarySuggestions
 import com.gvart.parleyroom.ai.transfer.MissingFieldsResponse
-import com.gvart.parleyroom.ai.transfer.NachbereitungState
 import com.gvart.parleyroom.ai.transfer.PromptTemplateInput
 import com.gvart.parleyroom.ai.transfer.PromptTemplateResponse
-import com.gvart.parleyroom.ai.transfer.PublishRequest
-import com.gvart.parleyroom.ai.transfer.PublishResponse
-import com.gvart.parleyroom.ai.transfer.RefineRequest
-import com.gvart.parleyroom.ai.transfer.ReviewUpdateRequest
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.routing.getPathUUID
 import com.gvart.parleyroom.common.routing.requirePrincipal
@@ -40,8 +34,6 @@ import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 
 fun Application.configureAiRouting() {
-    val nachbereitung: NachbereitungService by dependencies
-    val publishService: NachbereitungPublishService by dependencies
     val templates: PromptTemplateService by dependencies
     val suggestions: LibrarySuggestionService by dependencies
     val fillService: FillTranslationsService by dependencies
@@ -50,45 +42,6 @@ fun Application.configureAiRouting() {
     routing {
         authenticate {
             route("/api/v1/lessons/{id}") {
-                get("/nachbereitung") {
-                    call.respond(HttpStatusCode.OK, nachbereitung.state(call.getPathUUID(), call.requirePrincipal()))
-                }.describe {
-                    summary = "Nachbereitung panel state"
-                    description = "Mode, prefilled notes and prompt, the context the server adds, the latest job and the draft. Lesson teacher or admin."
-                    parameters { path("id") { description = "Lesson UUID" } }
-                    responses { HttpStatusCode.OK { schema = jsonSchema<NachbereitungState>() } }
-                }
-
-                post<GenerateRequest>("/nachbereitung/generate") {
-                    call.respond(HttpStatusCode.Accepted, nachbereitung.generate(call.getPathUUID(), it, call.requirePrincipal()))
-                }.describe {
-                    summary = "Start AI generation"
-                    description = "Queues a GENERATE job; poll GET /api/v1/ai/jobs/{id}. On success a draft document exists."
-                    parameters { path("id") { description = "Lesson UUID" } }
-                    requestBody { schema = jsonSchema<GenerateRequest>() }
-                    responses {
-                        HttpStatusCode.Accepted { schema = jsonSchema<GenerationJobResponse>() }
-                        HttpStatusCode.BadRequest { description = "NACHBEREITUNG_NO_ATTENDEES, VALIDATION_FAILED"; schema = jsonSchema<ProblemDetail>() }
-                        HttpStatusCode.TooManyRequests { description = "AI_RATE_LIMITED"; schema = jsonSchema<ProblemDetail>() }
-                        HttpStatusCode.ServiceUnavailable { description = "AI_NOT_CONFIGURED"; schema = jsonSchema<ProblemDetail>() }
-                    }
-                }
-
-                post<PublishRequest>("/nachbereitung/publish") {
-                    call.respond(HttpStatusCode.OK, publishService.publish(call.getPathUUID(), it, call.requirePrincipal()))
-                }.describe {
-                    summary = "Publish Nachbereitung"
-                    description = "One transaction: words to the library and the learners, accepted topics/grammar, lesson content, " +
-                            "vocab tables filled, document linked and shared. share=false saves to the library only " +
-                            "(nothing assigned, linked or shared). Idempotent."
-                    parameters { path("id") { description = "Lesson UUID" } }
-                    requestBody { schema = jsonSchema<PublishRequest>() }
-                    responses {
-                        HttpStatusCode.OK { schema = jsonSchema<PublishResponse>() }
-                        HttpStatusCode.Conflict { description = "AI_JOB_NOT_READY"; schema = jsonSchema<ProblemDetail>() }
-                    }
-                }
-
                 get("/library-suggestions") {
                     call.respond(HttpStatusCode.OK, suggestions.suggestions(call.getPathUUID(), call.requirePrincipal()))
                 }.describe {
@@ -101,7 +54,7 @@ fun Application.configureAiRouting() {
 
             route("/api/v1/ai/jobs/{id}") {
                 get {
-                    call.respond(HttpStatusCode.OK, nachbereitung.getJob(call.getPathUUID(), call.requirePrincipal()))
+                    call.respond(HttpStatusCode.OK, GenerationJobs.get(call.getPathUUID(), call.requirePrincipal()))
                 }.describe {
                     summary = "Get AI job"
                     description = "Poll until status is SUCCEEDED or FAILED."
@@ -112,27 +65,31 @@ fun Application.configureAiRouting() {
                     }
                 }
 
-                post<RefineRequest>("/refine") {
-                    call.respond(HttpStatusCode.Accepted, nachbereitung.refine(call.getPathUUID(), it, call.requirePrincipal()))
+                post<ApplyFillProposalsRequest>("/fill-proposals/apply") {
+                    call.respond(HttpStatusCode.OK, fillService.apply(call.getPathUUID(), it, call.requirePrincipal()))
                 }.describe {
-                    summary = "Refine a Nachbereitung"
-                    description = "Queues a REFINE job on a SUCCEEDED job; on success the draft's blocks are replaced (snapshot AI_REFINE)."
+                    summary = "Apply fill-missing proposals"
+                    description = "Writes the selected proposals of a SUCCEEDED FILL_TRANSLATIONS job to vocab_entries " +
+                            "(optionally with the teacher's own value). Fields filled meanwhile are not overwritten (reported as stale). " +
+                            "Unselected proposals are dropped; the job's proposals are then resolved."
                     parameters { path("id") { description = "Job UUID" } }
-                    requestBody { schema = jsonSchema<RefineRequest>() }
+                    requestBody { schema = jsonSchema<ApplyFillProposalsRequest>() }
                     responses {
-                        HttpStatusCode.Accepted { schema = jsonSchema<GenerationJobResponse>() }
-                        HttpStatusCode.Conflict { description = "AI_JOB_NOT_READY"; schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.OK { schema = jsonSchema<GenerationJobResponse>() }
+                        HttpStatusCode.Conflict { description = "AI_JOB_NOT_READY, AI_PROPOSALS_RESOLVED"; schema = jsonSchema<ProblemDetail>() }
                     }
                 }
 
-                put<ReviewUpdateRequest>("/review") {
-                    call.respond(HttpStatusCode.OK, nachbereitung.updateReview(call.getPathUUID(), it, call.requirePrincipal()))
+                post("/fill-proposals/reject") {
+                    call.respond(HttpStatusCode.OK, fillService.reject(call.getPathUUID(), call.requirePrincipal()))
                 }.describe {
-                    summary = "Save the vocab review"
-                    description = "Persists checkboxes and inline edits of the review table into the job result."
+                    summary = "Reject fill-missing proposals"
+                    description = "Discards all proposals of the job; vocab_entries stay unchanged."
                     parameters { path("id") { description = "Job UUID" } }
-                    requestBody { schema = jsonSchema<ReviewUpdateRequest>() }
-                    responses { HttpStatusCode.OK { schema = jsonSchema<GenerationJobResponse>() } }
+                    responses {
+                        HttpStatusCode.OK { schema = jsonSchema<GenerationJobResponse>() }
+                        HttpStatusCode.Conflict { description = "AI_JOB_NOT_READY, AI_PROPOSALS_RESOLVED"; schema = jsonSchema<ProblemDetail>() }
+                    }
                 }
             }
 
@@ -207,7 +164,8 @@ fun Application.configureAiRouting() {
                 call.respond(HttpStatusCode.Accepted, fillService.start(it, call.requirePrincipal()))
             }.describe {
                 summary = "Fill missing translations"
-                description = "Queues a FILL_TRANSLATIONS job for the teacher's entries; only empty fields are filled."
+                description = "Queues a FILL_TRANSLATIONS job for the teacher's entries. The job only proposes values for empty fields; " +
+                        "apply them with POST /api/v1/ai/jobs/{id}/fill-proposals/apply."
                 requestBody { schema = jsonSchema<FillMissingRequest>() }
                 responses {
                     HttpStatusCode.Accepted { schema = jsonSchema<GenerationJobResponse>() }

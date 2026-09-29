@@ -4,7 +4,8 @@ import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.material.data.MaterialSkill
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.document.service.DocumentBlockValidator
-import com.gvart.parleyroom.lesson.transfer.CorrectedSentenceInput
+import com.gvart.parleyroom.homework.data.HomeworkResponseType
+import com.gvart.parleyroom.homework.service.HomeworkUnits
 import com.gvart.parleyroom.vocabulary.data.NounArticle
 import com.gvart.parleyroom.vocabulary.data.WordType
 import com.gvart.parleyroom.vocabulary.service.VocabDisplay
@@ -20,19 +21,22 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import java.util.UUID
 
-/** What the model must return for GENERATE / REFINE (see API.md "AI output"). */
+/**
+ * What the model must return for GENERATE / REFINE of a draft bundle (see API.md "AI drafts").
+ * 1:1: [words] + [homework]; club: [notes] only. An item refine returns just that part.
+ */
 @Serializable
-data class AiOutput(
-    val vocab: List<AiVocab> = emptyList(),
-    val document: AiDocument,
-    val suggestedTopics: List<AiTopic> = emptyList(),
-    val suggestedGrammarTopics: List<AiGrammarTopic> = emptyList(),
-    val correctedSentences: List<CorrectedSentenceInput> = emptyList(),
+data class AiDraftOutput(
+    val words: List<AiWord> = emptyList(),
+    val homework: AiHomework? = null,
+    val notes: AiDocument? = null,
 )
 
 @Serializable
-data class AiVocab(
-    val key: String,
+data class AiHomework(val document: AiDocument? = null, val tasks: List<AiTask> = emptyList())
+
+@Serializable
+data class AiWord(
     val lemma: String,
     val article: NounArticle? = null,
     val plural: String? = null,
@@ -44,9 +48,10 @@ data class AiVocab(
     val exampleSentence: String? = null,
     val level: LanguageLevel? = null,
     val synonyms: List<String> = emptyList(),
-    val topicName: String? = null,
+    val topics: List<AiTopic> = emptyList(),
+    val grammarTopics: List<AiGrammarTopic> = emptyList(),
 ) {
-    fun toInput(topicIds: List<String>, sourceLessonId: String?) = VocabEntryInput(
+    fun toInput(sourceLessonId: String?) = VocabEntryInput(
         lemma = lemma.trim(),
         article = article,
         plural = plural?.takeIf { it.isNotBlank() },
@@ -57,14 +62,30 @@ data class AiVocab(
         explanationDe = explanationDe?.takeIf { it.isNotBlank() },
         exampleSentence = exampleSentence?.takeIf { it.isNotBlank() },
         level = level,
-        topicIds = topicIds,
         synonyms = synonyms.filter { it.isNotBlank() },
         sourceLessonId = sourceLessonId,
     )
 }
 
 @Serializable
-data class AiDocument(val title: String, val blocks: JsonArray)
+data class AiDocument(
+    val title: String,
+    val blocks: JsonArray,
+    val topics: List<AiTopic> = emptyList(),
+    val grammarTopics: List<AiGrammarTopic> = emptyList(),
+)
+
+@Serializable
+data class AiTask(
+    val title: String,
+    val instructions: String,
+    val responseType: HomeworkResponseType,
+    val topics: List<AiTopic> = emptyList(),
+    val grammarTopics: List<AiGrammarTopic> = emptyList(),
+)
+
+@Serializable
+data class AiDocumentAnswer(val document: AiDocument)
 
 @Serializable
 data class AiTopic(val name: String, val parentName: String? = null)
@@ -107,14 +128,22 @@ data class Issue(val pointer: String, val message: String)
 /** A validation failure of model output; the issues are fed back to the model on retry. */
 class AiOutputInvalid(val issues: List<Issue>) : Exception("AI output is invalid: " + issues.take(3).joinToString { "${it.pointer} ${it.message}" })
 
-/** A validated generation output, with document blocks converted to real document blocks. */
-data class ValidatedOutput(
-    val output: AiOutput,
-    val title: String,
-    val blocks: JsonArray,
-    /** Block id (uuid) -> vocab keys of each vocab_table. */
-    val vocabTables: Map<String, List<String>>,
+/** What a generate / refine asks the model for, and so what the answer must contain. */
+enum class DraftTarget { BUNDLE, WORD, EXERCISE_DOCUMENT, TASK, NOTES_DOCUMENT }
+
+/** A document from the model with real block ids. */
+data class ValidatedDocument(val title: String, val blocks: JsonArray, val topics: List<AiTopic>, val grammarTopics: List<AiGrammarTopic>)
+
+/** A validated draft answer; only the parts of the [DraftTarget] are set. */
+data class ValidatedDraft(
+    val words: List<AiWord> = emptyList(),
+    val exerciseDocument: ValidatedDocument? = null,
+    val tasks: List<AiTask> = emptyList(),
+    val notesDocument: ValidatedDocument? = null,
 )
+
+/** A refined existing document: blocks with real ids plus the vocab keys of each vocab_table (block id -> keys). */
+data class ValidatedDocumentRefine(val title: String, val blocks: JsonArray, val vocabTables: Map<String, List<String>>)
 
 /**
  * Parses and validates model output. Never trusts the model: the JSON must decode, vocab must be
@@ -123,54 +152,147 @@ data class ValidatedOutput(
  */
 object AiOutputParser {
 
-    const val MAX_VOCAB = 150
+    const val MAX_WORDS = 150
+    const val MIN_TASKS = 1
+    const val MAX_TASKS = 3
     const val MAX_SUGGESTED_TAGS = 5
     private const val MAX_ISSUES = 30
+    private const val MAX_TASK_TEXT = 5_000
 
     val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
-    fun parseGeneration(text: String): ValidatedOutput {
-        val output = decode<AiOutput>(text)
+    /**
+     * A draft answer for [target]. BUNDLE (1:1): words (≤ [MAX_WORDS]), one exercise document with at
+     * least one interactive exercise and [MIN_TASKS]..[MAX_TASKS] tasks. A club bundle is its notes
+     * document (NOTES_DOCUMENT). An item refine: exactly that one part. Other parts are ignored.
+     */
+    fun parseDraft(text: String, target: DraftTarget): ValidatedDraft {
+        val output = decode<AiDraftOutput>(text)
         val issues = mutableListOf<Issue>()
 
-        if (output.vocab.size > MAX_VOCAB) issues += Issue("/vocab", "at most $MAX_VOCAB words")
-        val keys = mutableSetOf<String>()
-        output.vocab.forEachIndexed { i, vocab ->
-            val pointer = "/vocab/$i"
-            if (vocab.key.isBlank()) issues += Issue("$pointer/key", "key is empty")
-            else if (!keys.add(vocab.key)) issues += Issue("$pointer/key", "key ${vocab.key} is used twice")
-            vocab.toInput(emptyList(), null).errors().forEach { issues += Issue(pointer, it) }
-            val unsupported = vocab.translations.keys - VocabDisplay.TRANSLATION_LANGUAGES
-            if (unsupported.isNotEmpty()) issues += Issue("$pointer/translations", "unsupported languages ${unsupported.joinToString()}; use ru, en")
-        }
-        output.suggestedTopics.forEachIndexed { i, t -> if (t.name.isBlank() || t.name.length > 255) issues += Issue("/suggestedTopics/$i/name", "name must be 1..255 characters") }
-        output.suggestedGrammarTopics.forEachIndexed { i, g -> if (g.name.isBlank() || g.name.length > 255) issues += Issue("/suggestedGrammarTopics/$i/name", "name must be 1..255 characters") }
-        output.correctedSentences.forEachIndexed { i, s ->
-            if (s.incorrect.isBlank() || s.correct.isBlank()) issues += Issue("/correctedSentences/$i", "needs both incorrect and correct")
-        }
+        var words = emptyList<AiWord>()
+        var exercise: ValidatedDocument? = null
+        var tasks = emptyList<AiTask>()
+        var notes: ValidatedDocument? = null
 
-        val title = output.document.title.trim()
-        if (title.isEmpty() || title.length > 255) issues += Issue("/document/title", "title must be 1..255 characters")
-
-        val converted = AiBlocks.fromAi(output.document.blocks)
-        converted.vocabTables.forEach { (index, tableKeys) ->
-            tableKeys.forEachIndexed { j, key ->
-                if (key !in keys) issues += Issue("/document/blocks/$index/vocabKeys/$j", "unknown vocab key $key")
+        when (target) {
+            DraftTarget.NOTES_DOCUMENT -> {
+                notes = output.notes?.let { document(it, "/notes", exercise = false, issues) }
+                if (output.notes == null) issues += Issue("/notes", "notes (the notes document) is required")
+            }
+            DraftTarget.WORD -> {
+                if (output.words.size != 1) issues += Issue("/words", "answer with exactly one word")
+                words = output.words.take(1)
+            }
+            DraftTarget.TASK -> {
+                val found = output.homework?.tasks.orEmpty()
+                if (found.size != 1) issues += Issue("/homework/tasks", "answer with exactly one task")
+                tasks = found.take(1)
+            }
+            DraftTarget.EXERCISE_DOCUMENT -> {
+                exercise = output.homework?.document?.let { document(it, "/homework/document", exercise = true, issues) }
+                if (output.homework?.document == null) issues += Issue("/homework/document", "homework.document is required")
+            }
+            DraftTarget.BUNDLE -> {
+                words = output.words
+                val homework = output.homework
+                if (homework == null) issues += Issue("/homework", "homework is required")
+                exercise = homework?.document?.let { document(it, "/homework/document", exercise = true, issues) }
+                if (homework != null && homework.document == null) issues += Issue("/homework/document", "homework.document is required")
+                tasks = homework?.tasks.orEmpty()
+                if (homework != null && tasks.size !in MIN_TASKS..MAX_TASKS)
+                    issues += Issue("/homework/tasks", "give $MIN_TASKS to $MAX_TASKS tasks")
             }
         }
-        try {
-            DocumentBlockValidator.validate(converted.blocks)
-            DocumentBlockValidator.completenessIssues(converted.blocks).forEach { issues += Issue("/document${it.pointer}", it.message) }
-        } catch (e: BadRequestException) {
-            issues += Issue("/document" + (e.pointer ?: "/blocks"), e.message ?: "invalid block")
-        }
+        checkWords(words, issues)
+        tasks.forEachIndexed { i, task -> checkTask(task, "/homework/tasks/$i", issues) }
 
         if (issues.isNotEmpty()) throw AiOutputInvalid(issues.take(MAX_ISSUES))
-        val tables = converted.vocabTables.mapKeys { (index, _) ->
-            (converted.blocks[index].jsonObject["id"] as JsonPrimitive).content
-        }
-        return ValidatedOutput(output, title, converted.blocks, tables)
+        return ValidatedDraft(
+            words = words.map { it.copy(topics = cleanTopics(it.topics), grammarTopics = cleanGrammar(it.grammarTopics)) },
+            exerciseDocument = exercise,
+            tasks = tasks.map {
+                it.copy(title = it.title.trim(), instructions = it.instructions.trim(),
+                    topics = cleanTopics(it.topics), grammarTopics = cleanGrammar(it.grammarTopics))
+            },
+            notesDocument = notes,
+        )
     }
+
+    /** A refined existing document: `{ "document": { title, blocks } }`, vocab tables may use [vocabKeys]. */
+    fun parseDocumentRefine(text: String, vocabKeys: Set<String>): ValidatedDocumentRefine {
+        val output = decode<AiDocumentAnswer>(text)
+        val issues = mutableListOf<Issue>()
+        val title = output.document.title.trim()
+        if (title.isEmpty() || title.length > 255) issues += Issue("/document/title", "title must be 1..255 characters")
+        val converted = AiBlocks.fromAi(output.document.blocks)
+        converted.vocabTables.forEach { (index, keys) ->
+            keys.forEachIndexed { j, key ->
+                if (key !in vocabKeys) issues += Issue("/document/blocks/$index/vocabKeys/$j", "unknown vocab key $key")
+            }
+        }
+        checkBlocks(converted.blocks, "/document", issues)
+        if (issues.isNotEmpty()) throw AiOutputInvalid(issues.take(MAX_ISSUES))
+        val tables = converted.vocabTables.mapKeys { (index, _) -> (converted.blocks[index].jsonObject["id"] as JsonPrimitive).content }
+        return ValidatedDocumentRefine(title, converted.blocks, tables)
+    }
+
+    private fun document(doc: AiDocument, pointer: String, exercise: Boolean, issues: MutableList<Issue>): ValidatedDocument {
+        val title = doc.title.trim()
+        if (title.isEmpty() || title.length > 255) issues += Issue("$pointer/title", "title must be 1..255 characters")
+        doc.blocks.forEachIndexed { i, block ->
+            if (((block as? JsonObject)?.get("type") as? JsonPrimitive)?.content == "vocab_table")
+                issues += Issue("$pointer/blocks/$i", "vocab_table is not allowed here: words belong in words")
+        }
+        val blocks = AiBlocks.fromAi(doc.blocks).blocks
+        checkBlocks(blocks, pointer, issues)
+        if (exercise && issues.none { it.pointer.startsWith(pointer) } && HomeworkUnits.documentUnits(UUID.randomUUID(), blocks).isEmpty())
+            issues += Issue("$pointer/blocks", "the homework document needs at least one exercise students answer in the app (\"interactive\": true)")
+        checkTags(doc.topics, doc.grammarTopics, pointer, issues)
+        return ValidatedDocument(title, blocks, cleanTopics(doc.topics), cleanGrammar(doc.grammarTopics))
+    }
+
+    private fun checkBlocks(blocks: JsonArray, pointer: String, issues: MutableList<Issue>) {
+        try {
+            DocumentBlockValidator.validate(blocks)
+            DocumentBlockValidator.completenessIssues(blocks).forEach { issues += Issue("$pointer${it.pointer}", it.message) }
+        } catch (e: BadRequestException) {
+            issues += Issue(pointer + (e.pointer ?: "/blocks"), e.message ?: "invalid block")
+        }
+    }
+
+    private fun checkWords(words: List<AiWord>, issues: MutableList<Issue>) {
+        if (words.size > MAX_WORDS) issues += Issue("/words", "at most $MAX_WORDS words")
+        val seen = mutableSetOf<String>()
+        words.forEachIndexed { i, word ->
+            val pointer = "/words/$i"
+            word.toInput(null).errors().forEach { issues += Issue(pointer, it) }
+            val unsupported = word.translations.keys - VocabDisplay.TRANSLATION_LANGUAGES
+            if (unsupported.isNotEmpty()) issues += Issue("$pointer/translations", "unsupported languages ${unsupported.joinToString()}; use ru, en")
+            if (!seen.add("${word.lemma.trim().lowercase()}|${word.article}|${word.wordType}"))
+                issues += Issue("$pointer/lemma", "the word ${word.lemma} is listed twice")
+            checkTags(word.topics, word.grammarTopics, pointer, issues)
+        }
+    }
+
+    private fun checkTask(task: AiTask, pointer: String, issues: MutableList<Issue>) {
+        if (task.title.isBlank() || task.title.trim().length > 255) issues += Issue("$pointer/title", "title must be 1..255 characters")
+        if (task.instructions.isBlank() || task.instructions.length > MAX_TASK_TEXT)
+            issues += Issue("$pointer/instructions", "instructions must be 1..$MAX_TASK_TEXT characters")
+        checkTags(task.topics, task.grammarTopics, pointer, issues)
+    }
+
+    private fun checkTags(topics: List<AiTopic>, grammar: List<AiGrammarTopic>, pointer: String, issues: MutableList<Issue>) {
+        if (topics.size > MAX_SUGGESTED_TAGS) issues += Issue("$pointer/topics", "at most $MAX_SUGGESTED_TAGS topics")
+        if (grammar.size > MAX_SUGGESTED_TAGS) issues += Issue("$pointer/grammarTopics", "at most $MAX_SUGGESTED_TAGS grammar topics")
+        topics.forEachIndexed { i, t -> if (t.name.isBlank() || t.name.length > 255) issues += Issue("$pointer/topics/$i/name", "name must be 1..255 characters") }
+        grammar.forEachIndexed { i, g -> if (g.name.isBlank() || g.name.length > 255) issues += Issue("$pointer/grammarTopics/$i/name", "name must be 1..255 characters") }
+    }
+
+    private fun cleanTopics(topics: List<AiTopic>) =
+        topics.map { it.copy(name = it.name.trim(), parentName = it.parentName?.trim()?.ifEmpty { null }) }.distinctBy { it.name.lowercase() }
+
+    private fun cleanGrammar(grammar: List<AiGrammarTopic>) = grammar.map { it.copy(name = it.name.trim()) }.distinctBy { it.name.lowercase() }
 
     fun parseFill(text: String, expectedKeys: Set<String>): AiFillOutput {
         val output = decode<AiFillOutput>(text)
@@ -197,11 +319,7 @@ object AiOutputParser {
             if (grammar.name.isBlank() || grammar.name.length > 255) issues += Issue("/grammarTopics/$i/name", "name must be 1..255 characters")
         }
         if (issues.isNotEmpty()) throw AiOutputInvalid(issues.take(MAX_ISSUES))
-        return output.copy(
-            topics = output.topics.map { it.copy(name = it.name.trim(), parentName = it.parentName?.trim()?.ifEmpty { null }) }
-                .distinctBy { it.name.lowercase() },
-            grammarTopics = output.grammarTopics.map { it.copy(name = it.name.trim()) }.distinctBy { it.name.lowercase() },
-        )
+        return output.copy(topics = cleanTopics(output.topics), grammarTopics = cleanGrammar(output.grammarTopics))
     }
 
     const val MAX_FEEDBACK_LINE = 300

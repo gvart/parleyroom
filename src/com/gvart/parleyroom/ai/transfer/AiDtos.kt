@@ -6,19 +6,15 @@ import com.gvart.parleyroom.ai.data.PromptTemplateLessonType
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
 import com.gvart.parleyroom.document.transfer.DocumentSummary
-import com.gvart.parleyroom.lesson.transfer.CorrectedSentenceInput
 import com.gvart.parleyroom.material.data.MaterialSkill
 import com.gvart.parleyroom.material.transfer.MaterialResponse
 import com.gvart.parleyroom.topic.transfer.GrammarTopicRef
 import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
-import com.gvart.parleyroom.vocabulary.transfer.VocabEntryInput
-import com.gvart.parleyroom.vocabulary.transfer.VocabEntryResponse
 import io.ktor.server.plugins.requestvalidation.ValidationResult
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import java.time.OffsetDateTime
 
-enum class NachbereitungMode { ONE_ON_ONE, CLUB }
 enum class DisplaySource { LESSON, STUDENT, LEVEL_DEFAULT }
 
 /** What the teacher sent to start a job (stored as `generation_jobs.input`). */
@@ -30,6 +26,11 @@ data class JobInput(
     val instruction: String? = null,
     val entryIds: List<String>? = null,
     val fields: List<String>? = null,
+    /** REFINE of one bundle item. */
+    val itemId: String? = null,
+    val pastLessonIds: List<String>? = null,
+    val topicIds: List<String>? = null,
+    val grammarTopicIds: List<String>? = null,
 )
 
 @Serializable
@@ -48,6 +49,8 @@ data class GenerationJobResponse(
     val materialId: String? = null,
     val parentJobId: String? = null,
     val documentId: String? = null,
+    /** GENERATE / REFINE of a draft bundle. */
+    val bundleId: String? = null,
     val input: JobInput,
     val result: JsonElement? = null,
     val error: JobError? = null,
@@ -65,47 +68,6 @@ data class GenerationJobResponse(
 )
 
 // ---- Results ----
-
-@Serializable
-data class NachbereitungResult(
-    val documentId: String,
-    val vocab: List<ReviewVocabItem>,
-    val vocabTables: List<VocabTableRef>,
-    val topics: List<TopicProposal>,
-    val grammarTopics: List<GrammarTopicProposal>,
-    val correctedSentences: List<CorrectedSentenceInput>,
-    /** Vocab key -> library entry id, filled by publish. */
-    val publishedEntries: Map<String, String> = emptyMap(),
-    /** Last library-only publish (`share = false`); a shared publish sets the job's publishedAt instead. */
-    @Serializable(with = OffsetDateTimeSerializer::class)
-    val savedToLibraryAt: OffsetDateTime? = null,
-)
-
-@Serializable
-data class ReviewVocabItem(
-    val key: String,
-    val entry: VocabEntryInput,
-    val topicKey: String? = null,
-    val matchedEntryId: String? = null,
-    val matchedEntry: VocabEntryResponse? = null,
-    val alreadyAssigned: Boolean = false,
-    val selected: Boolean = true,
-)
-
-@Serializable
-data class VocabTableRef(val blockId: String, val vocabKeys: List<String>)
-
-@Serializable
-data class TopicProposal(val key: String, val name: String, val parentName: String? = null, val existingId: String? = null)
-
-@Serializable
-data class GrammarTopicProposal(val key: String, val name: String, val level: LanguageLevel? = null, val existingId: String? = null)
-
-@Serializable
-data class FillTranslationsResult(val updated: List<FilledEntry>, val skipped: List<String>)
-
-@Serializable
-data class FilledEntry(val entryId: String, val filled: List<String>)
 
 enum class TextSourceKind { PDF, DOCX, TEXT, NAME_ONLY }
 
@@ -135,27 +97,6 @@ data class AiStatusResponse(val available: Boolean)
 // ---- Requests ----
 
 @Serializable
-data class GenerateRequest(
-    val notes: String,
-    val prompt: String = "",
-    val promptTemplateId: String? = null,
-) {
-    fun validate(): ValidationResult {
-        val errors = buildList {
-            if (notes.isBlank()) add("notes can't be empty")
-            if (notes.length > MAX_NOTES) add("notes must be at most $MAX_NOTES characters")
-            if (prompt.length > MAX_PROMPT) add("prompt must be at most $MAX_PROMPT characters")
-        }
-        return if (errors.isEmpty()) ValidationResult.Valid else ValidationResult.Invalid(errors)
-    }
-
-    companion object {
-        const val MAX_NOTES = 20_000
-        const val MAX_PROMPT = 10_000
-    }
-}
-
-@Serializable
 data class RefineRequest(val instruction: String) {
     fun validate(): ValidationResult = when {
         instruction.isBlank() -> ValidationResult.Invalid("instruction can't be empty")
@@ -163,94 +104,6 @@ data class RefineRequest(val instruction: String) {
         else -> ValidationResult.Valid
     }
 }
-
-@Serializable
-data class ReviewUpdateRequest(val vocab: List<ReviewVocabItem>) {
-    fun validate(): ValidationResult {
-        val errors = vocab.flatMapIndexed { i, item -> item.entry.errors().map { "vocab[$i]: $it" } }
-        return if (errors.isEmpty()) ValidationResult.Valid else ValidationResult.Invalid(errors)
-    }
-}
-
-@Serializable
-data class PublishVocabItem(
-    val key: String,
-    val matchedEntryId: String? = null,
-    val entry: VocabEntryInput? = null,
-    val topicKeys: List<String> = emptyList(),
-)
-
-@Serializable
-data class PublishTopic(
-    val key: String,
-    val name: String,
-    val parentId: String? = null,
-    val parentKey: String? = null,
-)
-
-@Serializable
-data class PublishGrammarTopic(
-    val key: String,
-    val name: String,
-    val level: LanguageLevel? = null,
-)
-
-@Serializable
-data class PublishRequest(
-    val jobId: String,
-    val vocab: List<PublishVocabItem> = emptyList(),
-    val topics: List<PublishTopic> = emptyList(),
-    val grammarTopics: List<PublishGrammarTopic> = emptyList(),
-    val topicIds: List<String> = emptyList(),
-    val grammarTopicIds: List<String> = emptyList(),
-    val correctedSentences: List<CorrectedSentenceInput>? = null,
-    val share: Boolean = true,
-) {
-    fun validate(): ValidationResult {
-        val errors = buildList {
-            vocab.forEachIndexed { i, item ->
-                if (item.matchedEntryId == null && item.entry == null) add("vocab[$i] needs matchedEntryId or entry")
-                item.entry?.errors()?.forEach { add("vocab[$i]: $it") }
-            }
-            if (vocab.map { it.key }.toSet().size != vocab.size) add("vocab keys must be unique")
-            topics.forEachIndexed { i, t ->
-                if (t.name.isBlank() || t.name.length > 255) add("topics[$i].name must be 1..255 characters")
-                if (t.parentId != null && t.parentKey != null) add("topics[$i]: pass parentId or parentKey, not both")
-            }
-            grammarTopics.forEachIndexed { i, g -> if (g.name.isBlank() || g.name.length > 255) add("grammarTopics[$i].name must be 1..255 characters") }
-            correctedSentences?.forEachIndexed { i, s ->
-                if (s.incorrect.isBlank() || s.correct.isBlank()) add("correctedSentences[$i] needs both incorrect and correct")
-            }
-        }
-        return if (errors.isEmpty()) ValidationResult.Valid else ValidationResult.Invalid(errors)
-    }
-}
-
-@Serializable
-data class PublishedRef(val key: String, val id: String, val reused: Boolean)
-
-@Serializable
-data class PublishedVocab(val key: String, val entryId: String, val reused: Boolean)
-
-@Serializable
-data class PublishResponse(
-    val documentId: String,
-    val revision: Int,
-    val wordsCreated: Int,
-    val wordsReused: Int,
-    val wordsAssigned: Int,
-    val recipients: Int,
-    val recipientIds: List<String>,
-    val topicsCreated: Int,
-    val grammarTopicsCreated: Int,
-    val vocab: List<PublishedVocab>,
-    val topics: List<PublishedRef>,
-    val grammarTopics: List<PublishedRef>,
-    @Serializable(with = OffsetDateTimeSerializer::class)
-    val publishedAt: OffsetDateTime,
-    /** False for a library-only publish: nothing was assigned, linked to the lesson or shared. */
-    val shared: Boolean = true,
-)
 
 @Serializable
 data class FillMissingRequest(
@@ -298,20 +151,14 @@ data class ContextSummary(
     val libraryGrammarTopicCount: Int,
     val attendees: List<AttendeeRef>,
     val attendeeCount: Int,
-)
-
-@Serializable
-data class NachbereitungState(
-    val lessonId: String,
-    val mode: NachbereitungMode,
-    val aiAvailable: Boolean,
-    val notes: String? = null,
-    val prompt: String? = null,
-    val context: ContextSummary,
-    val latestJob: GenerationJobResponse? = null,
-    val draftDocumentId: String? = null,
-    @Serializable(with = OffsetDateTimeSerializer::class)
-    val publishedAt: OffsetDateTime? = null,
+    /** Active goals of the student (1:1 only), e.g. "Exam telc B1 by 2026-12-01". */
+    val goals: List<String> = emptyList(),
+    /** Words the student keeps forgetting (FSRS lapses / difficulty), 1:1 only. */
+    val weakWords: List<String> = emptyList(),
+    /** Earlier lessons whose notes are sent as context. */
+    val pastLessons: List<PastLessonRef> = emptyList(),
+    val focusTopics: List<String> = emptyList(),
+    val focusGrammarTopics: List<String> = emptyList(),
 )
 
 // ---- Prompt templates ----
