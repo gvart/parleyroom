@@ -2,7 +2,8 @@ package com.gvart.parleyroom.ai
 
 import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.ai.data.GenerationJobStatus
-import com.gvart.parleyroom.ai.transfer.GenerateRequest
+import com.gvart.parleyroom.ai.transfer.DraftBundleResponse
+import com.gvart.parleyroom.ai.transfer.GenerateDraftRequest
 import com.gvart.parleyroom.ai.transfer.GenerationJobResponse
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.LessonType
@@ -71,11 +72,11 @@ fun seedLesson(
     id
 }
 
-suspend fun HttpClient.startGenerate(token: String, lessonId: UUID, prompt: String = "", notes: String = ANNA_NOTES): HttpResponse =
-    post("/api/v1/lessons/$lessonId/nachbereitung/generate") {
+suspend fun HttpClient.startGenerate(token: String, lessonId: UUID, prompt: String = "", notes: String? = ANNA_NOTES): HttpResponse =
+    post("/api/v1/lessons/$lessonId/draft-bundles") {
         contentType(ContentType.Application.Json)
         bearerAuth(token)
-        setBody(GenerateRequest(notes = notes, prompt = prompt))
+        setBody(GenerateDraftRequest(notes = notes, prompt = prompt))
     }
 
 /** Polls a job until it is SUCCEEDED or FAILED. */
@@ -88,5 +89,12 @@ suspend fun HttpClient.awaitJob(token: String, jobId: String): GenerationJobResp
     fail("Job $jobId did not finish")
 }
 
+/** Waits for the bundle's latest job and returns the bundle. */
+suspend fun HttpClient.awaitBundle(token: String, bundle: DraftBundleResponse): DraftBundleResponse {
+    awaitJob(token, bundle.job!!.id)
+    return get("/api/v1/ai/draft-bundles/${bundle.id}") { bearerAuth(token) }.body()
+}
+
+/** Generates the lesson's draft and returns its finished job. */
 suspend fun HttpClient.generateAndWait(token: String, lessonId: UUID, prompt: String = ""): GenerationJobResponse =
-    awaitJob(token, startGenerate(token, lessonId, prompt).body<GenerationJobResponse>().id)
+    awaitJob(token, startGenerate(token, lessonId, prompt).body<DraftBundleResponse>().job!!.id)

@@ -8,7 +8,7 @@ import com.gvart.parleyroom.ai.generateAndWait
 import com.gvart.parleyroom.ai.llm.FakeLlmGateway
 import com.gvart.parleyroom.ai.seedLesson
 import com.gvart.parleyroom.ai.transfer.GrammarGaps
-import com.gvart.parleyroom.ai.transfer.NachbereitungState
+import com.gvart.parleyroom.ai.transfer.DraftContextResponse
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.library.LibraryFixtures
@@ -55,7 +55,7 @@ class ProgressAiContextIntegrationTest : IntegrationTest() {
         }
         val lessonId = seedLesson()
 
-        val state = client.get("/api/v1/lessons/$lessonId/nachbereitung") { bearerAuth(token) }.body<NachbereitungState>()
+        val state = client.get("/api/v1/lessons/$lessonId/draft-context") { bearerAuth(token) }.body<DraftContextResponse>()
         assertEquals(GrammarGaps(listOf("Konjunktiv II"), listOf("Passiv"), 1, 1), state.context.grammarGaps)
 
         FakeLlmGateway.received.clear()
@@ -91,7 +91,7 @@ class ProgressAiContextIntegrationTest : IntegrationTest() {
         LibraryFixtures.tagLesson(seedLesson(students = listOf(STUDENT, STUDENT_2)), grammar = listOf(coveredByTwo))
 
         val lessonId = seedLesson(type = LessonType.SPEAKING_CLUB, students = attendees, level = LanguageLevel.B1)
-        val gaps = client.get("/api/v1/lessons/$lessonId/nachbereitung") { bearerAuth(token) }.body<NachbereitungState>().context.grammarGaps
+        val gaps = client.get("/api/v1/lessons/$lessonId/draft-context") { bearerAuth(token) }.body<DraftContextResponse>().context.grammarGaps
         assertEquals(listOf("Mehrheit schwach"), gaps.needsWork)
         // "Mehrheit schwach" is NEEDS_WORK for 2, NOT_COVERED for 1; "Einer schwach" NOT_COVERED for 2;
         // "Zwei behandelt" NOT_COVERED only for 1; "Niemand" for all 3.
@@ -111,8 +111,8 @@ class ProgressAiContextIntegrationTest : IntegrationTest() {
         ProgressFixtures.setLevel(STUDENT, LanguageLevel.B1)
         (0 until 35).forEach { LibraryFixtures.grammar("Thema %02d".format(it), LanguageLevel.B1, position = it) }
         val lessonId = seedLesson()
-        val gaps = client.get("/api/v1/lessons/$lessonId/nachbereitung") { bearerAuth(getTeacherToken(client)) }
-            .body<NachbereitungState>().context.grammarGaps
+        val gaps = client.get("/api/v1/lessons/$lessonId/draft-context") { bearerAuth(getTeacherToken(client)) }
+            .body<DraftContextResponse>().context.grammarGaps
         assertEquals(30, gaps.notCovered.size)
         assertEquals(35, gaps.notCoveredCount)
         assertEquals("Thema 00", gaps.notCovered.first())
