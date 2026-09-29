@@ -96,6 +96,11 @@ object GenerationJobs {
                 throw AiJobFailure(e.code, e.message ?: "The AI provider request failed", attempt, usage)
             }
             usage += Usage(reply.inputTokens, reply.outputTokens)
+            // A retry would hit the same limit, so a cut-off answer fails right away.
+            if (reply.truncated) {
+                log.warn("AI output cut off at maxTokens={} (attempt {}, outputTokens={})", maxTokens, attempt, reply.outputTokens)
+                throw AiJobFailure("AI_OUTPUT_INVALID", "The AI answer was cut off at the output limit", attempt, usage)
+            }
             try {
                 return Completion(parse(reply.text), attempt, usage)
             } catch (e: AiOutputInvalid) {
@@ -103,7 +108,8 @@ object GenerationJobs {
                 log.info("AI output invalid (attempt {}): {}", attempt, e.issues.take(5).joinToString("; ") { "${it.pointer} ${it.message}" })
                 if (attempt == 2)
                     throw AiJobFailure("AI_OUTPUT_INVALID", "The AI answer was still invalid after a retry (${e.issues.size} problems)", attempt, usage)
-                messages += LlmMessage.assistant(reply.text)
+                // The provider rejects an empty assistant turn; without one the retry is two user turns.
+                if (reply.text.isNotBlank()) messages += LlmMessage.assistant(reply.text)
                 messages += LlmMessage.user(Prompts.retry(e.issues))
             }
         }

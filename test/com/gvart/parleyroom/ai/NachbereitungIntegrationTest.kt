@@ -217,6 +217,32 @@ class NachbereitungIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    fun `an empty answer is retried without replaying an empty assistant turn`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        FakeLlmGateway.received.clear()
+
+        val job = client.generateAndWait(token, seedLesson(), prompt = "[fake:empty-once]")
+        assertEquals(GenerationJobStatus.SUCCEEDED, job.status)
+        assertEquals(2, job.attempts)
+        val retry = FakeLlmGateway.received.last().messages
+        assertTrue(retry.none { it.text.isBlank() }, "the provider rejects blank message text")
+    }
+
+    @Test
+    fun `an answer cut off at the token limit fails without a retry`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        FakeLlmGateway.received.clear()
+
+        val job = client.generateAndWait(token, seedLesson(), prompt = "[fake:truncated]")
+        assertEquals(GenerationJobStatus.FAILED, job.status)
+        assertEquals("AI_OUTPUT_INVALID", job.error?.code)
+        assertEquals(1, job.attempts)
+        assertEquals(1, FakeLlmGateway.received.size)
+    }
+
+    @Test
     fun `provider errors fail the job with a stable code`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
