@@ -162,4 +162,26 @@ class LessonRescheduleService(
             referenceId = lessonId,
         )
     }
+
+    fun withdrawReschedule(lessonId: UUID, principal: UserPrincipal): LessonResponse = transaction {
+        val lesson = support.findLesson(lessonId)
+        val pendingEvent = support.findPendingReschedule(lessonId)
+
+        if (pendingEvent[LessonEventTable.actorId].value != principal.id)
+            throw ForbiddenException("Only the proposer can withdraw a reschedule request")
+
+        LessonEventTable.update({ LessonEventTable.id eq pendingEvent[LessonEventTable.id] }) {
+            it[resolved] = true
+        }
+
+        LessonEventTable.insert {
+            it[LessonEventTable.lessonId] = lessonId
+            it[eventType] = LessonEventType.RESCHEDULE_WITHDRAWN
+            it[actorId] = principal.id
+            it[oldScheduledAt] = pendingEvent[LessonEventTable.oldScheduledAt]
+            it[newScheduledAt] = pendingEvent[LessonEventTable.newScheduledAt]
+        }
+
+        support.toResponse(lesson, principal)
+    }
 }
