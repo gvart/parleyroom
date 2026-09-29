@@ -1,0 +1,43 @@
+test/com/gvart/parleyroom/ai/NativeLanguageAiIntegrationTest.kt
+  s_81525541fb2fd4::t_431f1cc7152b74 1-109
+resources/ai/fill-translations-system.md
+  s_81525541fb2fd4::t_65a719593dc0dc 5,12
+resources/ai/nachbereitung-club.md
+  s_81525541fb2fd4::t_7e3bc870d5b148 9-10
+resources/ai/nachbereitung-system.md
+  s_81525541fb2fd4::t_022b51eb148466 10-11,44-46,50-51,68,73-75
+resources/ai/sentence-feedback-system.md
+  s_81525541fb2fd4::t_39f1c9e34bcf7d 9
+resources/document-blocks.schema.json
+  s_81525541fb2fd4::t_2fde6081323f06 662-664
+src/com/gvart/parleyroom/ai/llm/FakeLlmGateway.kt
+  s_81525541fb2fd4::t_2fbaa2ec36cc67 3,65-69,75-76,110-112,124-125,129-132,159-168,185,195-199,334-345,368
+src/com/gvart/parleyroom/ai/service/AiOutput.kt
+  s_81525541fb2fd4::t_1136dfa34acd64 170,172-174,217,274,281-284
+src/com/gvart/parleyroom/ai/service/DraftBundleService.kt
+  s_81525541fb2fd4::t_ed6b03b536dd10 188,242
+src/com/gvart/parleyroom/ai/service/LessonContextService.kt
+  s_81525541fb2fd4::t_fb188eb890680f 29-30,92-93,114,128-137,181-185,208,215,225,253,261,286,299-303,311
+src/com/gvart/parleyroom/ai/transfer/AiDtos.kt
+  s_81525541fb2fd4::t_85b77938897fa4 163-164
+src/com/gvart/parleyroom/practice/service/SentenceService.kt
+  s_81525541fb2fd4::t_bd5dc0d3dae57d 134,137-138,140
+test/com/gvart/parleyroom/practice/SentenceIntegrationTest.kt
+  s_81525541fb2fd4::t_ea3fa396a6e8aa 20,26,144-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ea4428b41716034e4fe888eb52dfd24b9a7bae78",
+  "prompts": {},
+  "sessions": {
+    "s_81525541fb2fd4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f74100a-bf7e-4308-bddf-c605ea23cebe",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
