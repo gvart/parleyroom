@@ -31,6 +31,8 @@ import java.util.UUID
  *   AVAILABILITY_SLOT_BLOCKED — outside an effective window (or inside a BLOCKED exception)
  *   AVAILABILITY_MIN_NOTICE   — too close to now
  */
+enum class ScheduleWarning { OUTSIDE_WORKING_HOURS, BLOCKED_DAY }
+
 class AvailabilityValidator {
 
     data class Settings(
@@ -101,6 +103,30 @@ class AvailabilityValidator {
                     code = "AVAILABILITY_SLOT_BLOCKED",
                 )
             }
+        }
+    }
+
+    /**
+     * Non-blocking version of [validate] for teacher-driven changes: reports what a student
+     * booking would have tripped over, without min-notice. Call inside a transaction.
+     */
+    fun warnings(teacherId: UUID, scheduledAt: OffsetDateTime, durationMinutes: Int): List<ScheduleWarning> {
+        val settings = loadSettings(teacherId)
+        val interval = Interval(scheduledAt, scheduledAt.plusMinutes(durationMinutes.toLong()))
+
+        val weeklyWindows = buildWeeklyWindowsFor(teacherId, settings.timezone, interval)
+        val availableOverrides = loadExceptions(teacherId, interval, AvailabilityExceptionType.AVAILABLE)
+        val blockedExceptions = loadExceptions(teacherId, interval, AvailabilityExceptionType.BLOCKED)
+
+        // Same default-open policy as validate: no weekly config means no working-hours limit.
+        val hasWeeklyConfig = weeklyWindows.isNotEmpty() || availableOverrides.isNotEmpty()
+        val outsideHours = hasWeeklyConfig && mergeIntervals(weeklyWindows + availableOverrides)
+            .none { !it.start.isAfter(interval.start) && !it.end.isBefore(interval.end) }
+        val blocked = blockedExceptions.any { it.intersect(interval) != null }
+
+        return buildList {
+            if (outsideHours) add(ScheduleWarning.OUTSIDE_WORKING_HOURS)
+            if (blocked) add(ScheduleWarning.BLOCKED_DAY)
         }
     }
 

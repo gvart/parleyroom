@@ -14,6 +14,8 @@ import com.gvart.parleyroom.lesson.transfer.CancelLessonRequest
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
+import com.gvart.parleyroom.lesson.transfer.MoveLessonRequest
+import com.gvart.parleyroom.lesson.transfer.MoveLessonResponse
 import com.gvart.parleyroom.lesson.transfer.PublicCalendarResponse
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.lesson.transfer.StartLessonResponse
@@ -553,6 +555,38 @@ fun Application.configureLessonRouting() {
                                     description = "Lesson or student not found"
                                     schema = jsonSchema<ProblemDetail>()
                                 }
+                            }
+                        }
+                    }
+
+                    post<MoveLessonRequest>("/move") {
+                        val result = rescheduleService.moveLesson(call.getPathUUID(), it, call.requirePrincipal())
+                        call.respond(HttpStatusCode.OK, result)
+                    }.describe {
+                        summary = "Move lesson"
+                        description = "Teacher (own lessons) or admin moves a CONFIRMED lesson directly to a new time, optionally changing duration and topic. Working hours and blocked days do not block the move; they come back as warnings. A pending reschedule proposal is resolved by the move. Writes a LESSON_MOVED lesson event and, when notify=true, a LESSON_MOVED notification (with oldScheduledAt/newScheduledAt) to the other participants. dryRun=true runs the same checks (409 on clash) and returns the warnings without changing anything."
+                        requestBody { schema = jsonSchema<MoveLessonRequest>() }
+                        parameters { path("id") { description = "UUID of the lesson" } }
+                        responses {
+                            HttpStatusCode.OK {
+                                description = "Moved (or dry run): lesson, warnings [OUTSIDE_WORKING_HOURS, BLOCKED_DAY], dryRun"
+                                schema = jsonSchema<MoveLessonResponse>()
+                            }
+                            HttpStatusCode.BadRequest {
+                                description = "LESSON_INVALID_STATE (not CONFIRMED) or invalid body (time in the past, non-positive duration, blank topic)"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
+                            HttpStatusCode.Forbidden {
+                                description = "Students, or a teacher who does not own the lesson"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
+                            HttpStatusCode.NotFound {
+                                description = "Lesson not found"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
+                            HttpStatusCode.Conflict {
+                                description = "AVAILABILITY_OVERLAP (another lesson) or AVAILABILITY_BUFFER_CONFLICT (inside the teacher's buffer)"
+                                schema = jsonSchema<ProblemDetail>()
                             }
                         }
                     }

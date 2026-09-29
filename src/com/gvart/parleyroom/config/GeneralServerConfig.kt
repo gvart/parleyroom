@@ -31,6 +31,7 @@ import com.gvart.parleyroom.homework.transfer.SaveAnswersRequest
 import com.gvart.parleyroom.homework.transfer.UpdateAssignmentRequest
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.UpdateLessonContentRequest
+import com.gvart.parleyroom.lesson.transfer.MoveLessonRequest
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.notification.transfer.MarkViewedRequest
 import com.gvart.parleyroom.registration.transfer.InviteUserRequest
@@ -173,6 +174,7 @@ fun Application.generalConfig() {
         validate<ResetPasswordRequest> { it.validate() }
         validate<CreateLessonRequest> { it.validate() }
         validate<RescheduleLessonRequest> { it.validate() }
+        validate<MoveLessonRequest> { it.validate() }
         validate<InviteUserRequest> { it.validate() }
         validate<QuickAddVocabRequest> { it.validate() }
         validate<VocabEntryInput> { it.validate() }

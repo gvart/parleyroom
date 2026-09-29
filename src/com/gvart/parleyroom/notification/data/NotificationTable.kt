@@ -19,6 +19,7 @@ enum class NotificationType {
     JOIN_REJECTED,
     LESSON_STARTED,
     LESSON_COMPLETED,
+    LESSON_MOVED,
     VOCAB_REVIEW_DUE,
     MATERIAL_SHARED,
     FOLDER_SHARED,
@@ -37,4 +38,6 @@ object NotificationTable : UUIDTable("notifications") {
     val viewed = bool("viewed").default(false)
     val createdAt = timestampWithTimeZone("created_at")
     val deliverAfter = timestampWithTimeZone("deliver_after").nullable()
+    val oldScheduledAt = timestampWithTimeZone("old_scheduled_at").nullable()
+    val newScheduledAt = timestampWithTimeZone("new_scheduled_at").nullable()
 }

@@ -14,6 +14,7 @@ enum class LessonEventType {
     LESSON_STARTED,
     LESSON_COMPLETED,
     LESSON_CANCELLED,
+    LESSON_MOVED,
 }
 
 object LessonEventTable : UUIDTable("lesson_events") {
