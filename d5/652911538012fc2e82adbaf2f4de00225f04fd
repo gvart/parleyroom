@@ -1,0 +1,35 @@
+resources/ai/nachbereitung-system.md
+  s_81525541fb2fd4::t_59071d6af47395 22-24,114
+src/com/gvart/parleyroom/ai/llm/FakeLlmGateway.kt
+  s_81525541fb2fd4::t_e21a75c839a34d 61,73-74,96,173-178
+src/com/gvart/parleyroom/ai/routing/DraftRouting.kt
+  s_81525541fb2fd4::t_a348cd82773f3f 63-64,95-96,102,193-194
+src/com/gvart/parleyroom/ai/service/AiOutput.kt
+  s_81525541fb2fd4::t_ef6ea434093933 3,166-168,171,199-211
+src/com/gvart/parleyroom/ai/service/DraftBundleService.kt
+  s_81525541fb2fd4::t_f139323db5f2fd 20,125-126,140-142,169,178,182-184,186,188,214-215,218,222,237,240,242,249-253,546
+src/com/gvart/parleyroom/ai/service/DraftItems.kt
+  s_81525541fb2fd4::t_45a464d12399f1 8,25,55,86-87,100,118-121,130-147
+src/com/gvart/parleyroom/ai/service/Prompts.kt
+  s_81525541fb2fd4::t_c44460d0daf70e 4,56-62,65,75,80
+src/com/gvart/parleyroom/ai/transfer/AiDtos.kt
+  s_81525541fb2fd4::t_f101e551ae4acf 34
+src/com/gvart/parleyroom/ai/transfer/DraftDtos.kt
+  s_81525541fb2fd4::t_953ef8ac13c607 38-40,84-86,100-101,105,205-208,210,212-213
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "d5652911538012fc2e82adbaf2f4de00225f04fd",
+  "prompts": {},
+  "sessions": {
+    "s_81525541fb2fd4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f74100a-bf7e-4308-bddf-c605ea23cebe",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
