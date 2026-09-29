@@ -1,0 +1,39 @@
+test/com/gvart/parleyroom/lesson/LessonMoveIntegrationTest.kt
+  s_ada7816b5a061f::t_603a6aba92082c 1-305
+resources/db/migration/V18__lesson_moved.sql
+  s_ada7816b5a061f::t_22db6dadf8d1db 1-8
+src/com/gvart/parleyroom/availability/service/AvailabilityValidator.kt
+  s_ada7816b5a061f::t_94c45aac69d545 34-35,109-132
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_ada7816b5a061f::t_2ad9987843c494 34,177
+src/com/gvart/parleyroom/lesson/data/LessonEventTable.kt
+  s_ada7816b5a061f::t_543c27c88e0b11 17
+src/com/gvart/parleyroom/lesson/routing/Routing.kt
+  s_ada7816b5a061f::t_a7cfe22674ac11 17-18,562-593
+src/com/gvart/parleyroom/lesson/service/LessonRescheduleService.kt
+  s_ada7816b5a061f::t_d56296af36d079 12-13,189-256
+src/com/gvart/parleyroom/lesson/transfer/MoveLessonRequest.kt
+  s_ada7816b5a061f::t_4e57c4c4963388 1-41
+src/com/gvart/parleyroom/notification/data/NotificationTable.kt
+  s_ada7816b5a061f::t_24a94eaa760dc2 22,41-42
+src/com/gvart/parleyroom/notification/service/NotificationService.kt
+  s_ada7816b5a061f::t_c7f187fe3c1e47 91-92,101-102,152-153
+src/com/gvart/parleyroom/notification/transfer/NotificationResponse.kt
+  s_ada7816b5a061f::t_59dc5f44a68060 18-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "6fda045d5c27f5d090a8f24983c18b1b58e702f0",
+  "prompts": {},
+  "sessions": {
+    "s_ada7816b5a061f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90375cfd-f524-4526-b228-08399ee17f0d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
