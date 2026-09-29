@@ -1233,7 +1233,7 @@ GenerationJob {
 }
 ```
 Job error codes (in `error.code`, not HTTP statuses): `AI_OUTPUT_INVALID` (still invalid after
-the retry), `AI_PROVIDER_ERROR` (provider/network error), `AI_RATE_LIMITED` (provider 429),
+the retry, or cut off at the output limit), `AI_PROVIDER_ERROR` (provider/network error), `AI_RATE_LIMITED` (provider 429),
 `AI_TIMEOUT`, `AI_INTERRUPTED` (server restarted), `DOCUMENT_NOT_FOUND` (REFINE: draft deleted meanwhile),
 `MATERIAL_NOT_FOUND` (SUGGEST_TAGS: material gone before the job ran).
 
@@ -1533,7 +1533,8 @@ and (club) a `grammar_box` TIP + `free_sentences` SPEAKING. Suggests topic `Allt
 `Perfekt`. Output always passes the strict profile. Test markers in the prompt/instruction:
 `[fake:invalid-once]` (first answer invalid → retry succeeds), `[fake:invalid]` (always invalid →
 `AI_OUTPUT_INVALID`), `[fake:error]` (→ `AI_PROVIDER_ERROR`), `[fake:rate-limit]` (→ `AI_RATE_LIMITED`),
-`[fake:delay=<ms>]`. Tests can read the prompts it received (in-process only, no endpoint).
+`[fake:delay=<ms>]`, `[fake:empty-once]` (first answer empty → retry succeeds), `[fake:truncated]`
+(answer cut off at the output limit → `AI_OUTPUT_INVALID` without a retry). Tests can read the prompts it received (in-process only, no endpoint).
 
 ### Error codes
 

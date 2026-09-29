@@ -6,6 +6,7 @@ import ai.koog.prompt.executor.clients.anthropic.AnthropicClientSettings
 import ai.koog.prompt.executor.clients.anthropic.AnthropicLLMClient
 import ai.koog.prompt.executor.clients.anthropic.AnthropicModels
 import ai.koog.prompt.executor.clients.anthropic.AnthropicParams
+import ai.koog.prompt.executor.clients.anthropic.models.AnthropicThinking
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
 import kotlinx.coroutines.CancellationException
@@ -40,7 +41,10 @@ class KoogAnthropicGateway(apiKey: String, override val modelId: String, request
     )
 
     override suspend fun complete(system: String, messages: List<LlmMessage>, maxTokens: Int): LlmReply {
-        val request = prompt("parleyroom-ai", params = AnthropicParams(maxTokens = maxTokens)) {
+        // Sonnet 5 thinks by default and thinking counts against maxTokens: a Nachbereitung spent all
+        // 16k tokens thinking and returned no text. Callers size maxTokens for the JSON answer alone.
+        val params = AnthropicParams(maxTokens = maxTokens, thinking = AnthropicThinking.Disabled())
+        val request = prompt("parleyroom-ai", params = params) {
             system(system)
             messages.forEach {
                 when (it.role) {
@@ -64,6 +68,7 @@ class KoogAnthropicGateway(apiKey: String, override val modelId: String, request
             text = response.textContent(),
             inputTokens = response.metaInfo.inputTokensCount,
             outputTokens = response.metaInfo.outputTokensCount,
+            truncated = response.finishReason == "max_tokens",
         )
     }
 }

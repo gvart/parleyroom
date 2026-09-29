@@ -21,7 +21,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  * answers with plausible output derived from the notes that always passes validation.
  *
  * Markers anywhere in the first user message: `[fake:invalid-once]`, `[fake:invalid]`,
- * `[fake:error]`, `[fake:rate-limit]`, `[fake:delay=<ms>]`; sentence feedback also `[fake:wrong]`.
+ * `[fake:error]`, `[fake:rate-limit]`, `[fake:delay=<ms>]`, `[fake:empty-once]`, `[fake:truncated]`;
+ * sentence feedback also `[fake:wrong]`.
  */
 class FakeLlmGateway : LlmGateway {
 
@@ -35,8 +36,13 @@ class FakeLlmGateway : LlmGateway {
         val isRetry = Prompts.section(messages.last().text, Prompts.VALIDATION_ERRORS) != null
 
         Regex("""\[fake:delay=(\d+)]""").find(request)?.let { delay(it.groupValues[1].toLong()) }
+        // Anthropic answers 400 "text content blocks must be non-empty".
+        if (messages.any { it.text.isBlank() }) throw LlmException("AI_PROVIDER_ERROR", "The AI provider request failed")
         if ("[fake:error]" in request) throw LlmException("AI_PROVIDER_ERROR", "The AI provider request failed")
         if ("[fake:rate-limit]" in request) throw LlmException("AI_RATE_LIMITED", "The AI provider is rate limiting requests")
+        // Output budget spent before any text (e.g. on thinking): an empty answer.
+        if ("[fake:empty-once]" in request && messages.size == 1) return LlmReply("", inputTokens = 1, outputTokens = maxTokens)
+        if ("[fake:truncated]" in request) return LlmReply("""{"vocab": [{"key": "v1", "lemma": "Hau""", inputTokens = 1, outputTokens = maxTokens, truncated = true)
         val invalid = "[fake:invalid]" in request || ("[fake:invalid-once]" in request && !isRetry)
 
         val output = when (Prompts.section(request, "task")) {
