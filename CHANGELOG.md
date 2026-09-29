@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.0.0](https://github.com/gvart/parleyroom/compare/v0.13.0...v1.0.0) (2026-09-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* **ai:** the Nachbereitung endpoints (GET/generate/publish under /lessons/{id}/nachbereitung, /ai/jobs/{id}/refine and /review) are replaced by the draft bundle API; fill-missing no longer writes vocab entries directly.
+
+### Features
+
+* **ai:** AI draft bundles with human-in-the-loop approval ([#52](https://github.com/gvart/parleyroom/issues/52)) ([994298f](https://github.com/gvart/parleyroom/commit/994298f2396d63f8bc3ef9f59c5985a6356f4ad3))
+* **ai:** extract words to learn from materials ([#54](https://github.com/gvart/parleyroom/issues/54)) ([a3cfe89](https://github.com/gvart/parleyroom/commit/a3cfe8985dbb01472849350cbd14d0a860d7e4d4))
+* **ai:** switch to Claude Sonnet 5.5 ([#51](https://github.com/gvart/parleyroom/issues/51)) ([8a6f0b1](https://github.com/gvart/parleyroom/commit/8a6f0b1b8b4635071f86d461d5750a7d2c4a4237))
+* **lesson:** auto-complete stale in-progress lessons ([#49](https://github.com/gvart/parleyroom/issues/49)) ([c437610](https://github.com/gvart/parleyroom/commit/c4376107dcd8ba547039ef265758cdac91b9732f))
+* Russian-first locale and student native language for translations ([#53](https://github.com/gvart/parleyroom/issues/53)) ([0fad04c](https://github.com/gvart/parleyroom/commit/0fad04c12641f49e6863d9855d51edc0142ac46d))
+
+
+### Bug Fixes
+
+* **ai:** material-only word extraction no longer fails as invalid output ([#55](https://github.com/gvart/parleyroom/issues/55)) ([4384826](https://github.com/gvart/parleyroom/commit/43848267a1c6e525a7e584b2067b4f9cb2bd98fa))
+* **ai:** stop Sonnet 5 thinking from eating the output budget ([#47](https://github.com/gvart/parleyroom/issues/47)) ([be872d7](https://github.com/gvart/parleyroom/commit/be872d7213846126f64f714fb24b4e1277e8dff5))
+* **notifications:** treat an SSE client disconnect as normal, not a 500 ([#48](https://github.com/gvart/parleyroom/issues/48)) ([0c5f77c](https://github.com/gvart/parleyroom/commit/0c5f77c4e11c1b137e0fd930b5dcd746f7d463a0))
+
 ## [0.13.0](https://github.com/gvart/parleyroom/compare/v0.12.0...v0.13.0) (2026-09-29)
 
 
