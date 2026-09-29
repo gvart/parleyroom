@@ -88,6 +88,8 @@ class NotificationService(
         type: NotificationType,
         referenceId: UUID? = null,
         deliverAfter: OffsetDateTime? = null,
+        oldScheduledAt: OffsetDateTime? = null,
+        newScheduledAt: OffsetDateTime? = null,
     ): NotificationResponse {
         val response = transaction {
             val id = NotificationTable.insertAndGetId {
@@ -96,6 +98,8 @@ class NotificationService(
                 it[NotificationTable.type] = type
                 it[NotificationTable.referenceId] = referenceId
                 it[NotificationTable.deliverAfter] = deliverAfter
+                it[NotificationTable.oldScheduledAt] = oldScheduledAt
+                it[NotificationTable.newScheduledAt] = newScheduledAt
             }
             findResponse(id.value)!!
         }
@@ -145,5 +149,7 @@ class NotificationService(
             role = row[UserTable.role],
         ),
         createdAt = row[NotificationTable.createdAt],
+        oldScheduledAt = row[NotificationTable.oldScheduledAt],
+        newScheduledAt = row[NotificationTable.newScheduledAt],
     )
 }

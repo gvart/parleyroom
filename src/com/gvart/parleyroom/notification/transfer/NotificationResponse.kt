@@ -15,6 +15,11 @@ data class NotificationResponse(
     val actor: NotificationActorResponse,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
+    /** Lesson time before and after, for LESSON_MOVED. */
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val oldScheduledAt: OffsetDateTime? = null,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val newScheduledAt: OffsetDateTime? = null,
 )
 
 @Serializable

@@ -9,6 +9,8 @@ import com.gvart.parleyroom.lesson.data.LessonEventType
 import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
+import com.gvart.parleyroom.lesson.transfer.MoveLessonRequest
+import com.gvart.parleyroom.lesson.transfer.MoveLessonResponse
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.notification.data.NotificationType
 import com.gvart.parleyroom.notification.service.NotificationService
@@ -183,5 +185,73 @@ class LessonRescheduleService(
         }
 
         support.toResponse(lesson, principal)
+    }
+
+    /**
+     * Teacher/admin moves a confirmed lesson directly, no proposal. Clashes with other lessons
+     * (and the buffer) are hard errors; working hours and blocked days only produce warnings.
+     * A pending reschedule proposal is superseded by the move and resolved with it.
+     */
+    fun moveLesson(lessonId: UUID, request: MoveLessonRequest, principal: UserPrincipal): MoveLessonResponse = transaction {
+        val lesson = support.findLessonForUpdate(lessonId)
+        val teacherId = lesson[LessonTable.teacherId].value
+
+        if (principal.role == UserRole.STUDENT)
+            throw ForbiddenException("Only teachers or admins can move a lesson")
+        if (principal.role != UserRole.ADMIN && teacherId != principal.id)
+            throw ForbiddenException("Only the assigned teacher can move this lesson")
+        if (lesson[LessonTable.status] != LessonStatus.CONFIRMED)
+            throw BadRequestException("Only confirmed lessons can be moved", code = "LESSON_INVALID_STATE")
+
+        val newDuration = request.durationMinutes ?: lesson[LessonTable.durationMinutes]
+        val bufferMinutes = if (principal.role == UserRole.ADMIN) 0
+        else availabilityValidator.loadSettings(teacherId).bufferMinutes
+
+        support.checkTeacherOverlap(teacherId, request.scheduledAt, newDuration, excludeLessonId = lessonId, bufferMinutes = bufferMinutes)
+        val warnings = availabilityValidator.warnings(teacherId, request.scheduledAt, newDuration)
+
+        if (request.dryRun) {
+            return@transaction MoveLessonResponse(support.toResponse(lesson, principal), warnings, dryRun = true)
+        }
+
+        val oldScheduledAt = lesson[LessonTable.scheduledAt]
+        LessonTable.update({ LessonTable.id eq lessonId }) {
+            it[scheduledAt] = request.scheduledAt
+            it[durationMinutes] = newDuration
+            request.topic?.let { t -> it[topic] = t }
+            it[updatedBy] = principal.id
+            it[updatedAt] = OffsetDateTime.now()
+        }
+
+        LessonEventTable.update({
+            (LessonEventTable.lessonId eq lessonId) and
+                    (LessonEventTable.eventType eq LessonEventType.RESCHEDULE_REQUESTED) and
+                    (LessonEventTable.resolved eq false)
+        }) {
+            it[resolved] = true
+        }
+
+        LessonEventTable.insert {
+            it[LessonEventTable.lessonId] = lessonId
+            it[eventType] = LessonEventType.LESSON_MOVED
+            it[actorId] = principal.id
+            it[LessonEventTable.oldScheduledAt] = oldScheduledAt
+            it[newScheduledAt] = request.scheduledAt
+        }
+
+        if (request.notify) {
+            for (userId in support.getOtherParticipants(lessonId, lesson, principal.id)) {
+                notificationService.createNotification(
+                    userId = userId,
+                    actorId = principal.id,
+                    type = NotificationType.LESSON_MOVED,
+                    referenceId = lessonId,
+                    oldScheduledAt = oldScheduledAt,
+                    newScheduledAt = request.scheduledAt,
+                )
+            }
+        }
+
+        MoveLessonResponse(support.toResponse(support.findLesson(lessonId), principal), warnings, dryRun = false)
     }
 }
