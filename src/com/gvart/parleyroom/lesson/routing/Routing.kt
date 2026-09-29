@@ -37,6 +37,8 @@ import io.ktor.server.routing.routing
 import java.time.OffsetDateTime
 import java.util.UUID
 
+private const val RANGE_MAX_PAGE_SIZE = 500
+
 fun Application.configureLessonRouting() {
     val lessonService: LessonService by dependencies
     val lifecycleService: LessonLifecycleService by dependencies
@@ -88,11 +90,14 @@ fun Application.configureLessonRouting() {
                     val from = call.request.queryParameters["from"]?.let(OffsetDateTime::parse)
                     val to = call.request.queryParameters["to"]?.let(OffsetDateTime::parse)
 
-                    val result = lessonService.getLessons(principal, from, to, PageRequest.from(call))
+                    // A bounded range is how the calendar loads a visible period in one request.
+                    val maxPageSize = if (from != null && to != null) RANGE_MAX_PAGE_SIZE else PageRequest.MAX_PAGE_SIZE
+
+                    val result = lessonService.getLessons(principal, from, to, PageRequest.from(call, maxPageSize))
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Get lessons"
-                    description = "Retrieves a paginated list of lessons for the authenticated user. Teachers see their lessons, students see confirmed lessons they participate in, admins see all. Supports date range filtering via 'from' and 'to' query parameters (ISO 8601 with offset)."
+                    description = "Retrieves a paginated list of lessons for the authenticated user. Teachers see their lessons, students see confirmed lessons they participate in, admins see all. Supports date range filtering via 'from' and 'to' query parameters (ISO 8601 with offset; scheduledAt within [from, to]). Always ordered by scheduledAt ascending, then id. When both 'from' and 'to' are given, pageSize may go up to 500."
                     parameters {
                         query("from") {
                             description = "Start of date range (ISO 8601, e.g. 2026-04-01T00:00:00+02:00)"
@@ -107,7 +112,7 @@ fun Application.configureLessonRouting() {
                             required = false
                         }
                         query("pageSize") {
-                            description = "Number of lessons per page (default 20, max 100)"
+                            description = "Number of lessons per page (default 20, max 100; max 500 when both from and to are given)"
                             required = false
                         }
                     }

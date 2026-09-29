@@ -28,6 +28,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import java.time.OffsetDateTime
 import kotlin.test.Test
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -487,6 +488,41 @@ class LessonIntegrationTest : IntegrationTest() {
             bearerAuth(teacherToken)
         }
         assertEquals(2, noFilter.body<LessonPageResponse>().lessons.size)
+    }
+
+    @Test
+    fun `date range returns every lesson in the period ordered by time`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+
+        // 130 lessons one hour apart from 2027-05-01T00:00Z, inserted latest-first so an
+        // unordered read would come back descending. The first 120 fall inside the range.
+        transaction {
+            exec(
+                """
+                INSERT INTO lessons (title, type, scheduled_at, teacher_id, status, topic, created_by)
+                SELECT 'Bulk ' || n, 'ONE_ON_ONE', TIMESTAMPTZ '2027-05-01T00:00:00Z' + (n * INTERVAL '1 hour'),
+                       '$TEACHER_ID', 'CONFIRMED', 'Bulk', '$TEACHER_ID'
+                FROM generate_series(129, 0, -1) AS n
+                """.trimIndent()
+            )
+        }
+
+        val response = client.get("/api/v1/lessons?from=2027-05-01T00:00:00Z&to=2027-05-05T23:00:00Z&pageSize=500") {
+            bearerAuth(teacherToken)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val page = response.body<LessonPageResponse>()
+        assertEquals(120, page.total)
+        assertEquals(120, page.lessons.size)
+        assertEquals((0 until 120).map { "Bulk $it" }, page.lessons.map { it.title })
+
+        // Without a bounded range the page size stays capped at 100, still in time order.
+        val unbounded = client.get("/api/v1/lessons?pageSize=500") { bearerAuth(teacherToken) }
+            .body<LessonPageResponse>()
+        assertEquals(130, unbounded.total)
+        assertEquals((0 until 100).map { "Bulk $it" }, unbounded.lessons.map { it.title })
     }
 
     @Test
