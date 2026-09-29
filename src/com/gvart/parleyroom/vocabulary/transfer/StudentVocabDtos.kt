@@ -29,6 +29,7 @@ data class StudentVocabResponse(
     val exampleSentence: String? = null,
     val level: LanguageLevel? = null,
     val topicIds: List<String> = emptyList(),
+    val grammarTopicIds: List<String> = emptyList(),
     val synonyms: List<String> = emptyList(),
     val lessonId: String? = null,
     val status: StudentVocabStatus,

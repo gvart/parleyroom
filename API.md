@@ -172,7 +172,8 @@ VocabEntryInput:
   "forms": "ist geblieben", "government": "sich kümmern um + Akk.",
   "translations": { "ru": "слово", "en": "word" },
   "explanationDe": "…", "exampleSentence": "…", "level": "A2",
-  "topicIds": ["uuid"], "synonyms": ["Begriff"], "sourceLessonId": "uuid | null"
+  "topicIds": ["uuid"], "synonyms": ["Begriff"], "sourceLessonId": "uuid | null",
+  "grammarTopicIds": ["uuid"]   // optional: left out (null) on PUT keeps the entry's grammar topics
 }
 ```
 `VocabEntry` = input + `id, teacherId, createdAt, updatedAt`. Lemma case is kept as written.
@@ -218,7 +219,7 @@ StudentVocab:
   "id": "uuid", "studentId": "uuid", "entryId": "uuid",
   "lemma": "Wort", "article": "DAS", "plural": "Wörter", "wordType": "NOUN",
   "forms": null, "government": null, "exampleSentence": "…", "level": "A2",
-  "topicIds": [], "synonyms": [], "lessonId": "uuid | null",
+  "topicIds": [], "grammarTopicIds": [], "synonyms": [], "lessonId": "uuid | null",
   "status": "NEW", "due": "ISO8601 | null", "reps": 0, "lapses": 0, "lastReview": null, "addedAt": "ISO8601",
   "display": { "fields": ["de_explanation"], "allowTranslationToggle": true },
   "translations": {},
@@ -1306,11 +1307,13 @@ DraftWord {
   entry: VocabEntryInput,          // lemma, article, plural, wordType, forms, government, translations,
                                    // explanationDe, exampleSentence, level, synonyms, sourceLessonId
                                    // (entry.topicIds is ignored — tags live in `topics`)
-  topics: [DraftTopic], grammarTopics: [DraftGrammarTopic],
+  topics: [DraftTopic], grammarTopics: [DraftGrammarTopic],   // without id = a suggested new tag, created only at Send;
+                                   // Send links the word to its topics and grammar topics
   libraryEntryId: uuid | null,     // read-only: library entry with the same lower(lemma)+article+wordType (recomputed on every edit)
   matched: bool,                   // read-only: = libraryEntryId != null. Send assigns that library entry AS IS and ignores
                                    // the draft's display fields, so the UI should show them read-only (lemma/article/type stay editable)
-  alreadyAssigned: bool            // read-only: every recipient already has that entry
+  alreadyAssigned: bool            // read-only: every recipient already has that entry (generation drops
+                                   // words a 1:1 student already has, so this is set only after an edit)
 }
 DraftDocument {                    // EXERCISE_DOCUMENT (homework) or NOTES_DOCUMENT (club)
   title, blocks: [Block],          // real document blocks (uuids), see "Documents"; NO vocab_table

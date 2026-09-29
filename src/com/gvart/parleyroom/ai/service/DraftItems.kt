@@ -58,11 +58,17 @@ object DraftItems {
         )
     }
 
-    /** Items for a validated model answer, in display order, matched against the library. Must run in a transaction. */
-    fun fromAi(draft: ValidatedDraft, teacherId: UUID, level: LanguageLevel?, sourceLessonId: UUID?, recipients: List<UUID>): List<NewDraftItem> {
+    /**
+     * Items for a validated model answer, in display order, matched against the library. Tags given by
+     * a [catalog] key are library tags; named ones are matched by name or stay new (created at Send).
+     * Must run in a transaction.
+     */
+    fun fromAi(
+        draft: ValidatedDraft, teacherId: UUID, level: LanguageLevel?, sourceLessonId: UUID?, recipients: List<UUID>, catalog: TagCatalog,
+    ): List<NewDraftItem> {
         val matcher = LibraryMatcher(teacherId)
-        fun topics(list: List<AiTopic>) = list.map { DraftTopic(matcher.matchTopic(it.name, it.parentName)?.toString(), it.name, it.parentName) }
-        fun grammar(list: List<AiGrammarTopic>) = list.map { DraftGrammarTopic(matcher.matchGrammar(it.name)?.toString(), it.name, it.level) }
+        fun topics(list: List<AiTopic>) = list.mapNotNull { catalog.topic(it, matcher) }.distinctBy { it.id ?: it.name.lowercase() }
+        fun grammar(list: List<AiGrammarTopic>) = list.mapNotNull { catalog.grammar(it, matcher) }.distinctBy { it.id ?: it.name.lowercase() }
         fun document(doc: ValidatedDocument) = DraftDocument(doc.title, doc.blocks, topics(doc.topics), grammar(doc.grammarTopics), level)
 
         val words = draft.words.map { word ->
@@ -83,8 +89,31 @@ object DraftItems {
         val assigned = entryId != null && recipients.isNotEmpty() && StudentVocabTable.selectAll()
             .where { (StudentVocabTable.vocabEntryId eq entryId) and (StudentVocabTable.studentId inList recipients) }
             .count() == recipients.size.toLong()
-        return word.copy(entry = word.entry.copy(topicIds = emptyList()), libraryEntryId = entryId?.toString(), matched = entryId != null,
+        return word.copy(entry = word.entry.copy(topicIds = emptyList(), grammarTopicIds = null), libraryEntryId = entryId?.toString(), matched = entryId != null,
             alreadyAssigned = assigned)
+    }
+
+    /** What [newWords] dropped. */
+    data class WordFilter(val kept: Int, val known: Int, val repeated: Int)
+
+    /**
+     * Only words new to the learner: drops the ones [known] has (the library entry, or the same
+     * normalized lemma) and repeats within the answer (same normalized lemma). Other items pass.
+     */
+    fun newWords(items: List<NewDraftItem>, known: StudentWords?): Pair<List<NewDraftItem>, WordFilter> {
+        val seen = mutableSetOf<String>()
+        var dropKnown = 0
+        var dropRepeated = 0
+        val kept = items.filter { item ->
+            if (item.kind != DraftItemKind.WORD) return@filter true
+            val word = json.decodeFromJsonElement<DraftWord>(item.payload)
+            when {
+                known?.has(word) == true -> { dropKnown++; false }
+                !seen.add(LibraryMatcher.normalizeLemma(word.entry.lemma)) -> { dropRepeated++; false }
+                else -> true
+            }
+        }
+        return kept to WordFilter(kept.count { it.kind == DraftItemKind.WORD }, dropKnown, dropRepeated)
     }
 
     fun insert(bundleId: UUID, items: List<NewDraftItem>, firstPosition: Int = 0) {
@@ -96,10 +125,10 @@ object DraftItems {
         }
     }
 
-    /** The current items in the model's output format for a refine: names only, short block ids. */
-    fun toAiJson(items: List<ResultRow>, target: DraftTarget, kinds: Set<DraftKind> = DraftKind.entries.toSet()): String {
-        fun topics(list: List<DraftTopic>) = list.map { AiTopic(it.name, it.parentName) }
-        fun grammar(list: List<DraftGrammarTopic>) = list.map { AiGrammarTopic(it.name, it.level) }
+    /** The current items in the model's output format for a refine: library tags by [catalog] key, short block ids. */
+    fun toAiJson(items: List<ResultRow>, target: DraftTarget, catalog: TagCatalog, kinds: Set<DraftKind> = DraftKind.entries.toSet()): String {
+        fun topics(list: List<DraftTopic>) = list.map(catalog::toAi)
+        fun grammar(list: List<DraftGrammarTopic>) = list.map(catalog::toAi)
         fun aiDocument(row: ResultRow) = document(row).let {
             AiDocument(it.title, AiBlocks.toAi(it.blocks, emptyMap(), emptyMap()), topics(it.topics), grammar(it.grammarTopics))
         }

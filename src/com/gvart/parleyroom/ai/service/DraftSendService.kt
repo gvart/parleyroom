@@ -86,9 +86,11 @@ class DraftSendService(
         val tags = Tags(principal.id, (exercise ?: notes)?.level)
 
         // 1. Words: find-or-create in the library (a matching entry is reused as is), assign to the recipients.
+        // Suggested new topics / grammar topics are created here, not at generation.
         val sentWords = words.map { (row, word) ->
             val entry = word.entry.copy(
                 topicIds = word.topics.map { tags.topic(it).toString() }.distinct(),
+                grammarTopicIds = word.grammarTopics.map { tags.grammar(it).toString() }.distinct(),
                 sourceLessonId = word.entry.sourceLessonId ?: lessonId?.toString(),
             )
             val added = vocabEntryService.quickAdd(

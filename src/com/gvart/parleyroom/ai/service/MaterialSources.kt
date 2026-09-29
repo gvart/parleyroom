@@ -27,10 +27,10 @@ data class MaterialSource(val id: UUID, val name: String, val kind: TextSourceKi
     fun ref() = DraftMaterialSource(id.toString(), name, kind, text.length, truncated)
 }
 
-/** What the student already has: dropped from generated words and listed in `<exclude_words>`. */
+/** What the student already has: dropped from generated words and listed in `<exclude_words>`. [lemmas] are normalized. */
 data class StudentWords(val entryIds: Set<UUID>, val lemmas: Set<String>, val display: List<String>) {
     fun has(word: DraftWord): Boolean =
-        word.libraryEntryId?.let { UUID.fromString(it) in entryIds } == true || word.entry.lemma.trim().lowercase() in lemmas
+        word.libraryEntryId?.let { UUID.fromString(it) in entryIds } == true || LibraryMatcher.normalizeLemma(word.entry.lemma) in lemmas
 }
 
 /**
@@ -115,7 +115,7 @@ class MaterialSources(private val storage: StorageService) {
                 .toList()
             return StudentWords(
                 entryIds = rows.map { it[VocabEntryTable.id].value }.toSet(),
-                lemmas = rows.map { it[VocabEntryTable.lemma].trim().lowercase() }.toSet(),
+                lemmas = rows.map { LibraryMatcher.normalizeLemma(it[VocabEntryTable.lemma]) }.toSet(),
                 display = rows.take(MAX_EXCLUDE_WORDS).map { row ->
                     listOfNotNull(row[VocabEntryTable.article]?.name?.lowercase(), row[VocabEntryTable.lemma]).joinToString(" ")
                 },

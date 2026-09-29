@@ -25,7 +25,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  *
  * Markers anywhere in the first user message: `[fake:invalid-once]`, `[fake:invalid]`,
  * `[fake:error]`, `[fake:rate-limit]`, `[fake:delay=<ms>]`, `[fake:empty-once]`, `[fake:truncated]`,
- * `[fake:ignore-exclude]`;
+ * `[fake:ignore-exclude]`, `[fake:suggest-tags]` (words also get a new topic, the library's Perfekt
+ * and a new grammar topic), `[fake:dup-words]` (every word with an umlaut again, spelled out);
  * sentence feedback also `[fake:wrong]`.
  */
 class FakeLlmGateway : LlmGateway {
@@ -77,8 +78,9 @@ class FakeLlmGateway : LlmGateway {
         val materials = Prompts.section(request, "materials")
         // `[fake:ignore-exclude]` answers with words the student has, to exercise the server-side filter.
         val exclude = if ("[fake:ignore-exclude]" in request) emptySet() else excludeWords(request)
-        val words = if (materials != null) vocabFromMaterials(materials, exclude, level, languages)
-        else vocabFromNotes(source, level, languages)
+        val words = (if (materials != null) vocabFromMaterials(materials, exclude, level, languages)
+        else vocabFromNotes(source, level, languages)).let { tagWords(it, context, "[fake:suggest-tags]" in request) }
+            .let { if ("[fake:dup-words]" in request) it + spelledOut(it) else it }
         if (club) return buildJsonObject { put("notes", clubNotes(words, languages, invalid)) }
         val produce = Prompts.section(request, "produce").orEmpty()
         if ("homework" !in produce) return buildJsonObject { put("words", JsonArray(words)) }
@@ -125,6 +127,33 @@ class FakeLlmGateway : LlmGateway {
                 }
             }
         }
+    }
+
+    /** Library tags by their context id (`T1: Alltag`, `G1: Perfekt (B1)`), else by name. */
+    private fun tagWords(words: List<JsonObject>, context: String, suggest: Boolean): List<JsonObject> {
+        fun keys(prefix: String) = context.lineSequence().mapNotNull { Regex("^($prefix\\d+): (.+)$").find(it) }
+            .associate { match -> match.groupValues[2].substringAfterLast(" > ").replace(Regex(" \\((A1|A2|B1|B2|C1|C2)\\)$"), "").lowercase() to match.groupValues[1] }
+        val topics = keys("T")
+        val grammar = keys("G")
+        fun tag(keys: Map<String, String>, name: String, extra: Map<String, String> = emptyMap()) = buildJsonObject {
+            keys[name.lowercase()]?.let { put("id", it) } ?: run { put("name", name); extra.forEach { (k, v) -> put(k, v) } }
+        }
+        return words.map { word ->
+            JsonObject(word + mapOf(
+                "topics" to buildJsonArray {
+                    add(tag(topics, "Alltag"))
+                    if (suggest) add(tag(topics, "Garten", mapOf("parentName" to "Alltag")))
+                },
+                "grammarTopics" to buildJsonArray { if (suggest) { add(tag(grammar, "Perfekt")); add(tag(grammar, "Wortbildung")) } },
+            ))
+        }
+    }
+
+    /** The words with an umlaut or ß again, spelled out ("Gießkanne" -> "Giesskanne"). */
+    private fun spelledOut(words: List<JsonObject>): List<JsonObject> = words.mapNotNull { word ->
+        val lemma = word["lemma"]!!.jsonPrimitive.content
+        val spelled = lemma.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+        if (spelled == lemma) null else JsonObject(word + ("lemma" to JsonPrimitive(spelled)))
     }
 
     /** Glosses each word in every attendee language: "Gießkanne (ru: Gießkanne (ru); uk: Gießkanne (uk))". */

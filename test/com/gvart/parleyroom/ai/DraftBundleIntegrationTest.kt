@@ -130,8 +130,8 @@ class DraftBundleIntegrationTest : IntegrationTest() {
         practice = get("/api/v1/practice/queue") { bearerAuth(token) }.body<PracticeQueueResponse>().cards.size,
     )
 
-    /** A library noun the student already has. */
-    private fun knownWord(lemma: String, article: NounArticle) = transaction {
+    /** A library noun the student already has (with [assigned]). */
+    private fun knownWord(lemma: String, article: NounArticle, assigned: Boolean = true) = transaction {
         val now = OffsetDateTime.now()
         val entryId = VocabEntryTable.insertAndGetId {
             it[teacherId] = TEACHER
@@ -143,7 +143,7 @@ class DraftBundleIntegrationTest : IntegrationTest() {
             it[createdAt] = now
             it[updatedAt] = now
         }
-        StudentVocabTable.insert {
+        if (assigned) StudentVocabTable.insert {
             it[studentId] = STUDENT
             it[vocabEntryId] = entryId
             it[addedAt] = now
@@ -166,7 +166,8 @@ class DraftBundleIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
         val alltag = LibraryFixtures.topic("Alltag")
-        knownWord("Teekanne", NounArticle.DIE)
+        knownWord("Teekanne", NounArticle.DIE, assigned = false)
+        knownWord("Vorbeikommen", NounArticle.DER)
         val lessonId = seedLesson(level = LanguageLevel.B1)
 
         val started = client.startGenerate(token, lessonId, prompt = "Mach eine Vokabelliste.")
@@ -182,8 +183,8 @@ class DraftBundleIntegrationTest : IntegrationTest() {
         assertEquals(DraftMode.ONE_ON_ONE, bundle.mode)
         assertEquals(listOf(STUDENT.toString()), bundle.recipients.map { it.id })
         val words = bundle.items(DraftItemKind.WORD)
-        assertEquals(listOf("Vorbeikommen", "Gießkanne", "Blumen gießen", "Teekanne", "kümmern", "Darum muss du dicht kümmern"),
-            words.map { it.word!!.entry.lemma })
+        assertEquals(listOf("Gießkanne", "Blumen gießen", "Teekanne", "kümmern", "Darum muss du dicht kümmern"),
+            words.map { it.word!!.entry.lemma }, "Vorbeikommen: the student has it")
         assertEquals(1, bundle.items(DraftItemKind.EXERCISE_DOCUMENT).size)
         assertTrue(bundle.items(DraftItemKind.TASK).size in 1..3)
         assertTrue(bundle.items(DraftItemKind.NOTES_DOCUMENT).isEmpty())
@@ -194,11 +195,11 @@ class DraftBundleIntegrationTest : IntegrationTest() {
         assertEquals("DIE", gieskanne.entry.article?.name)
         assertEquals(lessonId.toString(), gieskanne.entry.sourceLessonId)
         assertEquals(listOf(DraftTopic(alltag.toString(), "Alltag")), gieskanne.topics, "tags matched against the library")
-        // The library already has Teekanne and the student knows it.
+        // The library already has Teekanne, the student does not.
         val teekanne = words.single { it.word!!.entry.lemma == "Teekanne" }
         assertNotNull(teekanne.word!!.libraryEntryId)
         assertTrue(teekanne.word.matched, "a matched word is reused as is at Send")
-        assertTrue(teekanne.word.alreadyAssigned)
+        assertFalse(teekanne.word.alreadyAssigned)
         assertTrue(words.filter { it.id != teekanne.id }.none { it.word!!.matched || it.word.libraryEntryId != null })
         assertEquals(listOf(DraftKind.WORDS, DraftKind.HOMEWORK), bundle.input.kinds, "lesson scope: both by default")
         assertEquals("Teekanne", teekanne.matchedEntry?.lemma)

@@ -24,6 +24,8 @@ data class VocabEntryInput(
     val topicIds: List<String> = emptyList(),
     val synonyms: List<String> = emptyList(),
     val sourceLessonId: String? = null,
+    /** Null (left out) keeps the entry's grammar topics on update. */
+    val grammarTopicIds: List<String>? = null,
 ) {
     fun errors(): List<String> = buildList {
         if (lemma.isBlank()) add("Lemma can't be empty")
@@ -53,6 +55,7 @@ data class VocabEntryResponse(
     val topicIds: List<String> = emptyList(),
     val synonyms: List<String> = emptyList(),
     val sourceLessonId: String? = null,
+    val grammarTopicIds: List<String> = emptyList(),
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
     @Serializable(with = OffsetDateTimeSerializer::class)

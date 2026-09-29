@@ -17,6 +17,7 @@ import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.vocabulary.data.LessonVocabTable
 import com.gvart.parleyroom.vocabulary.data.StudentVocabTable
+import com.gvart.parleyroom.vocabulary.data.VocabEntryGrammarTopicTable
 import com.gvart.parleyroom.vocabulary.data.VocabEntryTable
 import com.gvart.parleyroom.vocabulary.data.VocabEntryTopicTable
 import com.gvart.parleyroom.vocabulary.data.WordType
@@ -97,8 +98,10 @@ class VocabEntryService(
         if (findDuplicate(teacherId, input, excludeId = entryId) != null)
             throw ConflictException("'${input.lemma.trim()}' is already in your library", code = "VOCAB_ENTRY_DUPLICATE")
         val topicIds = validateInput(teacherId, input)
+        val grammarIds = input.grammarTopicIds?.let { LibraryAccess.requireGrammarTopics(teacherId, it) }
         VocabEntryTable.update({ VocabEntryTable.id eq entryId }) { applyInput(it, input) }
         replaceTopics(entryId, topicIds)
+        grammarIds?.let { replaceGrammarTopics(entryId, it) }
         toResponses(listOf(VocabEntryTable.findByIdOrThrow(entryId, "Vocab entry"))).single()
     }
 
@@ -142,6 +145,7 @@ class VocabEntryService(
     fun toResponses(rows: List<ResultRow>): List<VocabEntryResponse> {
         if (rows.isEmpty()) return emptyList()
         val topicsByEntry = topicIdsByEntry(rows.map { it[VocabEntryTable.id].value })
+        val grammarByEntry = grammarTopicIdsByEntry(rows.map { it[VocabEntryTable.id].value })
         return rows.map { row ->
             val id = row[VocabEntryTable.id].value
             VocabEntryResponse(
@@ -160,6 +164,7 @@ class VocabEntryService(
                 topicIds = topicsByEntry[id].orEmpty().map(UUID::toString),
                 synonyms = row[VocabEntryTable.synonyms],
                 sourceLessonId = row[VocabEntryTable.sourceLessonId]?.value?.toString(),
+                grammarTopicIds = grammarByEntry[id].orEmpty().map(UUID::toString),
                 createdAt = row[VocabEntryTable.createdAt],
                 updatedAt = row[VocabEntryTable.updatedAt],
             )
@@ -187,6 +192,7 @@ class VocabEntryService(
 
     private fun insertEntry(teacherId: UUID, input: VocabEntryInput): UUID {
         val topicIds = validateInput(teacherId, input)
+        val grammarIds = LibraryAccess.requireGrammarTopics(teacherId, input.grammarTopicIds.orEmpty())
         val now = OffsetDateTime.now()
         val id = VocabEntryTable.insertAndGetId {
             it[VocabEntryTable.teacherId] = teacherId
@@ -195,6 +201,7 @@ class VocabEntryService(
             it[updatedAt] = now
         }.value
         replaceTopics(id, topicIds)
+        replaceGrammarTopics(id, grammarIds)
         return id
     }
 
@@ -225,6 +232,15 @@ class VocabEntryService(
         VocabEntryTopicTable.batchInsert(topicIds) { topicId ->
             this[VocabEntryTopicTable.vocabEntryId] = entryId
             this[VocabEntryTopicTable.topicId] = topicId
+        }
+    }
+
+    private fun replaceGrammarTopics(entryId: UUID, grammarTopicIds: List<UUID>) {
+        VocabEntryGrammarTopicTable.deleteWhere { vocabEntryId eq entryId }
+        if (grammarTopicIds.isEmpty()) return
+        VocabEntryGrammarTopicTable.batchInsert(grammarTopicIds) { grammarTopicId ->
+            this[VocabEntryGrammarTopicTable.vocabEntryId] = entryId
+            this[VocabEntryGrammarTopicTable.grammarTopicId] = grammarTopicId
         }
     }
 
@@ -312,6 +328,14 @@ class VocabEntryService(
             return VocabEntryTopicTable.selectAll()
                 .where { VocabEntryTopicTable.vocabEntryId inList entryIds }
                 .groupBy({ it[VocabEntryTopicTable.vocabEntryId].value }) { it[VocabEntryTopicTable.topicId].value }
+        }
+
+        /** Grammar topic ids per entry. Must run in a transaction. */
+        fun grammarTopicIdsByEntry(entryIds: List<UUID>): Map<UUID, List<UUID>> {
+            if (entryIds.isEmpty()) return emptyMap()
+            return VocabEntryGrammarTopicTable.selectAll()
+                .where { VocabEntryGrammarTopicTable.vocabEntryId inList entryIds }
+                .groupBy({ it[VocabEntryGrammarTopicTable.vocabEntryId].value }) { it[VocabEntryGrammarTopicTable.grammarTopicId].value }
         }
     }
 }

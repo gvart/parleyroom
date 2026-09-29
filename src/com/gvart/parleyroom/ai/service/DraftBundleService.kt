@@ -19,7 +19,6 @@ import com.gvart.parleyroom.ai.transfer.DraftContextResponse
 import com.gvart.parleyroom.ai.transfer.DraftItemResponse
 import com.gvart.parleyroom.ai.transfer.DraftKind
 import com.gvart.parleyroom.ai.transfer.DraftMaterialSource
-import com.gvart.parleyroom.ai.transfer.DraftWord
 import com.gvart.parleyroom.ai.transfer.GenerateDraftRequest
 import com.gvart.parleyroom.ai.transfer.JobInput
 import com.gvart.parleyroom.ai.transfer.PatchDraftItemRequest
@@ -61,6 +60,7 @@ import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
+import org.slf4j.LoggerFactory
 import java.util.UUID
 
 /**
@@ -74,6 +74,8 @@ class DraftBundleService(
     private val vocabEntryService: VocabEntryService,
     private val materialSources: MaterialSources,
 ) {
+
+    private val log = LoggerFactory.getLogger(DraftBundleService::class.java)
 
     // ---- Context for the generate form ----
 
@@ -152,13 +154,10 @@ class DraftBundleService(
 
         fun prompt() = MaterialPrompt(MaterialSources.promptText(sources), maxWords, studentWords.display)
 
-        /** Drops the words the student already has and keeps at most [maxWords]. */
-        fun filter(items: List<NewDraftItem>): List<NewDraftItem> {
+        /** Keeps at most [maxWords] words. */
+        fun cap(items: List<NewDraftItem>): List<NewDraftItem> {
             var words = 0
-            return items.filter { item ->
-                item.kind != DraftItemKind.WORD ||
-                        (!studentWords.has(GenerationJobs.json.decodeFromJsonElement<DraftWord>(item.payload)) && words++ < maxWords)
-            }
+            return items.filter { item -> item.kind != DraftItemKind.WORD || words++ < maxWords }
         }
     }
 
@@ -226,8 +225,8 @@ class DraftBundleService(
         }
         return transaction {
             val count = if (lockDraft(bundleId)) {
-                val items = DraftItems.fromAi(completion.value, ctx.teacherId, ctx.level, ctx.lessonId, ctx.attendeeIds)
-                    .let { materials?.filter(it) ?: it }
+                val items = newWords(bundleId, ctx, DraftItems.fromAi(completion.value, ctx.teacherId, ctx.level, ctx.lessonId, ctx.attendeeIds, ctx.catalog))
+                    .let { materials?.cap(it) ?: it }
                 DraftItemTable.deleteWhere { DraftItemTable.bundleId eq bundleId }
                 DraftItems.insert(bundleId, items)
                 items.size
@@ -279,7 +278,7 @@ class DraftBundleService(
             val materialRows = input.materialIds?.let { ids ->
                 MaterialTable.selectAll().where { (MaterialTable.id inList ids.map(UUID::fromString)) and (MaterialTable.teacherId eq ctx.teacherId) }.toList()
             }
-            Refine(ctx, target, DraftItems.toAiJson(listOfNotNull(item).ifEmpty { items }, target, kinds), notes, prompt,
+            Refine(ctx, target, DraftItems.toAiJson(listOfNotNull(item).ifEmpty { items }, target, ctx.catalog, kinds), notes, prompt,
                 materialRows, materialRows?.let { MaterialSources.studentWords(bundle[DraftBundleTable.studentId]!!.value) })
         }
         val materials = refine.materialRows?.let { MaterialContext(materialSources.extract(it, requireText = false), refine.studentWords!!) }
@@ -292,9 +291,9 @@ class DraftBundleService(
         return transaction {
             val ctx = refine.ctx
             val count = if (lockDraft(bundleId)) {
-                val generated = DraftItems.fromAi(completion.value, ctx.teacherId, ctx.level, ctx.lessonId, ctx.attendeeIds)
+                val generated = DraftItems.fromAi(completion.value, ctx.teacherId, ctx.level, ctx.lessonId, ctx.attendeeIds, ctx.catalog)
                 // A single refined item is kept even if the student has it: the teacher asked for that one.
-                val items = if (itemId == null) materials?.filter(generated) ?: generated else generated
+                val items = if (itemId == null) newWords(bundleId, ctx, generated).let { materials?.cap(it) ?: it } else generated
                 if (itemId == null) {
                     // Only the regenerated kinds are replaced (a club's notes document: everything).
                     val replaced = if (ctx.mode == DraftMode.CLUB) DraftItemKind.entries.toSet() else DraftItems.itemKinds(kinds)
@@ -312,6 +311,15 @@ class DraftBundleService(
             } else 0
             JobSuccess(jobResult(bundleId, count), completion.attempts, completion.usage)
         }
+    }
+
+    /** Drops generated words a 1:1 student already has and repeats within the answer. Must run in a transaction. */
+    private fun newWords(bundleId: UUID, ctx: LessonContext, items: List<NewDraftItem>): List<NewDraftItem> {
+        val student = ctx.attendeeIds.singleOrNull()?.takeIf { ctx.mode == DraftMode.ONE_ON_ONE }
+        val (kept, filter) = DraftItems.newWords(items, student?.let(MaterialSources::studentWords))
+        if (filter.known + filter.repeated > 0)
+            log.info("Draft {}: kept {} words, dropped {} the student has and {} repeated", bundleId, filter.kept, filter.known, filter.repeated)
+        return kept
     }
 
     // ---- Read ----
