@@ -88,11 +88,12 @@ data class AiTask(
 @Serializable
 data class AiDocumentAnswer(val document: AiDocument)
 
+/** A tag: [id] = a library key from the prompt (T1…); without it [name] is matched or proposed as new. */
 @Serializable
-data class AiTopic(val name: String, val parentName: String? = null)
+data class AiTopic(val name: String = "", val parentName: String? = null, val id: String? = null)
 
 @Serializable
-data class AiGrammarTopic(val name: String, val level: LanguageLevel? = null)
+data class AiGrammarTopic(val name: String = "", val level: LanguageLevel? = null, val id: String? = null)
 
 /** Model output for FILL_TRANSLATIONS. */
 @Serializable
@@ -300,14 +301,21 @@ object AiOutputParser {
     private fun checkTags(topics: List<AiTopic>, grammar: List<AiGrammarTopic>, pointer: String, issues: MutableList<Issue>) {
         if (topics.size > MAX_SUGGESTED_TAGS) issues += Issue("$pointer/topics", "at most $MAX_SUGGESTED_TAGS topics")
         if (grammar.size > MAX_SUGGESTED_TAGS) issues += Issue("$pointer/grammarTopics", "at most $MAX_SUGGESTED_TAGS grammar topics")
-        topics.forEachIndexed { i, t -> if (t.name.isBlank() || t.name.length > 255) issues += Issue("$pointer/topics/$i/name", "name must be 1..255 characters") }
-        grammar.forEachIndexed { i, g -> if (g.name.isBlank() || g.name.length > 255) issues += Issue("$pointer/grammarTopics/$i/name", "name must be 1..255 characters") }
+        fun check(id: String?, name: String, at: String) {
+            if (id.isNullOrBlank() && name.isBlank()) issues += Issue(at, "give the library id or a name")
+            if (name.length > 255) issues += Issue("$at/name", "name must be at most 255 characters")
+        }
+        topics.forEachIndexed { i, t -> check(t.id, t.name, "$pointer/topics/$i") }
+        grammar.forEachIndexed { i, g -> check(g.id, g.name, "$pointer/grammarTopics/$i") }
     }
 
-    private fun cleanTopics(topics: List<AiTopic>) =
-        topics.map { it.copy(name = it.name.trim(), parentName = it.parentName?.trim()?.ifEmpty { null }) }.distinctBy { it.name.lowercase() }
+    private fun cleanTopics(topics: List<AiTopic>) = topics
+        .map { it.copy(name = it.name.trim(), parentName = it.parentName?.trim()?.ifEmpty { null }, id = it.id?.trim()?.uppercase()?.ifEmpty { null }) }
+        .distinctBy { it.id ?: it.name.lowercase() }
 
-    private fun cleanGrammar(grammar: List<AiGrammarTopic>) = grammar.map { it.copy(name = it.name.trim()) }.distinctBy { it.name.lowercase() }
+    private fun cleanGrammar(grammar: List<AiGrammarTopic>) = grammar
+        .map { it.copy(name = it.name.trim(), id = it.id?.trim()?.uppercase()?.ifEmpty { null }) }
+        .distinctBy { it.id ?: it.name.lowercase() }
 
     fun parseFill(text: String, expectedKeys: Set<String>): AiFillOutput {
         val output = decode<AiFillOutput>(text)

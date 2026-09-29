@@ -93,7 +93,9 @@ class VocabularyService {
      */
     fun toResponses(rows: List<ResultRow>, principal: UserPrincipal): List<StudentVocabResponse> {
         if (rows.isEmpty()) return emptyList()
-        val topicsByEntry = VocabEntryService.topicIdsByEntry(rows.map { it[VocabEntryTable.id].value }.distinct())
+        val entryIds = rows.map { it[VocabEntryTable.id].value }.distinct()
+        val topicsByEntry = VocabEntryService.topicIdsByEntry(entryIds)
+        val grammarByEntry = VocabEntryService.grammarTopicIdsByEntry(entryIds)
         val settings = DisplaySettingResolver.load(rows)
         val isStudent = principal.role == UserRole.STUDENT
 
@@ -119,6 +121,7 @@ class VocabularyService {
                 exampleSentence = row[VocabEntryTable.exampleSentence],
                 level = row[VocabEntryTable.level],
                 topicIds = topicsByEntry[row[VocabEntryTable.id].value].orEmpty().map(UUID::toString),
+                grammarTopicIds = grammarByEntry[row[VocabEntryTable.id].value].orEmpty().map(UUID::toString),
                 synonyms = row[VocabEntryTable.synonyms],
                 lessonId = row[StudentVocabTable.lessonId]?.value?.toString(),
                 status = row[StudentVocabTable.status],

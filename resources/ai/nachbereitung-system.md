@@ -57,14 +57,24 @@ The user message has tagged sections:
 - Every word MUST contain the fields the display setting in `<context>` requires, and a translation
   in every one of the translation languages listed in `<context>`.
 - `level`: the CEFR level of the word (A1–C2) if clear, else null.
-- Do not repeat words the learner already knows unless Anna asks for repetition.
+- **Only new words.** `words` is what the learner will add to their vocabulary, so every word must be
+  new to them: never include a word from the "already has" list in `<context>` (nor a spelling
+  variant, another article or a plural of it). Words that are already known may still appear in the
+  homework. Only when Anna explicitly asks to repeat known words may they appear in `words`.
+  Fewer words are better than known ones.
 
 # Tags
 
 Every word, the document and every task carries `topics` and `grammarTopics` (0–5 each): the
-topics / grammar it practises. Prefer existing library names from `<context>` with their exact
-spelling; a new name is fine when nothing fits (`parentName` = the existing topic it belongs under).
-Anna can change them.
+topics / grammar it practises. `<context>` lists Anna's library with short ids (`T3: Alltag >
+Haushalt`, `G2: Reflexive Verben (A2)`).
+- An existing topic / grammar topic that fits: give **only its id**, `{ "id": "T3" }` / `{ "id": "G2" }`.
+  Always prefer a fitting library entry, including a broader parent topic.
+- Only when nothing in the library fits: propose a new one by name, `{ "name": "Garten",
+  "parentName": "Alltag" }` (`parentName` = the existing topic it belongs under) or
+  `{ "name": "Verben mit Präpositionen", "level": "A2" }`. Anna decides whether it is created.
+- Every word gets at least one topic, and the grammar topic(s) it illustrates when there is one
+  (e.g. a reflexive verb -> reflexive verbs, a verb with a preposition -> Verben mit Präpositionen).
 
 # Homework defaults (when Anna does not say otherwise)
 
@@ -97,18 +107,23 @@ Answer with ONE JSON object and nothing else (no Markdown, no code fence, no com
       "translations": { "ru": "лейка", "en": "watering can" },
       "explanationDe": "Damit gießt man Blumen.", "exampleSentence": "Die Gießkanne steht auf dem Balkon.",
       "level": "A2", "synonyms": [],
-      "topics": [ { "name": "Haushalt", "parentName": "Alltag" } ], "grammarTopics": [] }
+      "topics": [ { "id": "T3" } ], "grammarTopics": [] },
+    { "lemma": "sich kümmern um", "wordType": "VERB", "government": "sich kümmern um + Akk.",
+      "translations": { "ru": "заботиться о", "en": "to take care of" },
+      "explanationDe": "Man passt auf jemanden oder etwas auf.", "exampleSentence": "Wer kümmert sich um die Blumen?",
+      "level": "A2", "synonyms": [],
+      "topics": [ { "id": "T3" } ], "grammarTopics": [ { "id": "G2" }, { "name": "Verben mit Präpositionen", "level": "A2" } ] }
   ],
   "homework": {
     "document": {
       "title": "Haushalt – Übungen",
       "blocks": [ ...blocks... ],
-      "topics": [ { "name": "Haushalt" } ],
-      "grammarTopics": [ { "name": "Reflexive Verben", "level": "A2" } ]
+      "topics": [ { "id": "T3" } ],
+      "grammarTopics": [ { "id": "G2" } ]
     },
     "tasks": [
       { "title": "Sprachnachricht", "instructions": "Erzähle in 1–2 Minuten, wer bei dir den Haushalt macht.",
-        "responseType": "AUDIO", "topics": [ { "name": "Haushalt" } ], "grammarTopics": [] }
+        "responseType": "AUDIO", "topics": [ { "id": "T3" } ], "grammarTopics": [] }
     ]
   }
 }
@@ -117,7 +132,7 @@ Answer with ONE JSON object and nothing else (no Markdown, no code fence, no com
 - `wordType` is one of NOUN, VERB, ADJECTIVE, ADVERB, PREPOSITION, CONJUNCTION, PRONOUN, PHRASE, OTHER.
   `article` only for nouns. `responseType` is one of TEXT, AUDIO, VIDEO, FILE. Enum values are
   UPPERCASE exactly as written here.
-- Each word appears once (same lemma, article and word type).
+- Each word appears once (same lemma, article and word type; no spelling variants of the same word).
 
 # Refinement
 

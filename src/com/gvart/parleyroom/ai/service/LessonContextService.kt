@@ -80,7 +80,7 @@ data class LessonContext(
     val knownWords: List<String>,
     val coveredGrammar: List<GrammarTopicRef>,
     val grammarGaps: GrammarGaps,
-    val topicPaths: List<String>,
+    val topics: List<LibraryTopic>,
     val grammarTopics: List<GrammarTopicRef>,
     val prefillNotes: String?,
     val promptUsed: String?,
@@ -94,6 +94,9 @@ data class LessonContext(
 ) {
     val attendeeIds: List<UUID> get() = attendees.map { UUID.fromString(it.id) }
 
+    /** The library tags under the keys the prompt shows. */
+    val catalog: TagCatalog by lazy { TagCatalog(topics, grammarTopics) }
+
     fun summary() = ContextSummary(
         level = level,
         display = display,
@@ -102,7 +105,7 @@ data class LessonContext(
         knownWordCount = knownWordCount,
         coveredGrammar = coveredGrammar,
         grammarGaps = grammarGaps,
-        libraryTopicCount = topicPaths.size,
+        libraryTopicCount = topics.size,
         libraryGrammarTopicCount = grammarTopics.size,
         attendees = attendees,
         attendeeCount = attendees.size,
@@ -136,7 +139,11 @@ data class LessonContext(
             appendLine("Homework instructions: German only.")
         }
         appendLine()
-        appendLine(if (mode == DraftMode.CLUB) "Words the group already had:" else "Words the student already knows:")
+        appendLine(
+            (if (mode == DraftMode.CLUB) "Words the group already had" else "Words the student already has in their vocabulary") +
+                    " ($knownWordCount, newest first${if (knownWords.size < knownWordCount) ", the newest ${knownWords.size} shown" else ""}). " +
+                    "They are NOT new: never put them (or a spelling variant of them) into words:"
+        )
         appendLine(knownWords.joinToString(", ").ifEmpty { "(none yet)" })
         if (mode == DraftMode.ONE_ON_ONE) {
             appendLine()
@@ -165,11 +172,11 @@ data class LessonContext(
         appendLine("Grammar of level ${level ?: "unknown"} not covered yet${if (mode == DraftMode.CLUB) " (for at least half of the participants)" else ""}:")
         appendLine(grammarGaps.notCovered.joinToString(", ").ifEmpty { "(none known)" })
         appendLine()
-        appendLine("Library topics (reuse these exact names for topicName and suggestedTopics when they fit):")
-        appendLine(topicPaths.joinToString("\n").ifEmpty { "(empty library)" })
+        appendLine("Library topics as `id: path` (tag with {\"id\": …} when one fits):")
+        appendLine(catalog.topicLines().ifEmpty { "(empty library)" })
         appendLine()
-        appendLine("Library grammar topics (reuse these exact names in suggestedGrammarTopics when they fit):")
-        append(grammarTopics.joinToString(", ") { refText(it) }.ifEmpty { "(empty library)" })
+        appendLine("Library grammar topics as `id: name (level)` (tag with {\"id\": …} when one fits):")
+        append(catalog.grammarLines().ifEmpty { "(empty library)" })
     }
 
     /** Earlier lessons' notes, oldest first, headed by their date only. */
@@ -241,7 +248,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
             knownWords = known.second,
             coveredGrammar = coveredGrammar(earlier),
             grammarGaps = grammarGaps(teacherId, level, attendeeIds),
-            topicPaths = topicPaths(teacherId),
+            topics = libraryTopics(teacherId),
             grammarTopics = libraryGrammar(teacherId),
             prefillNotes = lesson[LessonTable.rawNotes],
             promptUsed = lesson[LessonTable.promptUsed],
@@ -274,7 +281,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
             knownWords = known.second,
             coveredGrammar = coveredGrammar(earlier),
             grammarGaps = grammarGaps(teacherId, level, listOf(studentId)),
-            topicPaths = topicPaths(teacherId),
+            topics = libraryTopics(teacherId),
             grammarTopics = libraryGrammar(teacherId),
             prefillNotes = null,
             promptUsed = null,
@@ -367,7 +374,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
         .limit(MAX_WEAK_WORDS)
         .map { row -> listOfNotNull(row[VocabEntryTable.article]?.name?.lowercase(), row[VocabEntryTable.lemma]).joinToString(" ") }
 
-    /** (total count, newest [MAX_KNOWN_WORDS] words rendered as "die Gießkanne"). */
+    /** (total count, newest [MAX_KNOWN_WORDS] lemmas; the article is left out to keep the list short). */
     private fun knownWords(
         mode: DraftMode,
         teacherId: UUID,
@@ -405,9 +412,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
         val shown = entryIds.take(MAX_KNOWN_WORDS)
         val rows = VocabEntryTable.selectAll().where { VocabEntryTable.id inList shown }
             .associateBy { it[VocabEntryTable.id].value }
-        val words = shown.mapNotNull { id ->
-            rows[id]?.let { row -> listOfNotNull(row[VocabEntryTable.article]?.name?.lowercase(), row[VocabEntryTable.lemma]).joinToString(" ") }
-        }
+        val words = shown.mapNotNull { id -> rows[id]?.get(VocabEntryTable.lemma) }
         return entryIds.size to words
     }
 
@@ -472,18 +477,23 @@ class LessonContextService(private val progress: ProgressCalculator) {
     }
 
     /** The teacher's topic tree as "Alltag > Haushalt" paths, sorted. */
-    fun topicPaths(teacherId: UUID): List<String> {
+    fun topicPaths(teacherId: UUID): List<String> = libraryTopics(teacherId).map { it.path }
+
+    /** The teacher's topics with their paths, sorted by path. */
+    fun libraryTopics(teacherId: UUID): List<LibraryTopic> {
         val topics = TopicTable.selectAll().where { TopicTable.teacherId eq teacherId }
             .associate { it[TopicTable.id].value to (it[TopicTable.parentId]?.value to it[TopicTable.name]) }
         fun path(id: UUID, depth: Int = 0): String {
             val (parent, name) = topics.getValue(id)
             return if (parent == null || parent !in topics || depth > 10) name else path(parent, depth + 1) + " > " + name
         }
-        return topics.keys.map { path(it) }.sorted().take(MAX_LIBRARY_ITEMS)
+        return topics.map { (id, value) -> LibraryTopic(id, value.second, value.first?.let(topics::get)?.second, path(id)) }
+            .sortedBy { it.path }.take(MAX_LIBRARY_ITEMS)
     }
 
     companion object {
-        const val MAX_KNOWN_WORDS = 300
+        /** Lemmas only (~4 tokens each): the whole vocabulary of most students fits. */
+        const val MAX_KNOWN_WORDS = 1_500
         const val MAX_LIBRARY_ITEMS = 300
         const val MAX_GAPS = 30
         const val MAX_WEAK_WORDS = 30

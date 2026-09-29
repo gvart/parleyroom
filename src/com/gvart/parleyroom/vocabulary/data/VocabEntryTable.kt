@@ -3,6 +3,7 @@ package com.gvart.parleyroom.vocabulary.data
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.pgEnum
 import com.gvart.parleyroom.lesson.data.LessonTable
+import com.gvart.parleyroom.topic.data.GrammarTopicTable
 import com.gvart.parleyroom.topic.data.TopicTable
 import com.gvart.parleyroom.user.data.UserTable
 import kotlinx.serialization.json.Json
@@ -38,6 +39,13 @@ object VocabEntryTopicTable : Table("vocab_entry_topics") {
     val topicId = reference("topic_id", TopicTable)
 
     override val primaryKey = PrimaryKey(vocabEntryId, topicId)
+}
+
+object VocabEntryGrammarTopicTable : Table("vocab_entry_grammar_topics") {
+    val vocabEntryId = reference("vocab_entry_id", VocabEntryTable)
+    val grammarTopicId = reference("grammar_topic_id", GrammarTopicTable)
+
+    override val primaryKey = PrimaryKey(vocabEntryId, grammarTopicId)
 }
 
 /** Words introduced in a lesson. */

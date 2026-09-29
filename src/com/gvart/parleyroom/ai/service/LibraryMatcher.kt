@@ -15,6 +15,7 @@ import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.lowerCase
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import java.text.Normalizer
 import java.time.OffsetDateTime
 import java.util.UUID
 
@@ -81,5 +82,18 @@ class LibraryMatcher(private val teacherId: UUID) {
             it[updatedAt] = now
         }.value
         return id to false
+    }
+
+    companion object {
+        private val ARTICLE = Regex("^(der|die|das)\\s+")
+        private val WHITESPACE = Regex("\\s+")
+
+        /**
+         * A lemma for "is this the same word": Unicode-composed, case-folded, single spaces, no
+         * leading article, umlauts and ß spelled out ("die  Gießkanne" = "giesskanne", "Mädchen" = "maedchen").
+         */
+        fun normalizeLemma(lemma: String): String = Normalizer.normalize(lemma, Normalizer.Form.NFC)
+            .trim().lowercase().replace(WHITESPACE, " ").replace(ARTICLE, "")
+            .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
     }
 }
