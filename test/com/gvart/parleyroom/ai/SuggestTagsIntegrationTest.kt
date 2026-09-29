@@ -20,7 +20,6 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
-import io.ktor.client.request.forms.InputProvider
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
@@ -29,17 +28,8 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.utils.io.core.ByteReadPacket
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
-import org.apache.pdfbox.pdmodel.PDDocument
-import org.apache.pdfbox.pdmodel.PDPage
-import org.apache.pdfbox.pdmodel.PDPageContentStream
-import org.apache.pdfbox.pdmodel.font.PDType1Font
-import org.apache.pdfbox.pdmodel.font.Standard14Fonts
-import java.io.ByteArrayOutputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -50,62 +40,6 @@ import kotlin.test.assertTrue
 class SuggestTagsIntegrationTest : IntegrationTest() {
 
     private val json = Json { ignoreUnknownKeys = true }
-
-    /** A PDF whose pages each carry one line of text. */
-    private fun pdf(vararg pages: String): ByteArray = PDDocument().use { document ->
-        pages.forEach { text ->
-            val page = PDPage()
-            document.addPage(page)
-            PDPageContentStream(document, page).use { stream ->
-                stream.beginText()
-                stream.setFont(PDType1Font(Standard14Fonts.FontName.HELVETICA), 12f)
-                stream.newLineAtOffset(72f, 700f)
-                stream.showText(text)
-                stream.endText()
-            }
-        }
-        ByteArrayOutputStream().also(document::save).toByteArray()
-    }
-
-    /** A minimal DOCX: just word/document.xml with one paragraph per line. */
-    private fun docx(vararg paragraphs: String): ByteArray {
-        val xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-            <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
-            ${paragraphs.joinToString("") { p -> "<w:p><w:r><w:t xml:space=\"preserve\">${p.substringBefore('|')}</w:t></w:r><w:r><w:tab/><w:t>${p.substringAfter('|', "")}</w:t></w:r></w:p>" }}
-            </w:body></w:document>"""
-        val out = ByteArrayOutputStream()
-        ZipOutputStream(out).use { zip ->
-            zip.putNextEntry(ZipEntry("[Content_Types].xml")); zip.write("<Types/>".toByteArray()); zip.closeEntry()
-            zip.putNextEntry(ZipEntry("word/document.xml")); zip.write(xml.toByteArray()); zip.closeEntry()
-        }
-        return out.toByteArray()
-    }
-
-    private suspend fun HttpClient.upload(
-        token: String,
-        name: String,
-        fileName: String,
-        contentType: String,
-        bytes: ByteArray,
-        suggestTags: Boolean = false,
-    ): HttpResponse = submitFormWithBinaryData(
-        url = "/api/v1/materials",
-        formData = formData {
-            append(
-                "metadata",
-                Json.encodeToString(CreateMaterialRequest.serializer(), CreateMaterialRequest(name = name, type = MaterialType.PDF, suggestTags = suggestTags)),
-                Headers.build { append(HttpHeaders.ContentType, "application/json") },
-            )
-            append(
-                "file",
-                InputProvider(bytes.size.toLong()) { ByteReadPacket(bytes) },
-                Headers.build {
-                    append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
-                    append(HttpHeaders.ContentType, contentType)
-                },
-            )
-        },
-    ) { bearerAuth(token) }
 
     /** A LINK material (no file part) with suggestions on: only its name is sent. */
     private suspend fun HttpClient.uploadLink(token: String, name: String): MaterialResponse = submitFormWithBinaryData(

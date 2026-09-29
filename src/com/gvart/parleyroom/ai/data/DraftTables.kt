@@ -28,6 +28,8 @@ object DraftBundleTable : UUIDTable("ai_draft_bundles") {
     val status = pgEnum<DraftStatus>("status", "AI_DRAFT_STATUS").default(DraftStatus.DRAFT)
     val input = jsonb<JsonElement>("input", Json.Default)
     val sendResult = jsonb<JsonElement>("send_result", Json.Default).nullable()
+    /** [DraftMaterialSource]s of a words-from-material generation. */
+    val materialSources = jsonb<JsonElement>("material_sources", Json.Default).nullable()
     val sentAt = timestampWithTimeZone("sent_at").nullable()
     // Database clock only: the update trigger sets updated_at with now(), so inserts must too.
     val createdAt = timestampWithTimeZone("created_at").defaultExpression(CurrentTimestampWithTimeZone)

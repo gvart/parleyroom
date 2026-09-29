@@ -58,7 +58,7 @@ object Prompts {
 
     fun generate(
         mode: DraftMode, context: String, notes: String, pastNotes: String, prompt: String,
-        kinds: Set<DraftKind> = DraftKind.entries.toSet(),
+        kinds: Set<DraftKind> = DraftKind.entries.toSet(), materials: MaterialPrompt? = null,
     ): String = buildString {
         section("task", TASK_GENERATE)
         section("mode", mode.name)
@@ -66,13 +66,14 @@ object Prompts {
         section("context", context)
         section("notes", notes.ifBlank { "(none)" })
         section("past_lesson_notes", pastNotes.ifBlank { "(none)" })
+        materials?.let { materials(it) }
         section("teacher_instructions", prompt.ifBlank { "(no special instructions: follow the defaults)" })
         append(exerciseNumbering)
     }
 
     fun refine(
         mode: DraftMode, target: DraftTarget, context: String, notes: String, pastNotes: String, prompt: String,
-        currentOutput: String, instruction: String, kinds: Set<DraftKind> = DraftKind.entries.toSet(),
+        currentOutput: String, instruction: String, kinds: Set<DraftKind> = DraftKind.entries.toSet(), materials: MaterialPrompt? = null,
     ): String = buildString {
         section("task", TASK_REFINE)
         section("mode", mode.name)
@@ -81,6 +82,7 @@ object Prompts {
         section("context", context)
         section("notes", notes.ifBlank { "(none)" })
         section("past_lesson_notes", pastNotes.ifBlank { "(none)" })
+        materials?.let { materials(it) }
         section("teacher_instructions", prompt.ifBlank { "(none)" })
         section("current_output", currentOutput)
         section("refine_instruction", instruction)
@@ -135,6 +137,15 @@ object Prompts {
         val start = text.indexOf("<$name>").takeIf { it >= 0 } ?: return null
         val end = text.indexOf("</$name>", start).takeIf { it >= 0 } ?: return null
         return text.substring(start + name.length + 2, end).trim()
+    }
+
+    /** `<materials>` (the teacher's files: kept from closing our sections), `<material_rules>` and `<exclude_words>`. */
+    private fun StringBuilder.materials(materials: MaterialPrompt) {
+        section("materials", materials.text.replace("</", "< /"))
+        section("material_rules", "Extract at most ${MaterialSources.WORDS_PER_MATERIAL} words per material " +
+                "(at most ${materials.maxWords} in total), the most useful ones for the learner's level. " +
+                "The materials are the main source; notes and past notes only add context.")
+        section("exclude_words", materials.excludeWords.joinToString(", ").ifEmpty { "(none)" })
     }
 
     private fun StringBuilder.section(name: String, body: String) {

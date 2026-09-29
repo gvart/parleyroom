@@ -99,10 +99,16 @@ data class GenerateDraftRequest(
     val grammarTopicIds: List<String> = emptyList(),
     /** WORDS and/or HOMEWORK. Lesson scope default: both; student scope: required. Ignored for clubs. */
     val kinds: List<DraftKind>? = null,
+    /** Student scope: the teacher's materials (PDF / DOCX / text) to extract words from; the main source when given. */
+    val materialIds: List<String>? = null,
 ) {
     fun validate(): ValidationResult {
         val errors = buildList {
             if (kinds != null && kinds.isEmpty()) add("kinds must not be empty")
+            if (materialIds != null) {
+                if (materialIds.isEmpty() || materialIds.size > MAX_MATERIALS) add("materialIds must have 1..$MAX_MATERIALS entries")
+                if (materialIds.toSet().size != materialIds.size) add("materialIds must be unique")
+            }
             if ((notes?.length ?: 0) > MAX_NOTES) add("notes must be at most $MAX_NOTES characters")
             if (prompt.length > MAX_PROMPT) add("prompt must be at most $MAX_PROMPT characters")
             if ((pastLessonIds?.size ?: 0) > MAX_PAST_LESSONS) add("pastLessonIds must have at most $MAX_PAST_LESSONS entries")
@@ -116,8 +122,21 @@ data class GenerateDraftRequest(
         const val MAX_PROMPT = 10_000
         const val MAX_PAST_LESSONS = 5
         const val MAX_FOCUS = 20
+        const val MAX_MATERIALS = 5
     }
 }
+
+/** A material a draft's words were extracted from, as sent to the model. */
+@Serializable
+data class DraftMaterialSource(
+    val id: String,
+    val name: String,
+    val kind: TextSourceKind,
+    /** Characters of its text sent to the model. */
+    val chars: Int,
+    /** Only the beginning was sent (page / character limit, or the budget shared by all materials). */
+    val truncated: Boolean,
+)
 
 @Serializable
 data class DraftBundleResponse(
@@ -128,6 +147,8 @@ data class DraftBundleResponse(
     val lessonId: String? = null,
     val studentId: String? = null,
     val input: GenerateDraftRequest,
+    /** The materials the words come from ("From: …"); empty without a material source. */
+    val materials: List<DraftMaterialSource> = emptyList(),
     /** The latest GENERATE / REFINE job of the bundle (poll it while QUEUED / RUNNING). */
     val job: GenerationJobResponse? = null,
     val items: List<DraftItemResponse>,
@@ -156,6 +177,7 @@ data class DraftBundleSummary(
     val student: AttendeeRef? = null,
     val itemCount: Int,
     val approvedCount: Int,
+    val materials: List<DraftMaterialSource> = emptyList(),
     val job: GenerationJobResponse? = null,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,

@@ -1232,7 +1232,7 @@ GenerationJob {
   documentId: uuid | null,          // REFINE of a document (see "Document draft revisions")
   bundleId: uuid | null,            // GENERATE / REFINE of a draft bundle
   input: {
-    notes?, prompt?, promptTemplateId?, pastLessonIds?, topicIds?, grammarTopicIds?,   // GENERATE
+    notes?, prompt?, promptTemplateId?, pastLessonIds?, topicIds?, grammarTopicIds?, materialIds?,   // GENERATE
     instruction?, itemId?,                                                              // REFINE
     entryIds?, fields?                                                                  // FILL_TRANSLATIONS
   },
@@ -1258,7 +1258,8 @@ GET /api/v1/ai/jobs/{id}   -> GenerationJob     404 AI_JOB_NOT_FOUND (also for o
 
 ```
 ai_draft_bundles  id, teacher_id, scope LESSON|STUDENT, lesson_id?, student_id?, mode ONE_ON_ONE|CLUB,
-                  status DRAFT|SENT|DISCARDED, input jsonb (GenerateDraftRequest), send_result jsonb?, sent_at?
+                  status DRAFT|SENT|DISCARDED, input jsonb (GenerateDraftRequest), send_result jsonb?, sent_at?,
+                  material_sources jsonb? ([DraftMaterialSource] of a words-from-material draft)
                   at most ONE open (DRAFT) bundle per lesson and per (teacher, student)
 ai_draft_items    id, bundle_id, kind WORD|EXERCISE_DOCUMENT|TASK|NOTES_DOCUMENT, position, approved bool,
                   payload jsonb (DraftWord | DraftDocument | DraftTask)
@@ -1308,6 +1309,7 @@ DraftItem {
 DraftBundle {
   id, scope, mode, status: DRAFT | SENT | DISCARDED, lessonId?, studentId?,
   input: GenerateDraftRequest,     // what the teacher asked for
+  materials: [DraftMaterialSource], // student words-from-material drafts: the source files ([] otherwise)
   job: GenerationJob | null,       // latest GENERATE / REFINE of this bundle (poll while QUEUED/RUNNING)
   items: [DraftItem],              // order: words, exercise document, tasks, notes document
   approvedCount,
@@ -1317,7 +1319,7 @@ DraftBundle {
 }
 DraftBundleSummary {
   id, scope, mode, status, lessonId?, lessonTitle?, lessonScheduledAt?, student?: { id, firstName, lastName },
-  itemCount, approvedCount, job: GenerationJob | null, createdAt, updatedAt, sentAt?
+  itemCount, approvedCount, materials: [DraftMaterialSource], job: GenerationJob | null, createdAt, updatedAt, sentAt?
 }
 ```
 
@@ -1373,6 +1375,7 @@ GenerateDraftRequest {
   kinds?: [WORDS | HOMEWORK]     // what to generate (non-empty). Lesson scope default: both. Student scope: REQUIRED
                                  // (400 AI_DRAFT_KINDS_REQUIRED): "Add words" -> [WORDS], "New homework" -> [HOMEWORK].
                                  // Ignored for clubs (always the notes document). Stored in bundle.input.kinds.
+  materialIds?: [uuid]           // student scope only: 1..5 distinct materials to extract words from (see below)
 }
 ```
 Creates the open draft of this lesson / student or **reuses it** (its items are replaced when the
@@ -1380,6 +1383,32 @@ job succeeds; 409 `AI_DRAFT_BUSY` while a job of that draft runs). A new bundle 
 be queued (429) is removed again. Needs at least one source (notes, past notes, prompt/template or
 focus) → else 400 `AI_DRAFT_NOTHING_TO_GENERATE`. `pastLessonIds` must be earlier COMPLETED
 lessons of the same student (1:1) / group (club) → else 400 `AI_DRAFT_PAST_LESSON_INVALID`.
+
+**Words from materials** (student scope, typically `{ kinds: [WORDS], materialIds: [...] }`): the
+teacher's uploaded worksheets / articles become the **main source**. Rules:
+- Each material must be in the **teacher's own library** (`materials.teacher_id`); it does not have to
+  be shared with the student yet (teachers often pick a file before sharing it). Another teacher's
+  material is rejected even if it is shared with the student. Unknown / foreign → **404
+  `MATERIAL_NOT_FOUND`**; not a PDF / DOCX / txt / md / csv file (links, audio, video, images) →
+  **400 `AI_MATERIAL_UNSUPPORTED`**; a file without extractable text (scanned, encrypted, corrupt,
+  empty) → **400 `AI_MATERIAL_NO_TEXT`**; > 5, duplicates, bad uuid or `materialIds` on the lesson
+  endpoint → 400 `VALIDATION_FAILED`.
+- Text is read when the request comes in: up to **30 PDF pages and 40 000 characters** per material
+  (tag suggestions keep their 3 pages / 6 000), and all materials together share **60 000
+  characters** (short ones keep their text, long ones split the rest). A cut material is marked in
+  the prompt and in `bundle.materials[].truncated`.
+- The model gets the text in `<materials>` (headed by the material names) and is asked for the most
+  useful words for the student's level, **≤ 40 per material** (≤ 150 in total). Words the student
+  already has (any `student_vocab` row, by lemma or library entry) are listed in `<exclude_words>`
+  and **dropped server-side** after generation too. Library matching and native-language
+  translations work as for every draft. With materials `pastLessonIds: null` means **none** (past
+  notes only when picked); materials count as a source for `AI_DRAFT_NOTHING_TO_GENERATE`.
+- A refine of the whole draft reads the same materials again (deleted ones are left out); a new
+  generate without `materialIds` clears the source.
+```
+DraftMaterialSource { id, name, kind: PDF | DOCX | TEXT, chars /* sent to the model */, truncated: bool }
+DraftBundle.materials / DraftBundleSummary.materials: [DraftMaterialSource]   // [] without materials: "From: <name>"
+```
 
 **One job generates what `kinds` asks for** (1:1; only those parts are required and kept):
 - **Words**: lemma + display fields, matched against the teacher's library (`libraryEntryId`), each
@@ -1396,7 +1425,7 @@ goals; covered grammar (earlier completed lessons); grammar gaps (P8, see Studen
 focus topics / grammar; the teacher's library topic paths and grammar names (≤ 300); the current
 notes (`<notes>`) and the selected past lessons' notes (`<past_lesson_notes>`, headed by date only).
 **Privacy**: the model never receives names, e-mails or any id (uuids are never sent; tags go by
-name and are mapped back server-side). Covered by a test that captures the fake provider's prompt.
+name and are mapped back server-side; a material goes by the name the teacher gave it). Covered by a test that captures the fake provider's prompt.
 
 **System prompts**: `resources/ai/nachbereitung-system.md` (+ `nachbereitung-club.md` for clubs,
 `blocks.md` shared block rules, `document-refine-system.md`, `fill-translations-system.md`),
