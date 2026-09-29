@@ -8,6 +8,7 @@ import com.gvart.parleyroom.ai.service.AiOutputInvalid
 import com.gvart.parleyroom.ai.service.AiOutputParser
 import com.gvart.parleyroom.ai.service.DraftTarget
 import com.gvart.parleyroom.ai.service.Prompts
+import com.gvart.parleyroom.ai.transfer.DraftKind
 import com.gvart.parleyroom.document.service.DocumentBlockValidator
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -21,6 +22,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -37,8 +39,8 @@ class AiOutputParserTest {
     private fun JsonObject.withHomework(key: String, value: kotlinx.serialization.json.JsonElement): JsonObject =
         JsonObject(this + ("homework" to JsonObject(this["homework"]!!.jsonObject + (key to value))))
 
-    private fun issues(json: JsonObject, target: DraftTarget = DraftTarget.BUNDLE) =
-        assertFailsWith<AiOutputInvalid> { AiOutputParser.parseDraft(json.toString(), target) }.issues
+    private fun issues(json: JsonObject, target: DraftTarget = DraftTarget.BUNDLE, kinds: Set<DraftKind> = DraftKind.entries.toSet()) =
+        assertFailsWith<AiOutputInvalid> { AiOutputParser.parseDraft(json.toString(), target, kinds) }.issues
 
     @Test
     fun `generate and refine prompts explain the automatic exercise numbering`() {
@@ -143,6 +145,27 @@ class AiOutputParserTest {
         }
         val withTable = JsonObject(document + ("blocks" to JsonArray(document["blocks"]!!.jsonArray + table)))
         assertTrue(issues(answer.withHomework("document", withTable)).any { "vocab_table is not allowed" in it.message })
+    }
+
+    @Test
+    fun `only the requested kinds are required and kept`() {
+        val answer = answer()
+        val wordsOnly = buildJsonObject { put("words", answer["words"]!!) }.toString()
+        val homeworkOnly = buildJsonObject { put("homework", answer["homework"]!!) }.toString()
+
+        val words = AiOutputParser.parseDraft(wordsOnly, DraftTarget.BUNDLE, setOf(DraftKind.WORDS))
+        assertEquals(6, words.words.size)
+        assertTrue(words.exerciseDocument == null && words.tasks.isEmpty())
+        val homework = AiOutputParser.parseDraft(homeworkOnly, DraftTarget.BUNDLE, setOf(DraftKind.HOMEWORK))
+        assertTrue(homework.words.isEmpty() && homework.exerciseDocument != null && homework.tasks.isNotEmpty())
+        assertTrue(AiOutputParser.parseDraft(answer.toString(), DraftTarget.BUNDLE, setOf(DraftKind.HOMEWORK)).words.isEmpty(),
+            "parts that were not asked for are dropped")
+
+        assertEquals("/words", issues(buildJsonObject { put("words", JsonArray(emptyList())) }, kinds = setOf(DraftKind.WORDS)).single().pointer)
+        assertEquals("/homework", issues(JsonObject(mapOf("words" to answer["words"]!!)), kinds = setOf(DraftKind.HOMEWORK)).single().pointer)
+        assertTrue("<produce>\nhomework\n</produce>" in
+            Prompts.generate(DraftMode.ONE_ON_ONE, "", "", "", "", setOf(DraftKind.HOMEWORK)))
+        assertFalse("<produce>" in Prompts.generate(DraftMode.CLUB, "", "", "", ""))
     }
 
     @Test

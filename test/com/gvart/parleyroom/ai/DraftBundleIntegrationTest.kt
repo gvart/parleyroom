@@ -16,6 +16,7 @@ import com.gvart.parleyroom.ai.transfer.DraftBundleSummary
 import com.gvart.parleyroom.ai.transfer.DraftContextResponse
 import com.gvart.parleyroom.ai.transfer.DraftDocument
 import com.gvart.parleyroom.ai.transfer.DraftItemResponse
+import com.gvart.parleyroom.ai.transfer.DraftKind
 import com.gvart.parleyroom.ai.transfer.DraftTopic
 import com.gvart.parleyroom.ai.transfer.GenerateDraftRequest
 import com.gvart.parleyroom.ai.transfer.GenerationJobResponse
@@ -195,8 +196,11 @@ class DraftBundleIntegrationTest : IntegrationTest() {
         assertEquals(listOf(DraftTopic(alltag.toString(), "Alltag")), gieskanne.topics, "tags matched against the library")
         // The library already has Teekanne and the student knows it.
         val teekanne = words.single { it.word!!.entry.lemma == "Teekanne" }
-        assertNotNull(teekanne.word!!.matchedEntryId)
+        assertNotNull(teekanne.word!!.libraryEntryId)
+        assertTrue(teekanne.word.matched, "a matched word is reused as is at Send")
         assertTrue(teekanne.word.alreadyAssigned)
+        assertTrue(words.filter { it.id != teekanne.id }.none { it.word!!.matched || it.word.libraryEntryId != null })
+        assertEquals(listOf(DraftKind.WORDS, DraftKind.HOMEWORK), bundle.input.kinds, "lesson scope: both by default")
         assertEquals("Teekanne", teekanne.matchedEntry?.lemma)
 
         val document = bundle.items(DraftItemKind.EXERCISE_DOCUMENT).single().document!!
@@ -460,7 +464,7 @@ class DraftBundleIntegrationTest : IntegrationTest() {
         assertTrue(patched.approved)
         assertEquals("Damit saugt man.", patched.word!!.entry.explanationDe)
         assertEquals(listOf("Haushalt", "Putzen"), patched.word.topics.map { it.name })
-        assertNotNull(patched.word.matchedEntryId)
+        assertNotNull(patched.word.libraryEntryId)
         assertTrue(patched.word.alreadyAssigned)
 
         // Document: title, blocks and tags; still validated.
@@ -716,7 +720,8 @@ class DraftBundleIntegrationTest : IntegrationTest() {
         FakeLlmGateway.received.clear()
         val started = client.post("/api/v1/students/$STUDENT/draft-bundles") {
             contentType(ContentType.Application.Json); bearerAuth(token)
-            setBody(GenerateDraftRequest(prompt = "Neue Hausaufgabe", pastLessonIds = listOf(older.toString())))
+            setBody(GenerateDraftRequest(prompt = "Neue Hausaufgabe", pastLessonIds = listOf(older.toString()),
+                kinds = listOf(DraftKind.WORDS, DraftKind.HOMEWORK)))
         }
         assertEquals(HttpStatusCode.Accepted, started.status, started.body<String>())
         val bundle = client.awaitBundle(token, started.body())
@@ -737,13 +742,92 @@ class DraftBundleIntegrationTest : IntegrationTest() {
 
         val cancelledPick = client.post("/api/v1/students/$STUDENT/draft-bundles") {
             contentType(ContentType.Application.Json); bearerAuth(token)
-            setBody(GenerateDraftRequest(pastLessonIds = listOf(cancelled.toString(), requested.toString())))
+            setBody(GenerateDraftRequest(pastLessonIds = listOf(cancelled.toString(), requested.toString()), kinds = listOf(DraftKind.WORDS)))
         }
         assertEquals("AI_DRAFT_PAST_LESSON_INVALID", cancelledPick.body<ProblemDetail>().code)
         val notMine = client.post("/api/v1/students/$STUDENT_2/draft-bundles") {
             contentType(ContentType.Application.Json); bearerAuth(token); setBody(GenerateDraftRequest(prompt = "x"))
         }
         assertEquals(HttpStatusCode.Forbidden, notMine.status)
+    }
+
+    // ---- Kinds ----
+
+    private suspend fun HttpClient.generateForStudent(token: String, request: GenerateDraftRequest): HttpResponse =
+        post("/api/v1/students/$STUDENT/draft-bundles") { contentType(ContentType.Application.Json); bearerAuth(token); setBody(request) }
+
+    @Test
+    fun `kinds decide whether words, homework or both are generated`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val student = getStudentToken(client)
+        val earlier = seedLesson(scheduledAt = OffsetDateTime.now().minusDays(7))
+        setNotes(earlier, "die Waschmaschine\nbügeln")
+
+        // "Add words": word items only, and the model is told so.
+        FakeLlmGateway.received.clear()
+        val words = client.awaitBundle(token, client.generateForStudent(token, GenerateDraftRequest(kinds = listOf(DraftKind.WORDS))).body())
+        assertEquals(GenerationJobStatus.SUCCEEDED, words.job?.status)
+        assertEquals(listOf(DraftItemKind.WORD, DraftItemKind.WORD), words.items.map { it.kind })
+        assertEquals(listOf(DraftKind.WORDS), words.input.kinds)
+        assertTrue("<produce>\nwords\n</produce>" in FakeLlmGateway.received.single().messages.single().text)
+        client.post("/api/v1/ai/draft-bundles/${words.id}/approve-all") { bearerAuth(token) }
+        val sentWords = client.send(token, words.id).body<SendDraftResponse>()
+        assertEquals(2, sentWords.wordsAssigned)
+        assertNull(sentWords.assignmentId)
+        assertNull(sentWords.exerciseDocumentId)
+
+        // "New homework": one exercise document and 1-3 tasks, no words.
+        val homework = client.awaitBundle(token, client.generateForStudent(token, GenerateDraftRequest(kinds = listOf(DraftKind.HOMEWORK))).body())
+        assertEquals(1, homework.items(DraftItemKind.EXERCISE_DOCUMENT).size)
+        assertTrue(homework.items(DraftItemKind.TASK).size in 1..3)
+        assertTrue(homework.items(DraftItemKind.WORD).isEmpty())
+        client.post("/api/v1/ai/draft-bundles/${homework.id}/approve-all") { bearerAuth(token) }
+        val vocabBefore = client.studentSees(student).vocab
+        val sentHomework = client.send(token, homework.id).body<SendDraftResponse>()
+        assertNotNull(sentHomework.assignmentId)
+        assertTrue(sentHomework.words.isEmpty())
+        assertEquals(vocabBefore, client.studentSees(student).vocab)
+
+        // Student scope must say what it wants.
+        val missing = client.generateForStudent(token, GenerateDraftRequest(prompt = "x"))
+        assertEquals("AI_DRAFT_KINDS_REQUIRED", missing.body<ProblemDetail>().code)
+        assertEquals("VALIDATION_FAILED", client.generateForStudent(token, GenerateDraftRequest(prompt = "x", kinds = emptyList())).body<ProblemDetail>().code)
+
+        // A club ignores kinds.
+        val club = seedLesson(type = LessonType.SPEAKING_CLUB, students = listOf(STUDENT, STUDENT_2))
+        val clubBundle = client.awaitBundle(token, client.post("/api/v1/lessons/$club/draft-bundles") {
+            contentType(ContentType.Application.Json); bearerAuth(token)
+            setBody(GenerateDraftRequest(notes = ANNA_NOTES, kinds = listOf(DraftKind.WORDS)))
+        }.body())
+        assertEquals(listOf(DraftItemKind.NOTES_DOCUMENT), clubBundle.items.map { it.kind })
+    }
+
+    @Test
+    fun `a whole refine regenerates only the requested kinds`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val bundle = client.generate(token, seedLesson())
+        client.post("/api/v1/ai/draft-bundles/${bundle.id}/approve-all") { bearerAuth(token) }
+        val wordIds = bundle.items(DraftItemKind.WORD).map { it.id }
+
+        FakeLlmGateway.received.clear()
+        val refined = client.awaitBundle(token, client.refineBundle(token, bundle.id,
+            RefineDraftRequest("Schwerere Übungen", kinds = listOf(DraftKind.HOMEWORK))).body())
+        assertEquals(GenerationJobStatus.SUCCEEDED, refined.job?.status)
+        val sent = FakeLlmGateway.received.single().messages.single().text
+        assertTrue("<produce>\nhomework\n</produce>" in sent)
+        assertFalse("Teekanne" in sent.substringAfter("<current_output>"), "only the homework is sent")
+
+        assertEquals(wordIds, refined.items(DraftItemKind.WORD).map { it.id }, "words are kept")
+        assertTrue(refined.items(DraftItemKind.WORD).all { it.approved })
+        assertTrue(refined.items(DraftItemKind.EXERCISE_DOCUMENT).single().document!!.title.endsWith("(überarbeitet)"))
+        assertTrue((refined.items(DraftItemKind.EXERCISE_DOCUMENT) + refined.items(DraftItemKind.TASK)).none { it.approved })
+        assertEquals(refined.items.indices.toList(), refined.items.map { it.position })
+        assertEquals(DraftItemKind.entries.filter { it != DraftItemKind.NOTES_DOCUMENT }, refined.items.map { it.kind }.distinct())
+
+        val both = client.refineBundle(token, bundle.id, RefineDraftRequest("x", itemId = wordIds.first(), kinds = listOf(DraftKind.WORDS)))
+        assertEquals("VALIDATION_FAILED", both.body<ProblemDetail>().code)
     }
 
     // ---- Refine of a shared document ----
