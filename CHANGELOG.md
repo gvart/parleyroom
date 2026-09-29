@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.13.0](https://github.com/gvart/parleyroom/compare/v0.12.0...v0.13.0) (2026-09-29)
+
+
+### Features
+
+* **lessons:** filter lesson list by date range and order by time ([#40](https://github.com/gvart/parleyroom/issues/40)) ([fffde59](https://github.com/gvart/parleyroom/commit/fffde590e7d4991036d502f98537466354d7292c))
+* **lessons:** let teachers move a confirmed lesson directly ([#43](https://github.com/gvart/parleyroom/issues/43)) ([9ce1fec](https://github.com/gvart/parleyroom/commit/9ce1fec30907ccb706e68885cac243f8fe3f57f8))
+* **lessons:** let the proposer withdraw a pending reschedule ([#41](https://github.com/gvart/parleyroom/issues/41)) ([4296b9b](https://github.com/gvart/parleyroom/commit/4296b9b9992d9e2c1c65ce2a206f61997b156e70))
+* **lessons:** store cancel reason and allow undoing a cancellation ([#42](https://github.com/gvart/parleyroom/issues/42)) ([6892aa3](https://github.com/gvart/parleyroom/commit/6892aa3b8e3a5e3a6666cb5fecfe2bf99a7db169))
+
 ## [0.12.0](https://github.com/gvart/parleyroom/compare/v0.11.0...v0.12.0) (2026-09-28)
 
 
