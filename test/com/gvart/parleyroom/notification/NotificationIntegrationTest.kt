@@ -3,9 +3,12 @@ package com.gvart.parleyroom.notification
 import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.notification.transfer.MarkViewedRequest
 import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlin.test.Test
@@ -42,5 +45,17 @@ class NotificationIntegrationTest : IntegrationTest() {
 
         // Should pass validation (200 OK) - the notification may not exist but validation passes
         assertEquals(HttpStatusCode.OK, response.status)
+    }
+
+    @Test
+    fun `stream with an expired token answers 401 when the client also accepts json`() = testApp {
+        // Plain client: the JSON client would add Accept: application/json itself. With only
+        // text/event-stream the JSON problem becomes a 406 and the portal never sees the 401.
+        val response = client.get("/api/v1/notifications/stream") {
+            bearerAuth("expired.or.invalid")
+            header(HttpHeaders.Accept, "text/event-stream, application/json")
+        }
+
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 }
