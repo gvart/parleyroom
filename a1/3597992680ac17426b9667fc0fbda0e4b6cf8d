@@ -1,0 +1,53 @@
+test/com/gvart/parleyroom/ai/AiVocabIntegrationTest.kt
+  s_4985e1aeba0736::t_003ae5fbc6a111 1-140
+src/com/gvart/parleyroom/ai/service/TagCatalog.kt
+  s_4985e1aeba0736::t_36e5d52bef513c 1-48
+resources/ai/nachbereitung-system.md
+  s_4985e1aeba0736::t_67b80ccc88d808 60-64,69-77,110-115,121-122,126,135
+resources/db/migration/V22__vocab_entry_grammar_topics.sql
+  s_4985e1aeba0736::t_3f29a3c95ea374 1-9
+src/com/gvart/parleyroom/ai/llm/FakeLlmGateway.kt
+  s_4985e1aeba0736::t_3c38d116cdcbf4 28-29,81-83,132-158
+src/com/gvart/parleyroom/ai/service/AiOutput.kt
+  s_4985e1aeba0736::t_9851478a3b4318 91,93,96,304-309,312-314,316-318
+src/com/gvart/parleyroom/ai/service/DraftBundleService.kt
+  s_4985e1aeba0736::t_a49009912be917 63,78-79,157-158,160,228-229,281,294,296,316-324
+src/com/gvart/parleyroom/ai/service/DraftItems.kt
+  s_4985e1aeba0736::t_8a8e89bb295c77 61-68,70-71,92,96-118,128-131
+src/com/gvart/parleyroom/ai/service/DraftSendService.kt
+  s_4985e1aeba0736::t_3554ad369f4201 89,93
+src/com/gvart/parleyroom/ai/service/LessonContextService.kt
+  s_4985e1aeba0736::t_aa3622fafb1d3c 83,97-99,108,142-146,175-176,178-179,251,284,377,415,480-483,490-491,495-496
+src/com/gvart/parleyroom/ai/service/LibraryMatcher.kt
+  s_4985e1aeba0736::t_2b55d7f3e78d71 18,86-98
+src/com/gvart/parleyroom/ai/service/MaterialSources.kt
+  s_4985e1aeba0736::t_6c82322106af7e 30,33,118
+src/com/gvart/parleyroom/vocabulary/data/VocabEntryTable.kt
+  s_4985e1aeba0736::t_39f89b7338eeea 6,44-50
+src/com/gvart/parleyroom/vocabulary/service/VocabEntryService.kt
+  s_4985e1aeba0736::t_596f66171c5108 20,101,104,148,167,195,204,238-246,332-339
+src/com/gvart/parleyroom/vocabulary/service/VocabularyService.kt
+  s_4985e1aeba0736::t_088cc84ca53adc 96-98,124
+src/com/gvart/parleyroom/vocabulary/transfer/StudentVocabDtos.kt
+  s_4985e1aeba0736::t_0fb4d4e1126877 32
+src/com/gvart/parleyroom/vocabulary/transfer/VocabEntryDtos.kt
+  s_4985e1aeba0736::t_3562aa6c18423c 27-28,58
+test/com/gvart/parleyroom/ai/DraftBundleIntegrationTest.kt
+  s_4985e1aeba0736::t_4acf54e8e30f37 133-134,146,169-170,186-187,198,202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "a13597992680ac17426b9667fc0fbda0e4b6cf8d",
+  "prompts": {},
+  "sessions": {
+    "s_4985e1aeba0736": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "67d7b6f0-b72a-461c-a3eb-bc1269097f4b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
