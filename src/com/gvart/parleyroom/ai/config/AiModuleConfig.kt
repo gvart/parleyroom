@@ -23,7 +23,7 @@ fun Application.configureAiModule() {
 
     val aiConfig = AiConfig(
         provider = value("ai.provider", AiConfig.PROVIDER_ANTHROPIC).lowercase(),
-        model = value("ai.model", "claude-sonnet-5"),
+        model = value("ai.model", "claude-sonnet-5-5"),
         anthropicApiKey = value("ai.anthropic_api_key", ""),
         maxActiveJobsPerTeacher = value("ai.max_active_jobs_per_teacher", "2").toInt(),
         maxConcurrentJobs = value("ai.max_concurrent_jobs", "3").toInt(),
