@@ -58,7 +58,7 @@ class FakeLlmGateway : LlmGateway {
         return LlmReply(text, inputTokens = (system.length + request.length) / 4, outputTokens = text.length / 4)
     }
 
-    /** 1:1: words from the notes (or, without notes, the past lesson notes) + homework; club: a notes document. */
+    /** 1:1: words from the notes (or, without notes, the past lesson notes) and/or homework per `<produce>`; club: a notes document. */
     private fun generate(request: String, invalid: Boolean): JsonObject {
         val club = Prompts.section(request, "mode") == "CLUB"
         val level = Prompts.section(request, "context")?.lineSequence()
@@ -70,6 +70,8 @@ class FakeLlmGateway : LlmGateway {
         }
         val words = vocabFromNotes(source, level)
         if (club) return buildJsonObject { put("notes", clubNotes(words, invalid)) }
+        val produce = Prompts.section(request, "produce").orEmpty()
+        if ("homework" !in produce) return buildJsonObject { put("words", JsonArray(words)) }
 
         val first = words.firstOrNull()
         val noun = words.firstOrNull { it["wordType"]?.jsonPrimitive?.content == "NOUN" }
@@ -91,7 +93,7 @@ class FakeLlmGateway : LlmGateway {
             add(articleQuestion(noun))
         }
         return buildJsonObject {
-            put("words", JsonArray(words))
+            if ("words" in produce) put("words", JsonArray(words))
             putJsonObject("homework") {
                 putJsonObject("document") {
                     put("title", "Hausaufgabe – Wortschatz und Übungen")
@@ -168,7 +170,12 @@ class FakeLlmGateway : LlmGateway {
                 buildJsonObject { put("tasks", buildJsonArray { add(JsonObject(task + ("instructions" to JsonPrimitive("$text (überarbeitet: $instruction)")))) }) }
             }
             "notes" -> buildJsonObject { put("notes", refinedDocument(current["notes"]!!.jsonObject)) }
-            else -> withHomework { homework -> JsonObject(homework + ("document" to refinedDocument(homework["document"]!!.jsonObject))) }
+            "document" -> withHomework { homework -> JsonObject(homework + ("document" to refinedDocument(homework["document"]!!.jsonObject))) }
+            // The whole draft: the document gets the note; a words-only draft gets it in every example.
+            else -> if ("homework" in current) withHomework { homework -> JsonObject(homework + ("document" to refinedDocument(homework["document"]!!.jsonObject))) }
+            else buildJsonObject {
+                put("words", JsonArray(current["words"]!!.jsonArray.map { JsonObject(it.jsonObject + ("exampleSentence" to JsonPrimitive("Überarbeitet: $instruction"))) }))
+            }
         }
     }
 

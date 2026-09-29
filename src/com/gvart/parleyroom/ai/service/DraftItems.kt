@@ -5,6 +5,7 @@ import com.gvart.parleyroom.ai.data.DraftItemTable
 import com.gvart.parleyroom.ai.transfer.DraftDocument
 import com.gvart.parleyroom.ai.transfer.DraftGrammarTopic
 import com.gvart.parleyroom.ai.transfer.DraftItemResponse
+import com.gvart.parleyroom.ai.transfer.DraftKind
 import com.gvart.parleyroom.ai.transfer.DraftTask
 import com.gvart.parleyroom.ai.transfer.DraftTopic
 import com.gvart.parleyroom.ai.transfer.DraftWord
@@ -21,6 +22,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 import java.util.UUID
 
 /** A draft item's content before it is stored. */
@@ -50,7 +52,7 @@ object DraftItems {
             word = word,
             document = if (kind == DraftItemKind.EXERCISE_DOCUMENT || kind == DraftItemKind.NOTES_DOCUMENT) document(row) else null,
             task = if (kind == DraftItemKind.TASK) task(row) else null,
-            matchedEntry = word?.matchedEntryId?.let(matched::get),
+            matchedEntry = word?.libraryEntryId?.let(matched::get),
             createdAt = row[DraftItemTable.createdAt],
             updatedAt = row[DraftItemTable.updatedAt],
         )
@@ -81,7 +83,8 @@ object DraftItems {
         val assigned = entryId != null && recipients.isNotEmpty() && StudentVocabTable.selectAll()
             .where { (StudentVocabTable.vocabEntryId eq entryId) and (StudentVocabTable.studentId inList recipients) }
             .count() == recipients.size.toLong()
-        return word.copy(entry = word.entry.copy(topicIds = emptyList()), matchedEntryId = entryId?.toString(), alreadyAssigned = assigned)
+        return word.copy(entry = word.entry.copy(topicIds = emptyList()), libraryEntryId = entryId?.toString(), matched = entryId != null,
+            alreadyAssigned = assigned)
     }
 
     fun insert(bundleId: UUID, items: List<NewDraftItem>, firstPosition: Int = 0) {
@@ -94,7 +97,7 @@ object DraftItems {
     }
 
     /** The current items in the model's output format for a refine: names only, short block ids. */
-    fun toAiJson(items: List<ResultRow>, target: DraftTarget): String {
+    fun toAiJson(items: List<ResultRow>, target: DraftTarget, kinds: Set<DraftKind> = DraftKind.entries.toSet()): String {
         fun topics(list: List<DraftTopic>) = list.map { AiTopic(it.name, it.parentName) }
         fun grammar(list: List<DraftGrammarTopic>) = list.map { AiGrammarTopic(it.name, it.level) }
         fun aiDocument(row: ResultRow) = document(row).let {
@@ -112,13 +115,34 @@ object DraftItems {
         }
         val notes = items.firstOrNull { it[DraftItemTable.kind] == DraftItemKind.NOTES_DOCUMENT }?.let(::aiDocument)
         val output = when (target) {
-            DraftTarget.BUNDLE -> AiDraftOutput(words = words, homework = AiHomework(exercise, tasks))
+            DraftTarget.BUNDLE -> AiDraftOutput(
+                words = if (DraftKind.WORDS in kinds) words else emptyList(),
+                homework = if (DraftKind.HOMEWORK in kinds) AiHomework(exercise, tasks) else null,
+            )
             DraftTarget.WORD -> AiDraftOutput(words = words)
             DraftTarget.EXERCISE_DOCUMENT -> AiDraftOutput(homework = AiHomework(document = exercise))
             DraftTarget.TASK -> AiDraftOutput(homework = AiHomework(tasks = tasks))
             DraftTarget.NOTES_DOCUMENT -> AiDraftOutput(notes = notes)
         }
         return AiOutputParser.json.encodeToString(AiDraftOutput.serializer(), output)
+    }
+
+    /** The item kinds a generation kind produces. */
+    fun itemKinds(kinds: Set<DraftKind>): Set<DraftItemKind> = kinds.flatMap {
+        when (it) {
+            DraftKind.WORDS -> listOf(DraftItemKind.WORD)
+            DraftKind.HOMEWORK -> listOf(DraftItemKind.EXERCISE_DOCUMENT, DraftItemKind.TASK)
+        }
+    }.toSet()
+
+    /** Display order: words, exercise document, tasks, notes; within a kind the previous order. */
+    fun renumber(bundleId: UUID) {
+        DraftItemTable.selectAll().where { DraftItemTable.bundleId eq bundleId }.toList()
+            .sortedWith(compareBy({ it[DraftItemTable.kind].ordinal }, { it[DraftItemTable.position] }))
+            .forEachIndexed { index, row ->
+                if (row[DraftItemTable.position] != index)
+                    DraftItemTable.update({ DraftItemTable.id eq row[DraftItemTable.id] }) { it[position] = index }
+            }
     }
 
     fun targetOf(kind: DraftItemKind): DraftTarget = when (kind) {

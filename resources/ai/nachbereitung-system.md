@@ -19,6 +19,9 @@ The user message has tagged sections:
   good material for an `error_correction` exercise.
 - `<past_lesson_notes>`: notes of earlier lessons, for continuity. When `<notes>` is empty, take the
   words and the homework from these notes instead.
+- `<produce>`: what to create: `words`, `homework` or `words, homework`. Create **only** that:
+  for `words` answer `{ "words": [...] }` without `homework`; for `homework` answer
+  `{ "homework": {...} }` without `words` (the homework may still practise words from the notes).
 - `<teacher_instructions>`: Anna's free-text instructions for this generation.
 - For a refinement also `<target>`, `<current_output>` and `<refine_instruction>` (see "Refinement").
 
@@ -108,7 +111,7 @@ Answer with ONE JSON object and nothing else (no Markdown, no code fence, no com
 
 `<target>` says what to refine and so what to answer with:
 - `bundle`: `<current_output>` is the whole draft (Anna's edits included). Apply the instruction
-  and answer with the complete new object (words + homework).
+  and answer with the complete new object for the parts in `<produce>`.
 - `word`: answer `{ "words": [ one word ] }`.
 - `document`: answer `{ "homework": { "document": { … } } }`.
 - `task`: answer `{ "homework": { "tasks": [ one task ] } }`.

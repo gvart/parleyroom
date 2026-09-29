@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.ai.service
 
 import com.gvart.parleyroom.ai.data.DraftMode
+import com.gvart.parleyroom.ai.transfer.DraftKind
 import com.gvart.parleyroom.document.service.DocumentBlockValidator
 
 /**
@@ -52,9 +53,16 @@ object Prompts {
         DraftTarget.NOTES_DOCUMENT -> "notes"
     }
 
-    fun generate(mode: DraftMode, context: String, notes: String, pastNotes: String, prompt: String): String = buildString {
+    /** The `<produce>` section of a 1:1 generate / whole refine: "words", "homework" or "words, homework". */
+    fun produce(kinds: Set<DraftKind>): String = DraftKind.entries.filter { it in kinds }.joinToString(", ") { it.name.lowercase() }
+
+    fun generate(
+        mode: DraftMode, context: String, notes: String, pastNotes: String, prompt: String,
+        kinds: Set<DraftKind> = DraftKind.entries.toSet(),
+    ): String = buildString {
         section("task", TASK_GENERATE)
         section("mode", mode.name)
+        if (mode == DraftMode.ONE_ON_ONE) section("produce", produce(kinds))
         section("context", context)
         section("notes", notes.ifBlank { "(none)" })
         section("past_lesson_notes", pastNotes.ifBlank { "(none)" })
@@ -64,11 +72,12 @@ object Prompts {
 
     fun refine(
         mode: DraftMode, target: DraftTarget, context: String, notes: String, pastNotes: String, prompt: String,
-        currentOutput: String, instruction: String,
+        currentOutput: String, instruction: String, kinds: Set<DraftKind> = DraftKind.entries.toSet(),
     ): String = buildString {
         section("task", TASK_REFINE)
         section("mode", mode.name)
         section("target", targetName(target))
+        if (target == DraftTarget.BUNDLE) section("produce", produce(kinds))
         section("context", context)
         section("notes", notes.ifBlank { "(none)" })
         section("past_lesson_notes", pastNotes.ifBlank { "(none)" })

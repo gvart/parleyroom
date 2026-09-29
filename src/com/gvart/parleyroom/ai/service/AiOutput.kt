@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.ai.service
 
+import com.gvart.parleyroom.ai.transfer.DraftKind
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.material.data.MaterialSkill
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
@@ -162,11 +163,12 @@ object AiOutputParser {
     val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
     /**
-     * A draft answer for [target]. BUNDLE (1:1): words (≤ [MAX_WORDS]), one exercise document with at
-     * least one interactive exercise and [MIN_TASKS]..[MAX_TASKS] tasks. A club bundle is its notes
+     * A draft answer for [target]. BUNDLE (1:1) per [kinds]: WORDS = words (≤ [MAX_WORDS], at least one
+     * when only words are asked for); HOMEWORK = one exercise document with at least one interactive
+     * exercise and [MIN_TASKS]..[MAX_TASKS] tasks. Parts that were not asked for are ignored. A club bundle is its notes
      * document (NOTES_DOCUMENT). An item refine: exactly that one part. Other parts are ignored.
      */
-    fun parseDraft(text: String, target: DraftTarget): ValidatedDraft {
+    fun parseDraft(text: String, target: DraftTarget, kinds: Set<DraftKind> = DraftKind.entries.toSet()): ValidatedDraft {
         val output = decode<AiDraftOutput>(text)
         val issues = mutableListOf<Issue>()
 
@@ -194,14 +196,19 @@ object AiOutputParser {
                 if (output.homework?.document == null) issues += Issue("/homework/document", "homework.document is required")
             }
             DraftTarget.BUNDLE -> {
-                words = output.words
-                val homework = output.homework
-                if (homework == null) issues += Issue("/homework", "homework is required")
-                exercise = homework?.document?.let { document(it, "/homework/document", exercise = true, issues) }
-                if (homework != null && homework.document == null) issues += Issue("/homework/document", "homework.document is required")
-                tasks = homework?.tasks.orEmpty()
-                if (homework != null && tasks.size !in MIN_TASKS..MAX_TASKS)
-                    issues += Issue("/homework/tasks", "give $MIN_TASKS to $MAX_TASKS tasks")
+                if (DraftKind.WORDS in kinds) {
+                    words = output.words
+                    if (kinds.size == 1 && words.isEmpty()) issues += Issue("/words", "give at least one word")
+                }
+                if (DraftKind.HOMEWORK in kinds) {
+                    val homework = output.homework
+                    if (homework == null) issues += Issue("/homework", "homework is required")
+                    exercise = homework?.document?.let { document(it, "/homework/document", exercise = true, issues) }
+                    if (homework != null && homework.document == null) issues += Issue("/homework/document", "homework.document is required")
+                    tasks = homework?.tasks.orEmpty()
+                    if (homework != null && tasks.size !in MIN_TASKS..MAX_TASKS)
+                        issues += Issue("/homework/tasks", "give $MIN_TASKS to $MAX_TASKS tasks")
+                }
             }
         }
         checkWords(words, issues)

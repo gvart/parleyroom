@@ -60,8 +60,8 @@ fun Application.configureDraftRouting() {
                     call.respond(HttpStatusCode.Accepted, drafts.generateForLesson(call.getPathUUID(), it, call.requirePrincipal()))
                 }.describe {
                     summary = "Generate the lesson's AI draft"
-                    description = "Queues a GENERATE job for the lesson's open draft bundle (created if none). 1:1: words + homework " +
-                            "(exercise document + 1-3 tasks); club: a notes document. Poll the bundle (or GET /api/v1/ai/jobs/{jobId}). " +
+                    description = "Queues a GENERATE job for the lesson's open draft bundle (created if none). 1:1: the requested kinds (default words + homework: " +
+                            "exercise document + 1-3 tasks); club: a notes document. Poll the bundle (or GET /api/v1/ai/jobs/{jobId}). " +
                             "Nothing reaches students before Send."
                     parameters { path("id") { description = "Lesson UUID" } }
                     requestBody { schema = jsonSchema<GenerateDraftRequest>() }
@@ -92,13 +92,14 @@ fun Application.configureDraftRouting() {
                     call.respond(HttpStatusCode.Accepted, drafts.generateForStudent(call.getPathUUID("studentId"), it, call.requirePrincipal()))
                 }.describe {
                     summary = "Generate an AI draft for a student"
-                    description = "Queues a GENERATE job for the student's open draft bundle (words + homework). Sources: past lesson notes " +
+                    description = "Queues a GENERATE job for the student's open draft bundle with the requested kinds (required: " +
+                            "[WORDS] for \"Add words\", [HOMEWORK] for \"New homework\"). Sources: past lesson notes " +
                             "(default the latest), profile, focus topics / grammar, template and prompt."
                     parameters { path("studentId") { description = "Student UUID" } }
                     requestBody { schema = jsonSchema<GenerateDraftRequest>() }
                     responses {
                         HttpStatusCode.Accepted { schema = jsonSchema<DraftBundleResponse>() }
-                        HttpStatusCode.BadRequest { description = "AI_DRAFT_NOTHING_TO_GENERATE, AI_DRAFT_PAST_LESSON_INVALID"; schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.BadRequest { description = "AI_DRAFT_KINDS_REQUIRED, AI_DRAFT_NOTHING_TO_GENERATE, AI_DRAFT_PAST_LESSON_INVALID"; schema = jsonSchema<ProblemDetail>() }
                         HttpStatusCode.Conflict { description = "AI_DRAFT_BUSY"; schema = jsonSchema<ProblemDetail>() }
                     }
                 }
@@ -189,8 +190,8 @@ fun Application.configureDraftRouting() {
                         call.respond(HttpStatusCode.Accepted, drafts.refine(call.getPathUUID(), it, call.requirePrincipal()))
                     }.describe {
                         summary = "Refine an AI draft"
-                        description = "Queues a REFINE job for the whole draft or one item (itemId). The refined items replace the old " +
-                            "ones and need approving again."
+                        description = "Queues a REFINE job for one item (itemId) or the whole draft's kinds (default the kinds it was generated with; " +
+                            "items of other kinds stay). The refined items replace the old ones and need approving again."
                         parameters { path("id") { description = "Bundle UUID" } }
                         requestBody { schema = jsonSchema<RefineDraftRequest>() }
                         responses {

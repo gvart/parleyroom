@@ -17,6 +17,7 @@ import com.gvart.parleyroom.ai.transfer.DraftBundleResponse
 import com.gvart.parleyroom.ai.transfer.DraftBundleSummary
 import com.gvart.parleyroom.ai.transfer.DraftContextResponse
 import com.gvart.parleyroom.ai.transfer.DraftItemResponse
+import com.gvart.parleyroom.ai.transfer.DraftKind
 import com.gvart.parleyroom.ai.transfer.GenerateDraftRequest
 import com.gvart.parleyroom.ai.transfer.JobInput
 import com.gvart.parleyroom.ai.transfer.PatchDraftItemRequest
@@ -121,6 +122,8 @@ class DraftBundleService(
         val prepared = transaction {
             LibraryAccess.requireTeacher(principal)
             requireStudentOfTeacher(studentId, principal)
+            if (request.kinds == null)
+                throw BadRequestException("Say what to generate: kinds WORDS and/or HOMEWORK", code = "AI_DRAFT_KINDS_REQUIRED")
             val ctx = context.loadForStudent(principal.id, studentId, sources(principal.id, request))
             Prepared(ctx, request.notes.orEmpty(), instructions(request, principal))
         }
@@ -134,6 +137,9 @@ class DraftBundleService(
         lessonId: UUID?, studentId: UUID?,
     ): DraftBundleResponse {
         val (ctx, notes, instructions) = prepared
+        // Stored with the effective kinds, so a whole refine regenerates the same parts.
+        val kinds = request.kinds?.toSet() ?: DraftKind.entries.toSet()
+        @Suppress("NAME_SHADOWING") val request = request.copy(kinds = DraftKind.entries.filter { it in kinds })
         if (notes.isBlank() && ctx.pastNotes.isEmpty() && instructions.isBlank() && ctx.focusTopics.isEmpty() && ctx.focusGrammar.isEmpty())
             throw BadRequestException("Give notes, past lesson notes, a prompt or a focus to generate from", code = "AI_DRAFT_NOTHING_TO_GENERATE")
 
@@ -160,6 +166,7 @@ class DraftBundleService(
         val jobInput = JobInput(
             notes = notes.takeIf { it.isNotBlank() }, prompt = request.prompt, promptTemplateId = request.promptTemplateId,
             pastLessonIds = ctx.pastNotes.map { it.ref.id }, topicIds = request.topicIds, grammarTopicIds = request.grammarTopicIds,
+            kinds = request.kinds,
         )
         val jobId = try {
             runner.enqueue(principal.id, lessonId, GenerationJobKind.GENERATE, GenerationJobs.json.encodeToJsonElement(jobInput),
@@ -168,15 +175,17 @@ class DraftBundleService(
             if (created) transaction { DraftBundleTable.deleteWhere { DraftBundleTable.id eq bundleId } }
             throw e
         }
-        runner.launch(jobId) { runGenerate(gateway, bundleId, ctx, notes, instructions) }
+        runner.launch(jobId) { runGenerate(gateway, bundleId, ctx, notes, instructions, kinds) }
         return get(bundleId, principal)
     }
 
-    private suspend fun runGenerate(gateway: LlmGateway, bundleId: UUID, ctx: LessonContext, notes: String, instructions: String): JobSuccess {
+    private suspend fun runGenerate(
+        gateway: LlmGateway, bundleId: UUID, ctx: LessonContext, notes: String, instructions: String, kinds: Set<DraftKind>,
+    ): JobSuccess {
         val target = if (ctx.mode == DraftMode.CLUB) DraftTarget.NOTES_DOCUMENT else DraftTarget.BUNDLE
-        val request = Prompts.generate(ctx.mode, ctx.toPromptText(), HtmlText.toPlainText(notes), ctx.pastNotesText(), instructions)
+        val request = Prompts.generate(ctx.mode, ctx.toPromptText(), HtmlText.toPlainText(notes), ctx.pastNotesText(), instructions, kinds)
         val completion = GenerationJobs.completeValidated(gateway, Prompts.draftSystem(ctx.mode), request, MAX_TOKENS) {
-            AiOutputParser.parseDraft(it, target)
+            AiOutputParser.parseDraft(it, target, kinds)
         }
         return transaction {
             val count = if (lockDraft(bundleId)) {
@@ -202,14 +211,15 @@ class DraftBundleService(
                 throw ConflictException("The draft has nothing to refine yet", code = "AI_DRAFT_EMPTY")
             bundle to itemId
         }
-        val input = JobInput(instruction = request.instruction, itemId = itemId?.toString())
+        val kinds = request.kinds?.toSet() ?: storedInput(bundle).kinds?.toSet() ?: DraftKind.entries.toSet()
+        val input = JobInput(instruction = request.instruction, itemId = itemId?.toString(), kinds = DraftKind.entries.filter { it in kinds })
         val jobId = runner.enqueue(principal.id, bundle[DraftBundleTable.lessonId]?.value, GenerationJobKind.REFINE,
             GenerationJobs.json.encodeToJsonElement(input), bundleId = bundleId, modelId = gateway.modelId)
-        runner.launch(jobId) { runRefine(gateway, bundleId, itemId, request.instruction) }
+        runner.launch(jobId) { runRefine(gateway, bundleId, itemId, request.instruction, kinds) }
         return get(bundleId, principal)
     }
 
-    private suspend fun runRefine(gateway: LlmGateway, bundleId: UUID, itemId: UUID?, instruction: String): JobSuccess {
+    private suspend fun runRefine(gateway: LlmGateway, bundleId: UUID, itemId: UUID?, instruction: String, kinds: Set<DraftKind>): JobSuccess {
         data class Refine(val ctx: LessonContext, val target: DraftTarget, val current: String, val notes: String, val prompt: String)
         val refine = transaction {
             val bundle = DraftBundleTable.selectAll().where { DraftBundleTable.id eq bundleId }.single()
@@ -224,20 +234,23 @@ class DraftBundleService(
                 LessonTable.select(LessonTable.rawNotes).where { LessonTable.id eq lessonId }.single()[LessonTable.rawNotes]
             }.orEmpty()
             val prompt = templateText(input.promptTemplateId, ctx.teacherId, input.prompt)
-            Refine(ctx, target, DraftItems.toAiJson(listOfNotNull(item).ifEmpty { items }, target), notes, prompt)
+            Refine(ctx, target, DraftItems.toAiJson(listOfNotNull(item).ifEmpty { items }, target, kinds), notes, prompt)
         }
         val request = Prompts.refine(refine.ctx.mode, refine.target, refine.ctx.toPromptText(), HtmlText.toPlainText(refine.notes),
-            refine.ctx.pastNotesText(), refine.prompt, refine.current, instruction)
+            refine.ctx.pastNotesText(), refine.prompt, refine.current, instruction, kinds)
         val completion = GenerationJobs.completeValidated(gateway, Prompts.draftSystem(refine.ctx.mode), request, MAX_TOKENS) {
-            AiOutputParser.parseDraft(it, refine.target)
+            AiOutputParser.parseDraft(it, refine.target, kinds)
         }
         return transaction {
             val ctx = refine.ctx
             val count = if (lockDraft(bundleId)) {
                 val items = DraftItems.fromAi(completion.value, ctx.teacherId, ctx.level, ctx.lessonId, ctx.attendeeIds)
                 if (itemId == null) {
-                    DraftItemTable.deleteWhere { DraftItemTable.bundleId eq bundleId }
-                    DraftItems.insert(bundleId, items)
+                    // Only the regenerated kinds are replaced (a club's notes document: everything).
+                    val replaced = if (ctx.mode == DraftMode.CLUB) DraftItemKind.entries.toSet() else DraftItems.itemKinds(kinds)
+                    DraftItemTable.deleteWhere { (DraftItemTable.bundleId eq bundleId) and (DraftItemTable.kind inList replaced) }
+                    DraftItems.insert(bundleId, items, firstPosition = Int.MAX_VALUE / 2)
+                    DraftItems.renumber(bundleId)
                 } else {
                     // The refined item needs approving again.
                     DraftItemTable.update({ (DraftItemTable.id eq itemId) and (DraftItemTable.bundleId eq bundleId) }) {
@@ -530,7 +543,7 @@ class DraftBundleService(
 
     private fun matchedEntries(teacherId: UUID, items: List<ResultRow>): Map<String, com.gvart.parleyroom.vocabulary.transfer.VocabEntryResponse> {
         val ids = items.filter { it[DraftItemTable.kind] == DraftItemKind.WORD }
-            .mapNotNull { DraftItems.word(it).matchedEntryId?.let(UUID::fromString) }
+            .mapNotNull { DraftItems.word(it).libraryEntryId?.let(UUID::fromString) }
         if (ids.isEmpty()) return emptyMap()
         val rows = VocabEntryTable.selectAll().where { (VocabEntryTable.id inList ids) and (VocabEntryTable.teacherId eq teacherId) }.toList()
         return vocabEntryService.toResponses(rows).associateBy { it.id }

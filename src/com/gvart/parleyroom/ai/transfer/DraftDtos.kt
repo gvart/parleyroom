@@ -35,7 +35,9 @@ data class DraftWord(
     val topics: List<DraftTopic> = emptyList(),
     val grammarTopics: List<DraftGrammarTopic> = emptyList(),
     /** Read-only: the library entry with the same lemma + article + word type (Send reuses it as is). */
-    val matchedEntryId: String? = null,
+    val libraryEntryId: String? = null,
+    /** Read-only: [libraryEntryId] is set, so Send assigns the library entry and ignores the edited display fields. */
+    val matched: Boolean = false,
     /** Read-only: every recipient already has the word. */
     val alreadyAssigned: Boolean = false,
 )
@@ -79,6 +81,9 @@ data class DraftItemResponse(
 
 // ---- Bundle ----
 
+/** What a 1:1 generation produces; clubs always get their notes document. */
+enum class DraftKind { WORDS, HOMEWORK }
+
 /** Body of POST …/draft-bundles, stored as the bundle's input. */
 @Serializable
 data class GenerateDraftRequest(
@@ -92,9 +97,12 @@ data class GenerateDraftRequest(
     /** Library topics / grammar the teacher wants to focus on. */
     val topicIds: List<String> = emptyList(),
     val grammarTopicIds: List<String> = emptyList(),
+    /** WORDS and/or HOMEWORK. Lesson scope default: both; student scope: required. Ignored for clubs. */
+    val kinds: List<DraftKind>? = null,
 ) {
     fun validate(): ValidationResult {
         val errors = buildList {
+            if (kinds != null && kinds.isEmpty()) add("kinds must not be empty")
             if ((notes?.length ?: 0) > MAX_NOTES) add("notes must be at most $MAX_NOTES characters")
             if (prompt.length > MAX_PROMPT) add("prompt must be at most $MAX_PROMPT characters")
             if ((pastLessonIds?.size ?: 0) > MAX_PAST_LESSONS) add("pastLessonIds must have at most $MAX_PAST_LESSONS entries")
@@ -194,10 +202,15 @@ data class PatchDraftItemRequest(
     }
 }
 
-/** Refine the whole bundle, or only [itemId]. */
+/**
+ * Refine the whole bundle, or only [itemId]. A whole refine regenerates the bundle's [kinds]
+ * (default: the kinds it was generated with); items of other kinds stay as they are.
+ */
 @Serializable
-data class RefineDraftRequest(val instruction: String, val itemId: String? = null) {
+data class RefineDraftRequest(val instruction: String, val itemId: String? = null, val kinds: List<DraftKind>? = null) {
     fun validate(): ValidationResult = when {
+        kinds != null && kinds.isEmpty() -> ValidationResult.Invalid("kinds must not be empty")
+        itemId != null && kinds != null -> ValidationResult.Invalid("kinds is only for a refine of the whole bundle")
         instruction.isBlank() -> ValidationResult.Invalid("instruction can't be empty")
         instruction.length > 4_000 -> ValidationResult.Invalid("instruction must be at most 4000 characters")
         else -> ValidationResult.Valid

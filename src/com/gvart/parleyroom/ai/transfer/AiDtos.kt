@@ -31,6 +31,7 @@ data class JobInput(
     val pastLessonIds: List<String>? = null,
     val topicIds: List<String>? = null,
     val grammarTopicIds: List<String>? = null,
+    val kinds: List<DraftKind>? = null,
 )
 
 @Serializable
