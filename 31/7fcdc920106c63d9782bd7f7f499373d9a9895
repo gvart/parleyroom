@@ -1,0 +1,69 @@
+test/com/gvart/parleyroom/user/LocalizationIntegrationTest.kt
+  s_81525541fb2fd4::t_00c8b5cf8f5156 1-179
+resources/db/migration/V20__native_language.sql
+  s_81525541fb2fd4::t_f83b6caf6b5ead 1-12
+src/com/gvart/parleyroom/admin/routing/Routing.kt
+  s_81525541fb2fd4::t_d3e4d9b8075ac5 94,112
+src/com/gvart/parleyroom/admin/service/AdminService.kt
+  s_81525541fb2fd4::t_105b60b0e01faa 16,18,88,107-108,121,154-155,250-251
+src/com/gvart/parleyroom/admin/transfer/AdminCreateUserRequest.kt
+  s_81525541fb2fd4::t_a58fc13ba0d311 17-18
+src/com/gvart/parleyroom/admin/transfer/AdminUpdateUserRequest.kt
+  s_81525541fb2fd4::t_f6f190066479c4 18,22
+src/com/gvart/parleyroom/admin/transfer/AdminUserResponse.kt
+  s_81525541fb2fd4::t_ccfc276ac210a7 22-24
+src/com/gvart/parleyroom/document/service/DocumentSupport.kt
+  s_81525541fb2fd4::t_1320833fc63057 204-205
+src/com/gvart/parleyroom/registration/data/RegistrationTable.kt
+  s_81525541fb2fd4::t_3db86866195ef4 17
+src/com/gvart/parleyroom/registration/routing/Routing.kt
+  s_81525541fb2fd4::t_bcafcb3c6a38c0 74-75
+src/com/gvart/parleyroom/registration/service/RegistrationService.kt
+  s_81525541fb2fd4::t_bc0640cd075385 5,10,45-46,72,104-105
+src/com/gvart/parleyroom/registration/transfer/InviteUserRequest.kt
+  s_81525541fb2fd4::t_96bf9926abe5ab 11-12
+src/com/gvart/parleyroom/user/data/SupportedLocale.kt
+  s_81525541fb2fd4::t_90ef402f8223fc 5-13,23-31
+src/com/gvart/parleyroom/user/data/UserTable.kt
+  s_81525541fb2fd4::t_7cec6e1a2a8352 20-24
+src/com/gvart/parleyroom/user/routing/Routing.kt
+  s_81525541fb2fd4::t_dcf0d3b6f0ad4e 211-213
+src/com/gvart/parleyroom/user/service/UserService.kt
+  s_81525541fb2fd4::t_b1daf9ec3e6393 12,72-73,91,93-94,105-106,219-220
+src/com/gvart/parleyroom/user/transfer/UpdateProfileRequest.kt
+  s_81525541fb2fd4::t_7731e0740c332f 13-16,26
+src/com/gvart/parleyroom/user/transfer/UserListResponse.kt
+  s_81525541fb2fd4::t_768942d9829629 30-32
+src/com/gvart/parleyroom/user/transfer/UserResponse.kt
+  s_81525541fb2fd4::t_b74e30f0da8b5b 22-26
+src/com/gvart/parleyroom/vocabulary/routing/Routing.kt
+  s_81525541fb2fd4::t_c12e1d13aaf25f 17,202,216,232-246
+src/com/gvart/parleyroom/vocabulary/service/VocabDisplay.kt
+  s_81525541fb2fd4::t_251765223341a1 5,13,17-20
+src/com/gvart/parleyroom/vocabulary/service/VocabSettingsService.kt
+  s_81525541fb2fd4::t_45bba258e23c7e 10,56-62,87-89,91,96
+src/com/gvart/parleyroom/vocabulary/service/VocabularyService.kt
+  s_81525541fb2fd4::t_f91ed84e324c91 142,148-149,172,174
+src/com/gvart/parleyroom/vocabulary/transfer/StudentVocabDtos.kt
+  s_81525541fb2fd4::t_c3366a01bee414 57,72-73,84-89
+test/com/gvart/parleyroom/user/UserIntegrationTest.kt
+  s_81525541fb2fd4::t_ca92931e1d39ff 145,151,168
+testResources/test-data.sql
+  s_81525541fb2fd4::t_e5a3d11764cf24 3,5-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "317fcdc920106c63d9782bd7f7f499373d9a9895",
+  "prompts": {},
+  "sessions": {
+    "s_81525541fb2fd4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f74100a-bf7e-4308-bddf-c605ea23cebe",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
