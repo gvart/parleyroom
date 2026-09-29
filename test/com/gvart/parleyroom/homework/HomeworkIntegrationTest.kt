@@ -237,7 +237,7 @@ class HomeworkIntegrationTest : IntegrationTest() {
     // ---- drafts ----
 
     @Test
-    fun `draft answers merge partially and idempotently, teacher sees progress but no content`() = testApp {
+    fun `draft answers merge partially and idempotently, teacher sees them in progress`() = testApp {
         val client = createJsonClient(this)
         val teacher = getTeacherToken(client)
         val student = getStudentToken(client)
@@ -264,7 +264,8 @@ class HomeworkIntegrationTest : IntegrationTest() {
         val teacherView = homework(client, id, teacher)
         assertEquals(2, teacherView.answeredUnits)
         assertNotNull(teacherView.lastSavedAt)
-        assertTrue(teacherView.units.all { it.answer == null }, "drafts are private")
+        assertEquals("""{"gaps":["musst",""]}""", teacherView.unit(GAP_1).answer.toString())
+        assertNull(teacherView.unit(GAP_1).autoResult, "not checked before submit")
 
         // null removes an answer
         val removed = send(client, "PUT", "/api/v1/homework/$id/answers", student,
@@ -384,7 +385,7 @@ class HomeworkIntegrationTest : IntegrationTest() {
         assertEquals("gehen, nicht fahren", reworking.unit(GAP_2).comment)
         assertNull(reworking.unit(GAP_2).correct)
         assertFalse(send(client, "GET", "/api/v1/homework/$id", student).bodyAsText().contains("solution"))
-        assertTrue(homework(client, id, teacher).units.all { it.answer == null }, "rework is a draft again")
+        assertEquals("""{"gaps":["fährt"]}""", homework(client, id, teacher).unit(GAP_2).answer.toString(), "the teacher follows the rework")
         assertEquals(1, send(client, "GET", "/api/v1/homework/counts", student).body<HomeworkCountsResponse>().returned)
 
         // Fix GAP_2 and resubmit: its old verdict is cleared, the unchanged EC verdict stays.
@@ -414,7 +415,7 @@ class HomeworkIntegrationTest : IntegrationTest() {
         assertNotNull(result.summary)
         assertTrue(send(client, "GET", "/api/v1/homework/$id", student).bodyAsText().contains("\"solution\""))
 
-        // Draft reviews only on SUBMITTED; DONE is final.
+        // Draft reviews only on OPEN / SUBMITTED; DONE is final.
         assertEquals("HOMEWORK_INVALID_STATE", send(client, "PUT", "/api/v1/homework/$id/review", teacher, """{ "feedback": "x" }""").code())
         val done = send(client, "POST", "/api/v1/homework/$id/review", teacher, """{ "feedback": "Gut gemacht", "outcome": "DONE" }""").body<HomeworkResponse>()
         assertEquals(HomeworkStatus.DONE, done.status)

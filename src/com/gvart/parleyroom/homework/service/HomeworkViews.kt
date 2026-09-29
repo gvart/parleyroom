@@ -185,8 +185,6 @@ class HomeworkViews(
         val isStudent = principal.role == UserRole.STUDENT
         val revealResults = status == HomeworkStatus.REVIEWED || status == HomeworkStatus.DONE
         val revealFeedback = revealResults || (status == HomeworkStatus.OPEN && row[HomeworkTable.lastOutcome] == HomeworkOutcome.RETURNED)
-        // Drafts are private: teachers see content only once it was submitted.
-        val hideContent = !isStudent && status == HomeworkStatus.OPEN
         val showResults = !isStudent || revealResults
         val showFeedback = !isStudent || revealFeedback
 
@@ -206,7 +204,7 @@ class HomeworkViews(
                 blockType = unit.blockType,
                 questionKind = unit.questionKind,
                 check = unit.check,
-                answer = if (hideContent) null else answer?.get(HomeworkAnswerTable.answer),
+                answer = answer?.get(HomeworkAnswerTable.answer),
                 answeredAt = answer?.get(HomeworkAnswerTable.answeredAt),
                 autoResult = if (showResults) autoResult else null,
                 autoScore = if (showResults) answer?.get(HomeworkAnswerTable.autoScore) else null,
@@ -222,7 +220,7 @@ class HomeworkViews(
             )
         }
 
-        val uploads = if (hideContent) emptyList() else HomeworkUploadTable.selectAll()
+        val uploads = HomeworkUploadTable.selectAll()
             .where { HomeworkUploadTable.homeworkId eq homeworkId }
             .orderBy(HomeworkUploadTable.createdAt to SortOrder.ASC)
             .map { upload ->

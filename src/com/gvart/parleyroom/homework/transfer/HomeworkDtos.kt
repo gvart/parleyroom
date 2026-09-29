@@ -65,6 +65,19 @@ data class UpdateAssignmentRequest(
     }
 }
 
+/** Edits one item while every homework of the assignment is still OPEN. Omitted fields stay; a blank task clears it. */
+@Serializable
+data class UpdateAssignmentItemRequest(
+    val title: String? = null,
+    val task: String? = null,
+    /** MATERIAL / TASK; a change drops the item's answers and uploads. */
+    val responseType: HomeworkResponseType? = null,
+    /** MATERIAL only: no response at all. */
+    val clearResponseType: Boolean = false,
+    /** DOCUMENT only: the edited snapshot; answers that no longer fit a unit are dropped. */
+    val blocks: JsonArray? = null,
+)
+
 @Serializable
 data class SaveAnswersRequest(
     val answers: List<AnswerInput>,

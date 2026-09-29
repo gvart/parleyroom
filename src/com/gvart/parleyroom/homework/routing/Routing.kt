@@ -14,6 +14,7 @@ import com.gvart.parleyroom.homework.service.AssignmentService
 import com.gvart.parleyroom.homework.service.HomeworkService
 import com.gvart.parleyroom.homework.service.HomeworkUploadService
 import com.gvart.parleyroom.homework.transfer.AnswersSavedResponse
+import com.gvart.parleyroom.homework.transfer.AssignmentItemInput
 import com.gvart.parleyroom.homework.transfer.AssignmentPageResponse
 import com.gvart.parleyroom.homework.transfer.AssignmentResponse
 import com.gvart.parleyroom.homework.transfer.CreateAssignmentRequest
@@ -24,6 +25,7 @@ import com.gvart.parleyroom.homework.transfer.HomeworkUploadResponse
 import com.gvart.parleyroom.homework.transfer.ReviewDraftRequest
 import com.gvart.parleyroom.homework.transfer.ReviewRequest
 import com.gvart.parleyroom.homework.transfer.SaveAnswersRequest
+import com.gvart.parleyroom.homework.transfer.UpdateAssignmentItemRequest
 import com.gvart.parleyroom.homework.transfer.UpdateAssignmentRequest
 import io.ktor.http.ContentDisposition
 import io.ktor.http.ContentType
@@ -109,9 +111,48 @@ fun Application.configureHomeworkRouting() {
                         call.respond(HttpStatusCode.OK, assignmentService.update(call.getPathUUID(), it, call.requirePrincipal()))
                     }.describe {
                         summary = "Update an assignment"
-                        description = "Title, instructions, due date. Items are immutable."
+                        description = "Title, instructions, due date. Items change through /items while every homework is OPEN."
                         requestBody { schema = jsonSchema<UpdateAssignmentRequest>() }
                         responses { HttpStatusCode.OK { schema = jsonSchema<AssignmentResponse>() } }
+                    }
+
+                    post<AssignmentItemInput>("/items") {
+                        call.respond(HttpStatusCode.OK, assignmentService.addItem(call.getPathUUID(), it, call.requirePrincipal()))
+                    }.describe {
+                        summary = "Add an item"
+                        description = "The owning teacher, while every homework of the assignment is OPEN. Appended last."
+                        requestBody { schema = jsonSchema<AssignmentItemInput>() }
+                        responses {
+                            HttpStatusCode.OK { schema = jsonSchema<AssignmentResponse>() }
+                            HttpStatusCode.BadRequest { description = "HOMEWORK_ITEM_INVALID (with pointer), VALIDATION_FAILED"; schema = jsonSchema<ProblemDetail>() }
+                            HttpStatusCode.Conflict { description = "ASSIGNMENT_ITEMS_LOCKED"; schema = jsonSchema<ProblemDetail>() }
+                        }
+                    }
+
+                    patch<UpdateAssignmentItemRequest>("/items/{itemId}") {
+                        call.respond(HttpStatusCode.OK, assignmentService.updateItem(call.getPathUUID(), call.getPathUUID("itemId"), it, call.requirePrincipal()))
+                    }.describe {
+                        summary = "Edit an item"
+                        description = "Title, task, response type (drops that item's answers and uploads) or a DOCUMENT item's blocks " +
+                            "(answers that no longer fit a unit are dropped). While every homework is OPEN."
+                        requestBody { schema = jsonSchema<UpdateAssignmentItemRequest>() }
+                        responses {
+                            HttpStatusCode.OK { schema = jsonSchema<AssignmentResponse>() }
+                            HttpStatusCode.BadRequest { description = "HOMEWORK_ITEM_INVALID, DOCUMENT_INVALID_BLOCK (with pointer)"; schema = jsonSchema<ProblemDetail>() }
+                            HttpStatusCode.NotFound { description = "HOMEWORK_ITEM_NOT_FOUND"; schema = jsonSchema<ProblemDetail>() }
+                            HttpStatusCode.Conflict { description = "ASSIGNMENT_ITEMS_LOCKED"; schema = jsonSchema<ProblemDetail>() }
+                        }
+                    }
+
+                    delete("/items/{itemId}") {
+                        call.respond(HttpStatusCode.OK, assignmentService.deleteItem(call.getPathUUID(), call.getPathUUID("itemId"), call.requirePrincipal()))
+                    }.describe {
+                        summary = "Remove an item"
+                        description = "Deletes its answers and uploads. While every homework is OPEN; the last item cannot be removed."
+                        responses {
+                            HttpStatusCode.OK { schema = jsonSchema<AssignmentResponse>() }
+                            HttpStatusCode.Conflict { description = "ASSIGNMENT_ITEMS_LOCKED, ASSIGNMENT_LAST_ITEM"; schema = jsonSchema<ProblemDetail>() }
+                        }
                     }
 
                     delete {
@@ -172,7 +213,7 @@ fun Application.configureHomeworkRouting() {
                         call.respond(HttpStatusCode.OK, homeworkService.get(call.getPathUUID(), call.requirePrincipal()))
                     }.describe {
                         summary = "Get homework"
-                        description = "Solutions and results are hidden from the student until REVIEWED/DONE; teachers never see draft content."
+                        description = "Solutions and results are hidden from the student until REVIEWED/DONE; the teacher also sees in-progress (OPEN) answers."
                         responses {
                             HttpStatusCode.OK { schema = jsonSchema<HomeworkResponse>() }
                             HttpStatusCode.NotFound { description = "HOMEWORK_NOT_FOUND"; schema = jsonSchema<ProblemDetail>() }
@@ -215,7 +256,7 @@ fun Application.configureHomeworkRouting() {
                         call.respond(HttpStatusCode.OK, homeworkService.saveReview(call.getPathUUID(), it.feedback, it.units, call.requirePrincipal()))
                     }.describe {
                         summary = "Save a review draft"
-                        description = "Teacher autosave on SUBMITTED homework; not visible to the student, no status change."
+                        description = "Teacher autosave on OPEN or SUBMITTED homework; no status change, hidden from the student until sent."
                         requestBody { schema = jsonSchema<ReviewDraftRequest>() }
                         responses {
                             HttpStatusCode.OK { schema = jsonSchema<HomeworkResponse>() }
@@ -227,7 +268,7 @@ fun Application.configureHomeworkRouting() {
                         call.respond(HttpStatusCode.OK, homeworkService.review(call.getPathUUID(), it.feedback, it.units, it.outcome, call.requirePrincipal()))
                     }.describe {
                         summary = "Review homework"
-                        description = "outcome REVIEWED, RETURNED (back to OPEN for rework) or DONE. SUBMITTED or REVIEWED only."
+                        description = "outcome REVIEWED, RETURNED (back to OPEN for rework) or DONE. Any status but DONE; from OPEN, REVIEWED/DONE auto-check the current answers."
                         requestBody { schema = jsonSchema<ReviewRequest>() }
                         responses {
                             HttpStatusCode.OK { schema = jsonSchema<HomeworkResponse>() }
@@ -291,7 +332,7 @@ fun Application.configureHomeworkRouting() {
                         }
                     }.describe {
                         summary = "Download an upload"
-                        description = "The student; the teacher/admin once the homework was submitted."
+                        description = "The student, the teacher or an admin."
                         responses {
                             HttpStatusCode.OK { description = "File bytes" }
                             HttpStatusCode.NotFound { description = "HOMEWORK_NOT_FOUND, HOMEWORK_UPLOAD_NOT_FOUND"; schema = jsonSchema<ProblemDetail>() }

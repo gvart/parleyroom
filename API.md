@@ -457,9 +457,10 @@ V12; the prod DB is reset).
 | `TASK` | `{ kind, title, task?, responseType }` | as given | one |
 
 `responseType: TEXT | AUDIO | VIDEO | FILE`. `title` ≤ 255, `task` ≤ 5 000 chars (plain text).
-Items get server uuids (`assignmentItemId`), keep their order, and are **immutable** after create
-(change = delete + re-assign). The snapshot means later edits of the document never shift answer
-keys or change the grading of assigned homework; students need no share on the document.
+Items get server uuids (`assignmentItemId`) and keep their order. While **every** homework of the
+assignment is `OPEN` the teacher may add, edit or remove items (see "Editing items"); after that
+they are frozen. The snapshot means later edits of the source document never shift answer keys or
+change the grading of assigned homework; students need no share on the document.
 
 **Answerable units of a DOCUMENT item** (only blocks with `interactive: true`; everything else is
 shown as context, incl. `vocab_table` with the viewer-resolved `vocab` side-list, `media` source):
@@ -502,14 +503,16 @@ teacher sets it). Summary: `{ closedCorrect, closedTotal, pendingReview, unanswe
 
 ```
 OPEN      --submit (student)--> SUBMITTED
-SUBMITTED --review REVIEWED---> REVIEWED     SUBMITTED|REVIEWED --review DONE--> DONE (final)
-SUBMITTED|REVIEWED --review RETURNED--> OPEN (rework, then submit again)
+OPEN|SUBMITTED --review REVIEWED---> REVIEWED     OPEN|SUBMITTED|REVIEWED --review DONE--> DONE (final)
+OPEN|SUBMITTED|REVIEWED --review RETURNED--> OPEN (rework, then submit again)
 ```
 - `OPEN`: student edits answers (draft autosave), uploads/deletes files.
 - `submit` (student, OPEN only): runs auto-check, locks answers, `attempt++`, `submittedAt`.
-- teacher `review` action on SUBMITTED or REVIEWED: `outcome` = `REVIEWED` | `RETURNED` (→ `OPEN`,
+- teacher `review` action on any status but DONE: `outcome` = `REVIEWED` | `RETURNED` (→ `OPEN`,
   student reworks and resubmits) | `DONE`. DONE is final (no more changes; teacher may still
-  delete the homework).
+  delete the homework). From `OPEN` (never submitted) `REVIEWED` / `DONE` first grade the current
+  answers exactly like a submit (auto-check, summary, `attempt++`, but no `submittedAt`);
+  `RETURNED` from `OPEN` only sends the feedback (status stays `OPEN`).
 - On resubmit, teacher override + comment are cleared for units whose answer changed.
 - `lastOutcome: REVIEWED | RETURNED | DONE | null` = the teacher's latest review outcome. After a
   return the status is `OPEN` again with `lastOutcome = RETURNED`, `returnedAt` and the return
@@ -526,12 +529,13 @@ SUBMITTED|REVIEWED --review RETURNED--> OPEN (rework, then submit again)
   Before that the student sees items, their own answers and uploads, and "submitted".
 - `feedback`, per-unit `comment` and `teacherCorrect` are visible only in `REVIEWED`, `DONE`, or
   `OPEN` with `lastOutcome = RETURNED` (feedback + comments only, still no results/solutions). While
-  `SUBMITTED` they are hidden, so review drafts (`PUT …/review`, allowed only in SUBMITTED) are never
-  seen early. Changing a REVIEWED homework goes through `POST …/review` again.
-- **Teachers never see draft content.** While the homework is `OPEN` (first attempt or after a
-  return) teachers/admins get `answer: null` for every unit and no `uploads` (download 404), only
-  progress: `answeredUnits`, `totalUnits`, `lastSavedAt`. From `SUBMITTED` on they see the full
-  submitted content, auto results and everything else.
+  `SUBMITTED` or a first-attempt `OPEN` they are hidden, so review drafts (`PUT …/review`, allowed in
+  OPEN and SUBMITTED) are not seen early — except on a returned `OPEN` homework, whose feedback and
+  comments are already visible and update live. Changing a REVIEWED homework goes through
+  `POST …/review` again.
+- **Teachers see work in progress.** While the homework is `OPEN` teachers/admins get the student's
+  current (autosaved) answers and uploads, plus `answeredUnits`, `totalUnits`, `lastSavedAt`. Auto
+  results only exist once graded (submit, or a review outcome from OPEN).
 
 ### Endpoints — teacher
 
@@ -542,7 +546,10 @@ GET    /api/v1/assignments/{id}            -> Assignment (items with full snapsh
 PATCH  /api/v1/assignments/{id}            Body: { title?, instructions?, dueDate?, clearDueDate? } -> Assignment
 DELETE /api/v1/assignments/{id}            -> 204 (owner or admin; deletes all homework + stored uploads)
 DELETE /api/v1/homework/{id}               -> 204 (owner or admin; removes one student's homework)
-PUT    /api/v1/homework/{id}/review        Body: ReviewDraft -> Homework   (autosave, SUBMITTED only, no status change)
+POST   /api/v1/assignments/{id}/items      Body: ItemInput -> Assignment   (appended; while every homework is OPEN)
+PATCH  /api/v1/assignments/{id}/items/{itemId}  Body: UpdateItem -> Assignment
+DELETE /api/v1/assignments/{id}/items/{itemId}  -> Assignment   (not the last item: 409 ASSIGNMENT_LAST_ITEM)
+PUT    /api/v1/homework/{id}/review        Body: ReviewDraft -> Homework   (autosave, OPEN or SUBMITTED, no status change)
 POST   /api/v1/homework/{id}/review        Body: ReviewDraft + { outcome: REVIEWED|RETURNED|DONE } -> Homework
 ```
 `CreateAssignment = { title (1..255), instructions? (≤ 10 000), dueDate? (YYYY-MM-DD), lessonId?,
@@ -551,6 +558,16 @@ groupIds, deduplicated, ≥ 1 (400 `ASSIGNMENT_NO_STUDENTS`). Students must be l
 (400 `STUDENT_NOT_LINKED`), groups / lessons / documents / materials must be the teacher's
 (404 `GROUP_NOT_FOUND` / `LESSON_NOT_FOUND` / `DOCUMENT_NOT_FOUND` / `MATERIAL_NOT_FOUND`).
 Bad item → 400 `HOMEWORK_ITEM_INVALID` + `pointer` (`/items/2/responseType`).
+
+**Editing items** (the owning teacher only; admins 403): any homework of the assignment not `OPEN`
+→ 409 `ASSIGNMENT_ITEMS_LOCKED`; unknown item → 404 `HOMEWORK_ITEM_NOT_FOUND`.
+`UpdateItem = { title?, task?, responseType?, clearResponseType?, blocks? }` — omitted fields stay;
+blank `task` clears it. `responseType` for MATERIAL/TASK, `clearResponseType` for MATERIAL only;
+changing it deletes that item's answers and uploads. `blocks` (DOCUMENT only) replaces the
+snapshot, validated like a document (`DOCUMENT_INVALID_BLOCK` + `pointer`, references must be the
+teacher's) and must keep ≥ 1 answerable unit; answers whose unit disappeared or whose payload no
+longer fits (e.g. more gaps than the text has) are deleted, the rest stay and are re-checked on
+grading. Removing an item deletes its answers and uploads. `itemCount` / `totalUnits` follow.
 
 `ReviewDraft = { feedback: string|null (≤ 10 000), units?: [{ assignmentItemId, blockId?, itemId?,
 correct: bool|null, comment: string|null (≤ 5 000) }] }` — `feedback` always replaces; for every
@@ -600,7 +617,7 @@ Content type = the part's `Content-Type` without parameters (`audio/webm;codecs=
 - FILE: `application/pdf`, DOCX, `application/msword`, `image/jpeg`, `image/png`, `image/webp`, `image/heic`, `text/plain`
 
 Stored at `homework/{homeworkId}/{uploadId}/{safeName}`; streamed back through the API (authed
-`GET …/file`) to the student and — once submitted — the teacher / admin. Deleted with the homework/assignment. The browser records
+`GET …/file`) to the student, the teacher and admins. Deleted with the homework/assignment. The browser records
 audio with `MediaRecorder` and uploads the blob like a file.
 `HomeworkUpload = { id, assignmentItemId, fileName, contentType, size, downloadUrl, createdAt }`;
 `downloadUrl` is an API path like the material one (`/api/v1/homework/{id}/uploads/{uploadId}/file`).
@@ -659,10 +676,13 @@ gap_results JSONB, teacher_correct, comment; partial unique indexes for document
 |---|---|---|
 | `ASSIGNMENT_NOT_FOUND` | 404 | |
 | `ASSIGNMENT_NO_STUDENTS` | 400 | no recipients after expanding groups |
+| `ASSIGNMENT_ITEMS_LOCKED` | 409 | item edit after a homework left OPEN |
+| `ASSIGNMENT_LAST_ITEM` | 409 | removing the only item |
+| `HOMEWORK_ITEM_NOT_FOUND` | 404 | item edit on an unknown item |
 | `HOMEWORK_NOT_FOUND` | 404 | also for students/teachers without access |
 | `HOMEWORK_ITEM_INVALID` | 400 | bad item input or unknown unit; `pointer` |
 | `HOMEWORK_ANSWER_INVALID` | 400 | answer payload does not fit the unit; `pointer` |
-| `HOMEWORK_INVALID_STATE` | 409 | review action in the wrong status |
+| `HOMEWORK_INVALID_STATE` | 409 | review on DONE, review draft on REVIEWED/DONE |
 | `SUBMISSION_LOCKED` | 409 | student write while not OPEN |
 | `UPLOAD_TYPE_NOT_ALLOWED` | 400 | content type not allowed for the unit's responseType (or TEXT unit) |
 | `UPLOAD_LIMIT_REACHED` | 409 | > 5 uploads on one unit |
