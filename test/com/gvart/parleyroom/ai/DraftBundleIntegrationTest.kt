@@ -700,11 +700,16 @@ class DraftBundleIntegrationTest : IntegrationTest() {
         setNotes(newer, "der Balkon")
         val cancelled = seedLesson(scheduledAt = OffsetDateTime.now().minusDays(3))
         setNotes(cancelled, "abgesagt")
-        transaction { LessonTable.update({ LessonTable.id eq cancelled }) { it[status] = LessonStatus.CANCELLED } }
+        val requested = seedLesson(scheduledAt = OffsetDateTime.now().minusDays(2))
+        setNotes(requested, "angefragt")
+        transaction {
+            LessonTable.update({ LessonTable.id eq cancelled }) { it[status] = LessonStatus.CANCELLED }
+            LessonTable.update({ LessonTable.id eq requested }) { it[status] = LessonStatus.REQUEST }
+        }
 
         val context = client.get("/api/v1/students/$STUDENT/draft-context") { bearerAuth(token) }.body<DraftContextResponse>()
         assertEquals(DraftScope.STUDENT, context.scope)
-        assertEquals(listOf(newer.toString(), older.toString()), context.pastLessons.map { it.id }, "cancelled lessons are left out")
+        assertEquals(listOf(newer.toString(), older.toString()), context.pastLessons.map { it.id }, "cancelled and requested lessons are left out")
         assertEquals("die Waschmaschine\nbügeln", context.pastLessons.last().notesPreview)
         assertEquals(listOf(newer.toString()), context.context.pastLessons.map { it.id }, "the latest by default")
 
@@ -720,7 +725,7 @@ class DraftBundleIntegrationTest : IntegrationTest() {
         assertEquals(STUDENT.toString(), bundle.studentId)
         assertEquals(listOf("Waschmaschine", "bügeln"), bundle.items(DraftItemKind.WORD).map { it.word!!.entry.lemma })
         val sent = FakeLlmGateway.received.single().messages.single().text
-        assertTrue("die Waschmaschine" in sent && "Balkon" !in sent && "abgesagt" !in sent)
+        assertTrue("die Waschmaschine" in sent && "Balkon" !in sent && "abgesagt" !in sent && "angefragt" !in sent)
         assertTrue("Neue Hausaufgabe" in sent)
 
         client.post("/api/v1/ai/draft-bundles/${bundle.id}/approve-all") { bearerAuth(token) }
@@ -732,7 +737,7 @@ class DraftBundleIntegrationTest : IntegrationTest() {
 
         val cancelledPick = client.post("/api/v1/students/$STUDENT/draft-bundles") {
             contentType(ContentType.Application.Json); bearerAuth(token)
-            setBody(GenerateDraftRequest(pastLessonIds = listOf(cancelled.toString())))
+            setBody(GenerateDraftRequest(pastLessonIds = listOf(cancelled.toString(), requested.toString())))
         }
         assertEquals("AI_DRAFT_PAST_LESSON_INVALID", cancelledPick.body<ProblemDetail>().code)
         val notMine = client.post("/api/v1/students/$STUDENT_2/draft-bundles") {

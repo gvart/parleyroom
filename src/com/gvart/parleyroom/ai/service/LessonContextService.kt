@@ -307,7 +307,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
         if (selected == null) return withNotes(earlier).take(1)
         val unknown = selected.filter { it !in earlier }
         if (unknown.isNotEmpty())
-            throw BadRequestException("Not an earlier lesson of this student or group: ${unknown.joinToString()}", code = "AI_DRAFT_PAST_LESSON_INVALID")
+            throw BadRequestException("Not an earlier completed lesson of this student or group: ${unknown.joinToString()}", code = "AI_DRAFT_PAST_LESSON_INVALID")
         return withNotes(selected.distinct())
     }
 
@@ -385,7 +385,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
     }
 
     /**
-     * Earlier, not cancelled lessons of the same learner(s): the student's, the group's, or (club
+     * Earlier lessons that actually took place (COMPLETED; not requested, cancelled or still running) of the same learner(s): the student's, the group's, or (club
      * without group) the teacher's of the same type.
      */
     private fun earlierLessons(
@@ -400,7 +400,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
         val query = LessonTable.select(LessonTable.id).where {
             (LessonTable.teacherId eq teacherId) and
                     (LessonTable.scheduledAt less before) and
-                    (LessonTable.status neq LessonStatus.CANCELLED)
+                    (LessonTable.status eq LessonStatus.COMPLETED)
         }
         excludeLessonId?.let { id -> query.andWhere { LessonTable.id neq id } }
         when {

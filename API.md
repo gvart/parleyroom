@@ -1330,7 +1330,7 @@ DraftContext {
   scope, mode, aiAvailable, lessonId?, studentId?,
   notes: string | null,              // lesson scope: lessons.raw_notes (the single notes source)
   context: ContextSummary,           // what the server adds with the default sources
-  pastLessons: [PastLesson],         // picker: earlier, NOT cancelled lessons of the same learner(s) with notes, newest first, ≤ 20
+  pastLessons: [PastLesson],         // picker: earlier COMPLETED lessons of the same learner(s) with notes, newest first, ≤ 20
   openBundle: DraftBundleSummary | null
 }
 PastLesson { id, title, scheduledAt, notesPreview }     // notes as plain text, first 300 chars
@@ -1364,7 +1364,7 @@ GenerateDraftRequest {
 Creates the open draft of this lesson / student or **reuses it** (its items are replaced when the
 job succeeds; 409 `AI_DRAFT_BUSY` while a job of that draft runs). A new bundle whose job could not
 be queued (429) is removed again. Needs at least one source (notes, past notes, prompt/template or
-focus) → else 400 `AI_DRAFT_NOTHING_TO_GENERATE`. `pastLessonIds` must be earlier, not cancelled
+focus) → else 400 `AI_DRAFT_NOTHING_TO_GENERATE`. `pastLessonIds` must be earlier COMPLETED
 lessons of the same student (1:1) / group (club) → else 400 `AI_DRAFT_PAST_LESSON_INVALID`.
 
 **One job generates words and homework together** (1:1):
@@ -1378,7 +1378,7 @@ lessons of the same student (1:1) / group (club) → else 400 `AI_DRAFT_PAST_LES
 All items start **unapproved**.
 
 **Context sent to the model**: level; display setting; known words (≤ 300); 1:1 also weak words and
-goals; covered grammar (earlier non-cancelled lessons); grammar gaps (P8, see Student progress);
+goals; covered grammar (earlier completed lessons); grammar gaps (P8, see Student progress);
 focus topics / grammar; the teacher's library topic paths and grammar names (≤ 300); the current
 notes (`<notes>`) and the selected past lessons' notes (`<past_lesson_notes>`, headed by date only).
 **Privacy**: the model never receives names, e-mails or any id (uuids are never sent; tags go by
@@ -1606,7 +1606,7 @@ task gets `" (überarbeitet: <instruction>)"` appended, a document gets a rich-t
 | `AI_DRAFT_BUSY` | 409 | a job of this draft is QUEUED / RUNNING |
 | `AI_DRAFT_EMPTY` | 409 | refine before anything was generated |
 | `AI_DRAFT_NOTHING_TO_GENERATE` | 400 | no notes, past notes, prompt or focus |
-| `AI_DRAFT_PAST_LESSON_INVALID` | 400 | not an earlier, not cancelled lesson of the learner(s) |
+| `AI_DRAFT_PAST_LESSON_INVALID` | 400 | not an earlier COMPLETED lesson of the learner(s) |
 | `AI_DRAFT_ITEM_KIND_MISMATCH` | 400 | PATCH content does not match the item kind |
 | `AI_DRAFT_DOCUMENT_INVALID` | 400 | vocab_table in a draft document / homework document without an interactive exercise |
 | `AI_DRAFT_NOTHING_APPROVED` | 400 | Send without approved items |

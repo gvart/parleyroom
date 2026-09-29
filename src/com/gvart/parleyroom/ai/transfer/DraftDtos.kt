@@ -269,7 +269,7 @@ data class DraftContextResponse(
     val notes: String? = null,
     /** What the server adds to the prompt with the default sources. */
     val context: ContextSummary,
-    /** Earlier (not cancelled) lessons with notes, newest first: the "notes from past lessons" picker. */
+    /** Earlier completed lessons with notes, newest first: the "notes from past lessons" picker. */
     val pastLessons: List<PastLessonRef>,
     /** The open (DRAFT) bundle of this lesson / student, if any. */
     val openBundle: DraftBundleSummary? = null,
