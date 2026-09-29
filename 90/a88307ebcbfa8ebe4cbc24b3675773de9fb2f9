@@ -1,0 +1,23 @@
+src/com/gvart/parleyroom/ai/data/GenerationJobTable.kt
+  s_81525541fb2fd4::t_a14e4a29cfad38 39
+src/com/gvart/parleyroom/ai/data/DraftTables.kt
+  s_81525541fb2fd4::t_85488267f906b4 1-59
+resources/db/migration/V19__ai_draft_bundles.sql
+  s_81525541fb2fd4::t_7f370bcf5c2139 1-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "90a88307ebcbfa8ebe4cbc24b3675773de9fb2f9",
+  "prompts": {},
+  "sessions": {
+    "s_81525541fb2fd4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f74100a-bf7e-4308-bddf-c605ea23cebe",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
