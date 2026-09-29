@@ -1,0 +1,27 @@
+resources/db/migration/V16__reschedule_withdrawn.sql
+  s_ada7816b5a061f::t_d189fa766b80a4 1-2
+src/com/gvart/parleyroom/lesson/data/LessonEventTable.kt
+  s_ada7816b5a061f::t_e5bdfcd85f1904 13
+src/com/gvart/parleyroom/lesson/routing/Routing.kt
+  s_ada7816b5a061f::t_4828d84a846414 617-646
+src/com/gvart/parleyroom/lesson/service/LessonRescheduleService.kt
+  s_ada7816b5a061f::t_cea4a9ced2bb73 165-186
+test/com/gvart/parleyroom/lesson/LessonIntegrationTest.kt
+  s_ada7816b5a061f::t_60ba1812cea1f3 921-980
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "1dc8a3fa5c5abc80aeb72e7ba416eaa420de5b0b",
+  "prompts": {},
+  "sessions": {
+    "s_ada7816b5a061f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90375cfd-f524-4526-b228-08399ee17f0d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
