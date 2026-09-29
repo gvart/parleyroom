@@ -1,0 +1,38 @@
+src/com/gvart/parleyroom/ai/transfer/AiJobDtos.kt
+  s_4985e1aeba0736::t_dd2faf085ba531 1-56
+test/com/gvart/parleyroom/ai/AiJobListIntegrationTest.kt
+  s_4985e1aeba0736::t_b314cbe8c520ac 1-131
+  s_4985e1aeba0736::t_074f7f0037ae6a 132-135
+src/com/gvart/parleyroom/ai/service/AiJobSummaries.kt
+  s_4985e1aeba0736::t_9d0e4d1fe61339 1-130
+  s_4985e1aeba0736::t_bb0505c7267007 131-132
+src/com/gvart/parleyroom/ai/routing/Routing.kt
+  s_4985e1aeba0736::t_77f075b9078909 57-77
+  s_4985e1aeba0736::t_dcb0c9e2c5f24c 7,12
+src/com/gvart/parleyroom/ai/config/AiModuleConfig.kt
+  s_4985e1aeba0736::t_ffc0dc8d512acd 18,45-46
+src/com/gvart/parleyroom/ai/service/GenerationJobRunner.kt
+  s_4985e1aeba0736::t_071749545e6b3f 8,10,59,61,84,110,131,152-159
+src/com/gvart/parleyroom/notification/routing/Routing.kt
+  s_4985e1aeba0736::t_31e8efea2a5800 122,124
+src/com/gvart/parleyroom/notification/service/NotificationSseManager.kt
+  s_4985e1aeba0736::t_47d59bca70e03b 5,14,16-17,22,30-34
+test/com/gvart/parleyroom/ai/DraftBundleIntegrationTest.kt
+  s_4985e1aeba0736::t_a44cbba1f6ef00 43,388
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "9555aba297f720f383ec3fa74ef2071083657176",
+  "prompts": {},
+  "sessions": {
+    "s_4985e1aeba0736": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "67d7b6f0-b72a-461c-a3eb-bc1269097f4b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
