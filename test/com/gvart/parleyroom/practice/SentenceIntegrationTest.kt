@@ -17,11 +17,13 @@ import com.gvart.parleyroom.practice.transfer.SentenceResponse
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.vocabulary.data.NounArticle
 import com.gvart.parleyroom.vocabulary.data.WordType
+import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
@@ -137,6 +139,24 @@ class SentenceIntegrationTest : IntegrationTest() {
         PracticeFixtures.setLevel(LanguageLevel.B1)
         val advanced = client.write(token, id, "Das Haus ist alt.").body<SentenceResponse>()
         assertNull(advanced.feedback.explanationTranslation)
+    }
+
+    @Test
+    fun `the explanation translation follows the native language, not the display setting`() = testApp {
+        val client = createJsonClient(this)
+        val token = getStudentToken(client)
+        val id = PracticeFixtures.word("Haus")
+        PracticeFixtures.setLevel(LanguageLevel.A2)
+        transaction { UserTable.update({ UserTable.id eq STUDENT }) { it[nativeLanguage] = "uk" } }
+        client.put("/api/v1/students/$STUDENT/vocab-settings") {
+            contentType(ContentType.Application.Json); bearerAuth(getTeacherToken(client))
+            setBody(VocabDisplaySetting(listOf("en"), allowTranslationToggle = false))
+        }
+        FakeLlmGateway.received.clear()
+
+        val feedback = client.write(token, id, "Das Haus ist alt.").body<SentenceResponse>().feedback
+        assertEquals("uk", Prompts.section(sentenceCalls().single().messages.first().text, "translation_language"))
+        assertEquals("uk", feedback.explanationTranslation?.language)
     }
 
     @Test

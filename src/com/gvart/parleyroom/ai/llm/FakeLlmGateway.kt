@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.ai.llm
 
+import com.gvart.parleyroom.ai.service.LessonContext
 import com.gvart.parleyroom.ai.service.Prompts
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
@@ -61,15 +62,18 @@ class FakeLlmGateway : LlmGateway {
     /** 1:1: words from the notes (or, without notes, the past lesson notes) and/or homework per `<produce>`; club: a notes document. */
     private fun generate(request: String, invalid: Boolean): JsonObject {
         val club = Prompts.section(request, "mode") == "CLUB"
-        val level = Prompts.section(request, "context")?.lineSequence()
-            ?.firstOrNull { it.startsWith("Level: ") }?.removePrefix("Level: ")?.takeIf { it.length == 2 }
+        val context = Prompts.section(request, "context").orEmpty()
+        val level = context.lineSequence()
+            .firstOrNull { it.startsWith("Level: ") }?.removePrefix("Level: ")?.takeIf { it.length == 2 }
+        val languages = translationLanguages(request)
+        val hint = context.lineSequence().any { it.startsWith("Homework instructions: German, each followed by a short hint") }
         val notes = Prompts.section(request, "notes").orEmpty().takeIf { it != NONE }.orEmpty()
         val source = notes.ifBlank {
             Prompts.section(request, "past_lesson_notes").orEmpty().takeIf { it != NONE }.orEmpty()
                 .lines().filterNot { it.startsWith("Lesson on ") }.joinToString("\n")
         }
-        val words = vocabFromNotes(source, level)
-        if (club) return buildJsonObject { put("notes", clubNotes(words, invalid)) }
+        val words = vocabFromNotes(source, level, languages)
+        if (club) return buildJsonObject { put("notes", clubNotes(words, languages, invalid)) }
         val produce = Prompts.section(request, "produce").orEmpty()
         if ("homework" !in produce) return buildJsonObject { put("words", JsonArray(words)) }
 
@@ -103,7 +107,9 @@ class FakeLlmGateway : LlmGateway {
                 }
                 putJsonArray("tasks") {
                     add(buildJsonObject {
-                        put("title", "Sprachnachricht"); put("instructions", "Erzähle in einer Minute, was du heute gelernt hast.")
+                        put("title", "Sprachnachricht")
+                        put("instructions", "Erzähle in einer Minute, was du heute gelernt hast." +
+                                if (hint) languages.joinToString("") { " ($it: Hinweis)" } else "")
                         put("responseType", "AUDIO"); putJsonArray("topics") { add(buildJsonObject { put("name", "Alltag") }) }
                     })
                     add(buildJsonObject {
@@ -115,11 +121,15 @@ class FakeLlmGateway : LlmGateway {
         }
     }
 
-    private fun clubNotes(words: List<JsonObject>, invalid: Boolean): JsonObject = buildJsonObject {
+    /** Glosses each word in every attendee language: "Gießkanne (ru: Gießkanne (ru); uk: Gießkanne (uk))". */
+    private fun clubNotes(words: List<JsonObject>, languages: List<String>, invalid: Boolean): JsonObject = buildJsonObject {
         put("title", "Club – Überblick")
         putJsonArray("blocks") {
             add(buildJsonObject { put("id", "b1"); put("type", "heading"); put("level", 1); put("text", "Club – Überblick") })
-            val lemmas = words.joinToString(", ") { it["lemma"]!!.jsonPrimitive.content }.ifEmpty { "keine" }
+            val lemmas = words.joinToString(", ") { word ->
+                val translations = word["translations"]!!.jsonObject
+                word["lemma"]!!.jsonPrimitive.content + " (" + languages.joinToString("; ") { "$it: ${translations[it]!!.jsonPrimitive.content}" } + ")"
+            }.ifEmpty { "keine" }
             add(buildJsonObject {
                 put("id", "b2"); put("type", "rich_text")
                 put("content", if (invalid) JsonPrimitive("not rich text") else richText("Neue Wörter: $lemmas"))
@@ -146,6 +156,16 @@ class FakeLlmGateway : LlmGateway {
     private fun refine(request: String, invalid: Boolean): JsonObject {
         val current = Json.parseToJsonElement(Prompts.section(request, "current_output")!!).jsonObject
         val instruction = Prompts.section(request, "refine_instruction").orEmpty()
+        val languages = translationLanguages(request)
+        // Adds translations the (possibly changed) recipients' languages require.
+        fun refinedWord(word: JsonObject, example: String? = null): JsonObject {
+            val lemma = word["lemma"]!!.jsonPrimitive.content
+            val translations = word["translations"]?.jsonObject.orEmpty()
+            val added = languages.filter { it !in translations }.associateWith { JsonPrimitive("$lemma ($it)") }
+            val changes = mutableMapOf<String, kotlinx.serialization.json.JsonElement>("translations" to JsonObject(translations + added))
+            example?.let { changes["exampleSentence"] = JsonPrimitive(it) }
+            return JsonObject(word + changes)
+        }
         fun refinedDocument(document: JsonObject): JsonObject {
             val blocks = document["blocks"]!!.jsonArray + buildJsonObject {
                 put("id", "refined"); put("type", "rich_text")
@@ -162,7 +182,7 @@ class FakeLlmGateway : LlmGateway {
         return when (Prompts.section(request, "target")) {
             "word" -> {
                 val word = current["words"]!!.jsonArray.single().jsonObject
-                buildJsonObject { put("words", buildJsonArray { add(JsonObject(word + ("exampleSentence" to JsonPrimitive("Überarbeitet: $instruction")))) }) }
+                buildJsonObject { put("words", buildJsonArray { add(refinedWord(word, "Überarbeitet: $instruction")) }) }
             }
             "task" -> withHomework { homework ->
                 val task = homework["tasks"]!!.jsonArray.single().jsonObject
@@ -172,9 +192,11 @@ class FakeLlmGateway : LlmGateway {
             "notes" -> buildJsonObject { put("notes", refinedDocument(current["notes"]!!.jsonObject)) }
             "document" -> withHomework { homework -> JsonObject(homework + ("document" to refinedDocument(homework["document"]!!.jsonObject))) }
             // The whole draft: the document gets the note; a words-only draft gets it in every example.
-            else -> if ("homework" in current) withHomework { homework -> JsonObject(homework + ("document" to refinedDocument(homework["document"]!!.jsonObject))) }
-            else buildJsonObject {
-                put("words", JsonArray(current["words"]!!.jsonArray.map { JsonObject(it.jsonObject + ("exampleSentence" to JsonPrimitive("Überarbeitet: $instruction"))) }))
+            else -> if ("homework" in current) {
+                val refined = withHomework { homework -> JsonObject(homework + ("document" to refinedDocument(homework["document"]!!.jsonObject))) }
+                current["words"]?.let { words -> JsonObject(refined + ("words" to JsonArray(words.jsonArray.map { refinedWord(it.jsonObject) }))) } ?: refined
+            } else buildJsonObject {
+                put("words", JsonArray(current["words"]!!.jsonArray.map { refinedWord(it.jsonObject, "Überarbeitet: $instruction") }))
             }
         }
     }
@@ -309,8 +331,18 @@ class FakeLlmGateway : LlmGateway {
         private val WHITESPACE = Regex("\\s+")
         private const val NONE = "(none)"
 
-        /** One word per note line without digits: `der X` / capitalised word -> noun, `-en` -> verb, else phrase. */
-        fun vocabFromNotes(notes: String, level: String?): List<JsonObject> {
+        /** The languages the context line demands (see LessonContext.TRANSLATION_LANGUAGES_LINE); ru when absent. */
+        fun translationLanguages(request: String): List<String> = Prompts.section(request, "context").orEmpty().lineSequence()
+            .firstOrNull { it.startsWith(LessonContext.TRANSLATION_LANGUAGES_LINE) }
+            ?.removePrefix(LessonContext.TRANSLATION_LANGUAGES_LINE)?.substringBefore('.')
+            ?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)
+            ?: listOf("ru")
+
+        /**
+         * One word per note line without digits: `der X` / capitalised word -> noun, `-en` -> verb, else phrase.
+         * Translations: ru, en and every one of [languages], as "<lemma> (<code>)".
+         */
+        fun vocabFromNotes(notes: String, level: String?, languages: List<String> = emptyList()): List<JsonObject> {
             val seen = mutableSetOf<String>()
             return notes.lineSequence()
                 .map { it.substringBefore("<-").trim() }
@@ -333,7 +365,7 @@ class FakeLlmGateway : LlmGateway {
                         put("lemma", lemma)
                         article?.let { put("article", it) }
                         put("wordType", type)
-                        putJsonObject("translations") { put("ru", "$lemma (ru)"); put("en", "$lemma (en)") }
+                        putJsonObject("translations") { (listOf("ru", "en") + languages).distinct().forEach { put(it, "$lemma ($it)") } }
                         put("explanationDe", "Erklärung: $lemma")
                         put("exampleSentence", "Beispiel mit $lemma.")
                         level?.let { put("level", it) }

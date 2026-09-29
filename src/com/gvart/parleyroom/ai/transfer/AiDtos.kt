@@ -160,6 +160,8 @@ data class ContextSummary(
     val pastLessons: List<PastLessonRef> = emptyList(),
     val focusTopics: List<String> = emptyList(),
     val focusGrammarTopics: List<String> = emptyList(),
+    /** Languages every generated word is translated into: the recipients' native languages (club: the union). */
+    val translationLanguages: List<String> = emptyList(),
 )
 
 // ---- Prompt templates ----

@@ -185,7 +185,7 @@ class DraftBundleService(
         val target = if (ctx.mode == DraftMode.CLUB) DraftTarget.NOTES_DOCUMENT else DraftTarget.BUNDLE
         val request = Prompts.generate(ctx.mode, ctx.toPromptText(), HtmlText.toPlainText(notes), ctx.pastNotesText(), instructions, kinds)
         val completion = GenerationJobs.completeValidated(gateway, Prompts.draftSystem(ctx.mode), request, MAX_TOKENS) {
-            AiOutputParser.parseDraft(it, target, kinds)
+            AiOutputParser.parseDraft(it, target, kinds, ctx.translationLanguages)
         }
         return transaction {
             val count = if (lockDraft(bundleId)) {
@@ -239,7 +239,7 @@ class DraftBundleService(
         val request = Prompts.refine(refine.ctx.mode, refine.target, refine.ctx.toPromptText(), HtmlText.toPlainText(refine.notes),
             refine.ctx.pastNotesText(), refine.prompt, refine.current, instruction, kinds)
         val completion = GenerationJobs.completeValidated(gateway, Prompts.draftSystem(refine.ctx.mode), request, MAX_TOKENS) {
-            AiOutputParser.parseDraft(it, refine.target, kinds)
+            AiOutputParser.parseDraft(it, refine.target, kinds, refine.ctx.translationLanguages)
         }
         return transaction {
             val ctx = refine.ctx

@@ -167,8 +167,11 @@ object AiOutputParser {
      * when only words are asked for); HOMEWORK = one exercise document with at least one interactive
      * exercise and [MIN_TASKS]..[MAX_TASKS] tasks. Parts that were not asked for are ignored. A club bundle is its notes
      * document (NOTES_DOCUMENT). An item refine: exactly that one part. Other parts are ignored.
+     * Every word must translate into each of [requiredLanguages] (the recipients' native languages).
      */
-    fun parseDraft(text: String, target: DraftTarget, kinds: Set<DraftKind> = DraftKind.entries.toSet()): ValidatedDraft {
+    fun parseDraft(
+        text: String, target: DraftTarget, kinds: Set<DraftKind> = DraftKind.entries.toSet(), requiredLanguages: List<String> = emptyList(),
+    ): ValidatedDraft {
         val output = decode<AiDraftOutput>(text)
         val issues = mutableListOf<Issue>()
 
@@ -211,7 +214,7 @@ object AiOutputParser {
                 }
             }
         }
-        checkWords(words, issues)
+        checkWords(words, requiredLanguages, issues)
         tasks.forEachIndexed { i, task -> checkTask(task, "/homework/tasks/$i", issues) }
 
         if (issues.isNotEmpty()) throw AiOutputInvalid(issues.take(MAX_ISSUES))
@@ -268,14 +271,17 @@ object AiOutputParser {
         }
     }
 
-    private fun checkWords(words: List<AiWord>, issues: MutableList<Issue>) {
+    private fun checkWords(words: List<AiWord>, requiredLanguages: List<String>, issues: MutableList<Issue>) {
         if (words.size > MAX_WORDS) issues += Issue("/words", "at most $MAX_WORDS words")
         val seen = mutableSetOf<String>()
         words.forEachIndexed { i, word ->
             val pointer = "/words/$i"
             word.toInput(null).errors().forEach { issues += Issue(pointer, it) }
             val unsupported = word.translations.keys - VocabDisplay.TRANSLATION_LANGUAGES
-            if (unsupported.isNotEmpty()) issues += Issue("$pointer/translations", "unsupported languages ${unsupported.joinToString()}; use ru, en")
+            if (unsupported.isNotEmpty())
+                issues += Issue("$pointer/translations", "unsupported languages ${unsupported.joinToString()}; use ${VocabDisplay.TRANSLATION_LANGUAGES.joinToString()}")
+            val missing = requiredLanguages.filter { word.translations[it].isNullOrBlank() }
+            if (missing.isNotEmpty()) issues += Issue("$pointer/translations", "missing translations: ${missing.joinToString()}")
             if (!seen.add("${word.lemma.trim().lowercase()}|${word.article}|${word.wordType}"))
                 issues += Issue("$pointer/lemma", "the word ${word.lemma} is listed twice")
             checkTags(word.topics, word.grammarTopics, pointer, issues)

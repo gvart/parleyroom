@@ -659,6 +659,9 @@
                 "ru": {
                   "$ref": "#/$defs/optionalText"
                 },
+                "uk": {
+                  "$ref": "#/$defs/optionalText"
+                },
                 "en": {
                   "$ref": "#/$defs/optionalText"
                 }
