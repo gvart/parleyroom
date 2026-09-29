@@ -18,6 +18,8 @@ import com.gvart.parleyroom.ai.transfer.DraftBundleSummary
 import com.gvart.parleyroom.ai.transfer.DraftContextResponse
 import com.gvart.parleyroom.ai.transfer.DraftItemResponse
 import com.gvart.parleyroom.ai.transfer.DraftKind
+import com.gvart.parleyroom.ai.transfer.DraftMaterialSource
+import com.gvart.parleyroom.ai.transfer.DraftWord
 import com.gvart.parleyroom.ai.transfer.GenerateDraftRequest
 import com.gvart.parleyroom.ai.transfer.JobInput
 import com.gvart.parleyroom.ai.transfer.PatchDraftItemRequest
@@ -33,6 +35,7 @@ import com.gvart.parleyroom.homework.service.HomeworkUnits
 import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
+import com.gvart.parleyroom.material.data.MaterialTable
 import com.gvart.parleyroom.topic.service.LibraryAccess
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
@@ -69,6 +72,7 @@ class DraftBundleService(
     private val runner: GenerationJobRunner,
     private val context: LessonContextService,
     private val vocabEntryService: VocabEntryService,
+    private val materialSources: MaterialSources,
 ) {
 
     // ---- Context for the generate form ----
@@ -106,6 +110,8 @@ class DraftBundleService(
 
     fun generateForLesson(lessonId: UUID, request: GenerateDraftRequest, principal: UserPrincipal): DraftBundleResponse {
         val gateway = GenerationJobs.requireGateway(ai)
+        if (request.materialIds != null)
+            throw BadRequestException("materialIds is only for student drafts", code = "VALIDATION_FAILED")
         val prepared = transaction {
             LibraryAccess.requireTeacher(principal)
             val lesson = context.requireLessonTeacher(lessonId, principal)
@@ -119,29 +125,55 @@ class DraftBundleService(
 
     fun generateForStudent(studentId: UUID, request: GenerateDraftRequest, principal: UserPrincipal): DraftBundleResponse {
         val gateway = GenerationJobs.requireGateway(ai)
-        val prepared = transaction {
+        val materialIds = request.materialIds?.map { parse(it, "materialIds") }
+        val (prepared, materialRows) = transaction {
             LibraryAccess.requireTeacher(principal)
             requireStudentOfTeacher(studentId, principal)
             if (request.kinds == null)
                 throw BadRequestException("Say what to generate: kinds WORDS and/or HOMEWORK", code = "AI_DRAFT_KINDS_REQUIRED")
-            val ctx = context.loadForStudent(principal.id, studentId, sources(principal.id, request))
-            Prepared(ctx, request.notes.orEmpty(), instructions(request, principal))
+            val rows = materialIds?.let { materialSources.requireFiles(principal.id, it) }
+            // With materials they are the source: past notes only when picked explicitly.
+            val sources = sources(principal.id, request).let { if (rows != null && it.pastLessonIds == null) it.copy(pastLessonIds = emptyList()) else it }
+            val ctx = context.loadForStudent(principal.id, studentId, sources)
+            Prepared(ctx, request.notes.orEmpty(), instructions(request, principal)) to rows
         }
-        return start(gateway, DraftScope.STUDENT, prepared, request, principal, lessonId = null, studentId = studentId)
+        // Reads the files: outside the transaction.
+        val materials = materialRows?.let { rows ->
+            MaterialContext(materialSources.extract(rows, requireText = true), transaction { MaterialSources.studentWords(studentId) })
+        }
+        return start(gateway, DraftScope.STUDENT, prepared.copy(materials = materials), request, principal, lessonId = null, studentId = studentId)
     }
 
-    private data class Prepared(val ctx: LessonContext, val notes: String, val instructions: String)
+    private data class Prepared(val ctx: LessonContext, val notes: String, val instructions: String, val materials: MaterialContext? = null)
+
+    /** Materials a student draft extracts words from, and the words the student already has. */
+    private data class MaterialContext(val sources: List<MaterialSource>, val studentWords: StudentWords) {
+        val maxWords get() = minOf(MaterialSources.WORDS_PER_MATERIAL * sources.size, AiOutputParser.MAX_WORDS)
+
+        fun prompt() = MaterialPrompt(MaterialSources.promptText(sources), maxWords, studentWords.display)
+
+        /** Drops the words the student already has and keeps at most [maxWords]. */
+        fun filter(items: List<NewDraftItem>): List<NewDraftItem> {
+            var words = 0
+            return items.filter { item ->
+                item.kind != DraftItemKind.WORD ||
+                        (!studentWords.has(GenerationJobs.json.decodeFromJsonElement<DraftWord>(item.payload)) && words++ < maxWords)
+            }
+        }
+    }
 
     private fun start(
         gateway: LlmGateway, scope: DraftScope, prepared: Prepared, request: GenerateDraftRequest, principal: UserPrincipal,
         lessonId: UUID?, studentId: UUID?,
     ): DraftBundleResponse {
-        val (ctx, notes, instructions) = prepared
+        val (ctx, notes, instructions, materials) = prepared
         // Stored with the effective kinds, so a whole refine regenerates the same parts.
         val kinds = request.kinds?.toSet() ?: DraftKind.entries.toSet()
         @Suppress("NAME_SHADOWING") val request = request.copy(kinds = DraftKind.entries.filter { it in kinds })
-        if (notes.isBlank() && ctx.pastNotes.isEmpty() && instructions.isBlank() && ctx.focusTopics.isEmpty() && ctx.focusGrammar.isEmpty())
+        if (notes.isBlank() && ctx.pastNotes.isEmpty() && instructions.isBlank() && ctx.focusTopics.isEmpty() && ctx.focusGrammar.isEmpty() &&
+            materials == null)
             throw BadRequestException("Give notes, past lesson notes, a prompt or a focus to generate from", code = "AI_DRAFT_NOTHING_TO_GENERATE")
+        val materialRefs = materials?.let { m -> GenerationJobs.json.encodeToJsonElement(m.sources.map { it.ref() }) }
 
         // Generating again reuses the open draft: its items are replaced when the job succeeds.
         val (bundleId, created) = transaction {
@@ -150,6 +182,7 @@ class DraftBundleService(
                 requireIdle(open[DraftBundleTable.id].value)
                 DraftBundleTable.update({ DraftBundleTable.id eq open[DraftBundleTable.id] }) {
                     it[input] = GenerationJobs.json.encodeToJsonElement(request)
+                    it[materialSources] = materialRefs
                 }
                 open[DraftBundleTable.id].value to false
             } else {
@@ -160,13 +193,14 @@ class DraftBundleService(
                     it[DraftBundleTable.studentId] = studentId
                     it[mode] = ctx.mode
                     it[input] = GenerationJobs.json.encodeToJsonElement(request)
+                    it[materialSources] = materialRefs
                 }.value to true
             }
         }
         val jobInput = JobInput(
             notes = notes.takeIf { it.isNotBlank() }, prompt = request.prompt, promptTemplateId = request.promptTemplateId,
             pastLessonIds = ctx.pastNotes.map { it.ref.id }, topicIds = request.topicIds, grammarTopicIds = request.grammarTopicIds,
-            kinds = request.kinds,
+            kinds = request.kinds, materialIds = request.materialIds,
         )
         val jobId = try {
             runner.enqueue(principal.id, lessonId, GenerationJobKind.GENERATE, GenerationJobs.json.encodeToJsonElement(jobInput),
@@ -175,21 +209,24 @@ class DraftBundleService(
             if (created) transaction { DraftBundleTable.deleteWhere { DraftBundleTable.id eq bundleId } }
             throw e
         }
-        runner.launch(jobId) { runGenerate(gateway, bundleId, ctx, notes, instructions, kinds) }
+        runner.launch(jobId) { runGenerate(gateway, bundleId, ctx, notes, instructions, kinds, materials) }
         return get(bundleId, principal)
     }
 
     private suspend fun runGenerate(
         gateway: LlmGateway, bundleId: UUID, ctx: LessonContext, notes: String, instructions: String, kinds: Set<DraftKind>,
+        materials: MaterialContext?,
     ): JobSuccess {
         val target = if (ctx.mode == DraftMode.CLUB) DraftTarget.NOTES_DOCUMENT else DraftTarget.BUNDLE
-        val request = Prompts.generate(ctx.mode, ctx.toPromptText(), HtmlText.toPlainText(notes), ctx.pastNotesText(), instructions, kinds)
+        val request = Prompts.generate(ctx.mode, ctx.toPromptText(), HtmlText.toPlainText(notes), ctx.pastNotesText(), instructions, kinds,
+            materials?.prompt())
         val completion = GenerationJobs.completeValidated(gateway, Prompts.draftSystem(ctx.mode), request, MAX_TOKENS) {
             AiOutputParser.parseDraft(it, target, kinds, ctx.translationLanguages)
         }
         return transaction {
             val count = if (lockDraft(bundleId)) {
                 val items = DraftItems.fromAi(completion.value, ctx.teacherId, ctx.level, ctx.lessonId, ctx.attendeeIds)
+                    .let { materials?.filter(it) ?: it }
                 DraftItemTable.deleteWhere { DraftItemTable.bundleId eq bundleId }
                 DraftItems.insert(bundleId, items)
                 items.size
@@ -220,7 +257,10 @@ class DraftBundleService(
     }
 
     private suspend fun runRefine(gateway: LlmGateway, bundleId: UUID, itemId: UUID?, instruction: String, kinds: Set<DraftKind>): JobSuccess {
-        data class Refine(val ctx: LessonContext, val target: DraftTarget, val current: String, val notes: String, val prompt: String)
+        data class Refine(
+            val ctx: LessonContext, val target: DraftTarget, val current: String, val notes: String, val prompt: String,
+            val materialRows: List<ResultRow>?, val studentWords: StudentWords?,
+        )
         val refine = transaction {
             val bundle = DraftBundleTable.selectAll().where { DraftBundleTable.id eq bundleId }.single()
             val ctx = contextOf(bundle)
@@ -234,17 +274,26 @@ class DraftBundleService(
                 LessonTable.select(LessonTable.rawNotes).where { LessonTable.id eq lessonId }.single()[LessonTable.rawNotes]
             }.orEmpty()
             val prompt = templateText(input.promptTemplateId, ctx.teacherId, input.prompt)
-            Refine(ctx, target, DraftItems.toAiJson(listOfNotNull(item).ifEmpty { items }, target, kinds), notes, prompt)
+            // The same materials again (deleted ones are left out).
+            val materialRows = input.materialIds?.let { ids ->
+                MaterialTable.selectAll().where { (MaterialTable.id inList ids.map(UUID::fromString)) and (MaterialTable.teacherId eq ctx.teacherId) }.toList()
+            }
+            Refine(ctx, target, DraftItems.toAiJson(listOfNotNull(item).ifEmpty { items }, target, kinds), notes, prompt,
+                materialRows, materialRows?.let { MaterialSources.studentWords(bundle[DraftBundleTable.studentId]!!.value) })
         }
+        val materials = refine.materialRows?.let { MaterialContext(materialSources.extract(it, requireText = false), refine.studentWords!!) }
+            ?.takeIf { it.sources.isNotEmpty() }
         val request = Prompts.refine(refine.ctx.mode, refine.target, refine.ctx.toPromptText(), HtmlText.toPlainText(refine.notes),
-            refine.ctx.pastNotesText(), refine.prompt, refine.current, instruction, kinds)
+            refine.ctx.pastNotesText(), refine.prompt, refine.current, instruction, kinds, materials?.prompt())
         val completion = GenerationJobs.completeValidated(gateway, Prompts.draftSystem(refine.ctx.mode), request, MAX_TOKENS) {
             AiOutputParser.parseDraft(it, refine.target, kinds, refine.ctx.translationLanguages)
         }
         return transaction {
             val ctx = refine.ctx
             val count = if (lockDraft(bundleId)) {
-                val items = DraftItems.fromAi(completion.value, ctx.teacherId, ctx.level, ctx.lessonId, ctx.attendeeIds)
+                val generated = DraftItems.fromAi(completion.value, ctx.teacherId, ctx.level, ctx.lessonId, ctx.attendeeIds)
+                // A single refined item is kept even if the student has it: the teacher asked for that one.
+                val items = if (itemId == null) materials?.filter(generated) ?: generated else generated
                 if (itemId == null) {
                     // Only the regenerated kinds are replaced (a club's notes document: everything).
                     val replaced = if (ctx.mode == DraftMode.CLUB) DraftItemKind.entries.toSet() else DraftItems.itemKinds(kinds)
@@ -389,6 +438,7 @@ class DraftBundleService(
             lessonId = bundle[DraftBundleTable.lessonId]?.value?.toString(),
             studentId = bundle[DraftBundleTable.studentId]?.value?.toString(),
             input = storedInput(bundle),
+            materials = materials(bundle),
             job = latestJob(bundleId)?.let(GenerationJobs::toResponse),
             items = items.map { DraftItems.toResponse(it, matched) },
             approvedCount = items.count { it[DraftItemTable.approved] },
@@ -423,6 +473,7 @@ class DraftBundleService(
             student = student,
             itemCount = counts.values.sum(),
             approvedCount = counts[true] ?: 0,
+            materials = materials(bundle),
             job = latestJob(bundleId)?.let(GenerationJobs::toResponse),
             createdAt = bundle[DraftBundleTable.createdAt],
             updatedAt = bundle[DraftBundleTable.updatedAt],
@@ -519,6 +570,9 @@ class DraftBundleService(
 
     private fun storedInput(bundle: ResultRow): GenerateDraftRequest =
         GenerationJobs.json.decodeFromJsonElement(bundle[DraftBundleTable.input])
+
+    private fun materials(bundle: ResultRow): List<DraftMaterialSource> =
+        bundle[DraftBundleTable.materialSources]?.let { GenerationJobs.json.decodeFromJsonElement<List<DraftMaterialSource>>(it) }.orEmpty()
 
     private fun recipientIds(bundle: ResultRow) = recipients(bundle).map { UUID.fromString(it.id) }
 

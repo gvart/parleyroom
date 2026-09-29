@@ -68,7 +68,8 @@ fun Application.configureDraftRouting() {
                     responses {
                         HttpStatusCode.Accepted { schema = jsonSchema<DraftBundleResponse>() }
                         HttpStatusCode.BadRequest {
-                            description = "NACHBEREITUNG_NO_ATTENDEES, AI_DRAFT_NOTHING_TO_GENERATE, AI_DRAFT_PAST_LESSON_INVALID, VALIDATION_FAILED"
+                            description = "NACHBEREITUNG_NO_ATTENDEES, AI_DRAFT_NOTHING_TO_GENERATE, AI_DRAFT_PAST_LESSON_INVALID, " +
+                                    "VALIDATION_FAILED (also materialIds: student drafts only)"
                             schema = jsonSchema<ProblemDetail>()
                         }
                         HttpStatusCode.Conflict { description = "AI_DRAFT_BUSY"; schema = jsonSchema<ProblemDetail>() }
@@ -94,12 +95,19 @@ fun Application.configureDraftRouting() {
                     summary = "Generate an AI draft for a student"
                     description = "Queues a GENERATE job for the student's open draft bundle with the requested kinds (required: " +
                             "[WORDS] for \"Add words\", [HOMEWORK] for \"New homework\"). Sources: past lesson notes " +
-                            "(default the latest), profile, focus topics / grammar, template and prompt."
+                            "(default the latest), profile, focus topics / grammar, template and prompt. With materialIds (≤ 5 of the " +
+                            "teacher's own PDF / DOCX / text materials) their text is the main source: ≤ 40 words per material, words " +
+                            "the student already has are left out, past notes only when picked; bundle.materials lists them (truncated flag)."
                     parameters { path("studentId") { description = "Student UUID" } }
                     requestBody { schema = jsonSchema<GenerateDraftRequest>() }
                     responses {
                         HttpStatusCode.Accepted { schema = jsonSchema<DraftBundleResponse>() }
-                        HttpStatusCode.BadRequest { description = "AI_DRAFT_KINDS_REQUIRED, AI_DRAFT_NOTHING_TO_GENERATE, AI_DRAFT_PAST_LESSON_INVALID"; schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.BadRequest {
+                            description = "AI_DRAFT_KINDS_REQUIRED, AI_DRAFT_NOTHING_TO_GENERATE, AI_DRAFT_PAST_LESSON_INVALID, " +
+                                    "AI_MATERIAL_UNSUPPORTED, AI_MATERIAL_NO_TEXT, VALIDATION_FAILED"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.NotFound { description = "MATERIAL_NOT_FOUND (unknown or another teacher's)"; schema = jsonSchema<ProblemDetail>() }
                         HttpStatusCode.Conflict { description = "AI_DRAFT_BUSY"; schema = jsonSchema<ProblemDetail>() }
                     }
                 }

@@ -12,6 +12,7 @@ import com.gvart.parleyroom.ai.service.FillTranslationsService
 import com.gvart.parleyroom.ai.service.GenerationJobRunner
 import com.gvart.parleyroom.ai.service.LessonContextService
 import com.gvart.parleyroom.ai.service.LibrarySuggestionService
+import com.gvart.parleyroom.ai.service.MaterialSources
 import com.gvart.parleyroom.ai.service.PromptTemplateService
 import com.gvart.parleyroom.ai.service.SuggestTagsService
 import io.ktor.server.application.Application
@@ -49,6 +50,7 @@ fun Application.configureAiModule() {
         provide { AiRuntime(aiConfig, gateway) }
         provide { runner }
         provide(LessonContextService::class)
+        provide(MaterialSources::class)
         provide(DraftBundleService::class)
         provide(DraftSendService::class)
         provide(DocumentDraftService::class)

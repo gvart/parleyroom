@@ -19,11 +19,12 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Deterministic offline provider for tests and E2E. Reads the tagged sections of the prompt and
- * answers with plausible output derived from the notes (or, without notes, the past lesson notes)
- * that always passes validation.
+ * answers with plausible output derived from the notes (or, without notes, the past lesson notes;
+ * with `<materials>`, the material text) that always passes validation.
  *
  * Markers anywhere in the first user message: `[fake:invalid-once]`, `[fake:invalid]`,
- * `[fake:error]`, `[fake:rate-limit]`, `[fake:delay=<ms>]`, `[fake:empty-once]`, `[fake:truncated]`;
+ * `[fake:error]`, `[fake:rate-limit]`, `[fake:delay=<ms>]`, `[fake:empty-once]`, `[fake:truncated]`,
+ * `[fake:ignore-exclude]`;
  * sentence feedback also `[fake:wrong]`.
  */
 class FakeLlmGateway : LlmGateway {
@@ -72,7 +73,11 @@ class FakeLlmGateway : LlmGateway {
             Prompts.section(request, "past_lesson_notes").orEmpty().takeIf { it != NONE }.orEmpty()
                 .lines().filterNot { it.startsWith("Lesson on ") }.joinToString("\n")
         }
-        val words = vocabFromNotes(source, level, languages)
+        val materials = Prompts.section(request, "materials")
+        // `[fake:ignore-exclude]` answers with words the student has, to exercise the server-side filter.
+        val exclude = if ("[fake:ignore-exclude]" in request) emptySet() else excludeWords(request)
+        val words = if (materials != null) vocabFromMaterials(materials, exclude, level, languages)
+        else vocabFromNotes(source, level, languages)
         if (club) return buildJsonObject { put("notes", clubNotes(words, languages, invalid)) }
         val produce = Prompts.section(request, "produce").orEmpty()
         if ("homework" !in produce) return buildJsonObject { put("words", JsonArray(words)) }
@@ -360,20 +365,51 @@ class FakeLlmGateway : LlmGateway {
                     else Triple(lemma, type, article)
                 }
                 .take(30)
-                .map { (lemma, type, article) ->
-                    buildJsonObject {
-                        put("lemma", lemma)
-                        article?.let { put("article", it) }
-                        put("wordType", type)
-                        putJsonObject("translations") { (listOf("ru", "en") + languages).distinct().forEach { put(it, "$lemma ($it)") } }
-                        put("explanationDe", "Erklärung: $lemma")
-                        put("exampleSentence", "Beispiel mit $lemma.")
-                        level?.let { put("level", it) }
-                        putJsonArray("topics") { add(buildJsonObject { put("name", "Alltag") }) }
-                    }
-                }
+                .map { (lemma, type, article) -> word(lemma, type, article, level, languages) }
                 .toList()
         }
+
+        /**
+         * Words from `<materials>`: per material (headed "Material n: …") at most 40 distinct nouns
+         * (capitalised, not sentence-initial) and verbs (`-en`), skipping [exclude] (lower-case lemmas).
+         */
+        fun vocabFromMaterials(materials: String, exclude: Set<String>, level: String?, languages: List<String> = emptyList()): List<JsonObject> {
+            val seen = exclude.toMutableSet()
+            return materials.split(MATERIAL_HEADER).drop(1).flatMap { block ->
+                block.substringAfter('\n').split(SENTENCE_END).flatMap { sentence ->
+                    sentence.split(NON_LETTER).filter { it.isNotEmpty() }.drop(1).mapNotNull { token ->
+                        when {
+                            token.length < 4 || token.lowercase() in STOP_WORDS -> null
+                            token.first().isUpperCase() -> Triple(token, "NOUN", articleFor(token))
+                            token.length >= 5 && token.endsWith("en") -> Triple(token, "VERB", null)
+                            else -> null
+                        }
+                    }
+                }.filter { seen.add(it.first.lowercase()) }.take(40)
+            }.map { (lemma, type, article) -> word(lemma, type, article, level, languages) }
+        }
+
+        /** Lower-case lemmas of `<exclude_words>` ("die Gießkanne" -> "gießkanne"). */
+        fun excludeWords(request: String): Set<String> = Prompts.section(request, "exclude_words").orEmpty()
+            .takeIf { it != NONE }.orEmpty()
+            .split(',').map { it.trim().substringAfterLast(' ').lowercase() }.filter { it.isNotEmpty() }.toSet()
+
+        private fun word(lemma: String, type: String, article: String?, level: String?, languages: List<String>) = buildJsonObject {
+            put("lemma", lemma)
+            article?.let { put("article", it) }
+            put("wordType", type)
+            putJsonObject("translations") { (listOf("ru", "en") + languages).distinct().forEach { put(it, "$lemma ($it)") } }
+            put("explanationDe", "Erklärung: $lemma")
+            put("exampleSentence", "Beispiel mit $lemma.")
+            level?.let { put("level", it) }
+            putJsonArray("topics") { add(buildJsonObject { put("name", "Alltag") }) }
+        }
+
+        private val MATERIAL_HEADER = Regex("(?m)^Material \\d+: ")
+        private val SENTENCE_END = Regex("[.!?:;\\n]+")
+        private val NON_LETTER = Regex("[^\\p{L}]+")
+        private val STOP_WORDS = setOf("aber", "oder", "dann", "wenn", "weil", "dass", "eine", "einen", "einem", "einer", "haben", "sein",
+            "werden", "können", "müssen", "wollen", "sollen", "diese", "dieser", "diesen", "noch", "schon", "sehr", "auch", "nicht")
 
         private fun articleFor(noun: String): String = when {
             listOf("ung", "heit", "keit", "schaft", "e").any { noun.endsWith(it) } -> "DIE"
