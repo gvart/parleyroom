@@ -1,0 +1,33 @@
+src/com/gvart/parleyroom/ai/llm/FakeLlmGateway.kt
+  s_81525541fb2fd4::t_afd806c4bba2ee 39-40,43-45
+  s_81525541fb2fd4::t_4365cfd74bb1b1 24-25
+src/com/gvart/parleyroom/ai/service/GenerationJobs.kt
+  s_81525541fb2fd4::t_7a343e5e6da970 99-103
+  s_81525541fb2fd4::t_4f7ffd4eaf57e5 111-112
+src/com/gvart/parleyroom/ai/llm/KoogAnthropicGateway.kt
+  s_81525541fb2fd4::t_cfb310f3880270 9
+  s_81525541fb2fd4::t_c7a3faf7ef2f9f 44-47
+  s_81525541fb2fd4::t_d10847ece5330f 71
+test/com/gvart/parleyroom/ai/NachbereitungIntegrationTest.kt
+  s_81525541fb2fd4::t_d773b009c893be 219-244
+API.md
+  s_81525541fb2fd4::t_ae3b6814633941 1236,1536-1537
+src/com/gvart/parleyroom/ai/llm/LlmGateway.kt
+  s_81525541fb2fd4::t_b590b3afe86d94 13-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "06f7c21df8da0a9ee1dc3e18f7523e5209e867dc",
+  "prompts": {},
+  "sessions": {
+    "s_81525541fb2fd4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f74100a-bf7e-4308-bddf-c605ea23cebe",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
