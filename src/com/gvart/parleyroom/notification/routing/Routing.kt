@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
+import java.io.IOException
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -130,6 +131,8 @@ fun Application.configureNotificationRouting() {
                                 }
                             }
                         }
+                    } catch (_: IOException) {
+                        // The client went away (tab closed, reconnect): not a server error.
                     } finally {
                         sseManager.unsubscribe(principal.id, flow)
                     }
