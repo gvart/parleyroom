@@ -19,6 +19,9 @@ data class AdminUserResponse(
     val level: LanguageLevel?,
     val status: UserStatus,
     val locale: String,
+    val nativeLanguage: String? = null,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val localeConfirmedAt: OffsetDateTime? = null,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
     @Serializable(with = OffsetDateTimeSerializer::class)

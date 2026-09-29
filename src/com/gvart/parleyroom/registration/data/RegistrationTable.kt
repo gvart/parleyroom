@@ -14,4 +14,5 @@ object RegistrationTable : UUIDTable("registrations") {
     val expiresAt = timestampWithTimeZone("expires_at")
     val createdAt = timestampWithTimeZone("created_at")
     val role = pgEnum<UserRole>("role", "USER_ROLE")
+    val nativeLanguage = varchar("native_language", 5).nullable()
 }

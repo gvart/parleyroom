@@ -26,6 +26,8 @@ import com.gvart.parleyroom.progress.service.ProgressCalculator
 import com.gvart.parleyroom.topic.data.GrammarTopicTable
 import com.gvart.parleyroom.topic.data.TopicTable
 import com.gvart.parleyroom.topic.transfer.GrammarTopicRef
+import com.gvart.parleyroom.user.data.DEFAULT_NATIVE_LANGUAGE
+import com.gvart.parleyroom.user.data.NATIVE_LANGUAGES
 import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.security.UserPrincipal
@@ -87,6 +89,8 @@ data class LessonContext(
     val pastNotes: List<PastNotes> = emptyList(),
     val focusTopics: List<String> = emptyList(),
     val focusGrammar: List<String> = emptyList(),
+    /** The recipients' native languages (club: the union), ru when none is known. */
+    val translationLanguages: List<String> = listOf(DEFAULT_NATIVE_LANGUAGE),
 ) {
     val attendeeIds: List<UUID> get() = attendees.map { UUID.fromString(it.id) }
 
@@ -107,6 +111,7 @@ data class LessonContext(
         pastLessons = pastNotes.map { it.ref },
         focusTopics = focusTopics,
         focusGrammarTopics = focusGrammar,
+        translationLanguages = translationLanguages,
     )
 
     fun toPromptText(): String = buildString {
@@ -120,6 +125,16 @@ data class LessonContext(
         }
         appendLine("Vocabulary display setting: every word MUST have ${required.joinToString(" and ")}. " +
                 "Other translations are optional but welcome.")
+        val languages = translationLanguages.joinToString(", ")
+        appendLine("$TRANSLATION_LANGUAGES_LINE $languages. Every word MUST have translations in all of them.")
+        if (mode == DraftMode.CLUB) {
+            appendLine("Glosses for new words in the notes document: $languages.")
+        } else if (level == LanguageLevel.A1 || level == LanguageLevel.A2) {
+            appendLine("Homework instructions: German, each followed by a short hint in $languages " +
+                    "(e.g. \"Ergänze die Sätze. (ru: Дополните предложения.)\").")
+        } else {
+            appendLine("Homework instructions: German only.")
+        }
         appendLine()
         appendLine(if (mode == DraftMode.CLUB) "Words the group already had:" else "Words the student already knows:")
         appendLine(knownWords.joinToString(", ").ifEmpty { "(none yet)" })
@@ -163,6 +178,11 @@ data class LessonContext(
     }
 
     private fun refText(ref: GrammarTopicRef) = ref.level?.let { "${ref.name} ($it)" } ?: ref.name
+
+    companion object {
+        /** Prefix of the context line listing the required translation languages (the fake provider reads it). */
+        const val TRANSLATION_LANGUAGES_LINE = "Translation languages (the learners' native languages):"
+    }
 }
 
 /** Builds [LessonContext]. Must run in a transaction. */
@@ -185,13 +205,14 @@ class LessonContextService(private val progress: ProgressCalculator) {
         val mode = modeOf(lesson)
 
         val attendees = (LessonStudentTable innerJoin UserTable)
-            .select(UserTable.id, UserTable.firstName, UserTable.lastName, UserTable.level)
+            .select(UserTable.id, UserTable.firstName, UserTable.lastName, UserTable.level, UserTable.nativeLanguage)
             .where { (LessonStudentTable.lessonId eq lessonId) and (LessonStudentTable.status eq LessonStudentStatus.CONFIRMED) }
             .orderBy(UserTable.lastName)
             .toList()
         val attendeeRefs = attendees.map { AttendeeRef(it[UserTable.id].value.toString(), it[UserTable.firstName], it[UserTable.lastName]) }
         val attendeeIds = attendees.map { it[UserTable.id].value }
         val student = attendeeIds.singleOrNull()?.takeIf { mode == DraftMode.ONE_ON_ONE }
+        val languages = translationLanguages(attendees.map { it[UserTable.nativeLanguage] })
 
         val level = when (mode) {
             DraftMode.ONE_ON_ONE -> attendees.singleOrNull()?.get(UserTable.level)
@@ -201,7 +222,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
         val lessonOverride = VocabDisplay.of(lesson[LessonTable.vocabDisplayFields], lesson[LessonTable.allowTranslationToggle])
         val (display, source) = when {
             lessonOverride != null -> lessonOverride to DisplaySource.LESSON
-            else -> studentOrLevelDisplay(teacherId, student, level)
+            else -> studentOrLevelDisplay(teacherId, student, level, languages.first())
         }
 
         val known = knownWords(mode, teacherId, lessonId, groupId, student, attendeeIds)
@@ -229,6 +250,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
             pastNotes = pastNotes(earlier, sources.pastLessonIds),
             focusTopics = focusTopics(sources),
             focusGrammar = focusGrammar(sources),
+            translationLanguages = languages,
         )
     }
 
@@ -236,7 +258,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
     fun loadForStudent(teacherId: UUID, studentId: UUID, sources: ContextSources = ContextSources()): LessonContext {
         val user = UserTable.findByIdOrThrow(studentId, "Student")
         val level = user[UserTable.level]
-        val (display, source) = studentOrLevelDisplay(teacherId, studentId, level)
+        val (display, source) = studentOrLevelDisplay(teacherId, studentId, level, user[UserTable.nativeLanguage])
         val known = knownWords(DraftMode.ONE_ON_ONE, teacherId, null, null, studentId, listOf(studentId))
         val earlier = earlierLessons(DraftMode.ONE_ON_ONE, teacherId, OffsetDateTime.now(), null, studentId, null, LessonType.ONE_ON_ONE)
         return LessonContext(
@@ -261,6 +283,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
             pastNotes = pastNotes(earlier, sources.pastLessonIds),
             focusTopics = focusTopics(sources),
             focusGrammar = focusGrammar(sources),
+            translationLanguages = translationLanguages(listOf(user[UserTable.nativeLanguage])),
         )
     }
 
@@ -273,7 +296,11 @@ class LessonContextService(private val progress: ProgressCalculator) {
         return withNotes(earlier).take(MAX_PAST_LESSON_CHOICES).map { it.ref }
     }
 
-    private fun studentOrLevelDisplay(teacherId: UUID, student: UUID?, level: LanguageLevel?): Pair<VocabDisplaySetting, DisplaySource> {
+    /** Distinct native languages in canonical order; ru when none is set. */
+    private fun translationLanguages(native: List<String?>): List<String> =
+        NATIVE_LANGUAGES.filter { it in native }.ifEmpty { listOf(DEFAULT_NATIVE_LANGUAGE) }
+
+    private fun studentOrLevelDisplay(teacherId: UUID, student: UUID?, level: LanguageLevel?, nativeLanguage: String?): Pair<VocabDisplaySetting, DisplaySource> {
         val studentSetting = student?.let { studentId ->
             TeacherStudentTable.selectAll()
                 .where { (TeacherStudentTable.teacherId eq teacherId) and (TeacherStudentTable.studentId eq studentId) }
@@ -281,7 +308,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
                 ?.let { VocabDisplay.of(it[TeacherStudentTable.vocabDisplayFields], it[TeacherStudentTable.allowTranslationToggle]) }
         }
         return if (studentSetting != null) studentSetting to DisplaySource.STUDENT
-        else VocabDisplay.defaultFor(level) to DisplaySource.LEVEL_DEFAULT
+        else VocabDisplay.defaultFor(level, nativeLanguage) to DisplaySource.LEVEL_DEFAULT
     }
 
     private fun libraryGrammar(teacherId: UUID) = GrammarTopicTable.selectAll()

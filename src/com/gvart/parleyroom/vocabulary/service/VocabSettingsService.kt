@@ -7,6 +7,7 @@ import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
+import com.gvart.parleyroom.user.data.requireSupportedNativeLanguage
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
 import com.gvart.parleyroom.vocabulary.transfer.VocabSettingsResponse
@@ -52,6 +53,13 @@ class VocabSettingsService {
         toResponse(findRelationship(studentId, principal.id))
     }
 
+    fun setNativeLanguage(studentId: UUID, nativeLanguage: String, principal: UserPrincipal): VocabSettingsResponse = transaction {
+        requireSupportedNativeLanguage(nativeLanguage)
+        requireTeacherOf(studentId, principal)
+        UserTable.update({ UserTable.id eq studentId }) { it[UserTable.nativeLanguage] = nativeLanguage }
+        toResponse(findRelationship(studentId, principal.id))
+    }
+
     private fun requireTeacherOf(studentId: UUID, principal: UserPrincipal) {
         if (principal.role != UserRole.TEACHER)
             throw ForbiddenException("Only the student's teacher can change these settings")
@@ -76,13 +84,16 @@ class VocabSettingsService {
 
     private fun toResponse(row: ResultRow): VocabSettingsResponse {
         val studentId = row[TeacherStudentTable.studentId].value
-        val level = UserTable.selectAll().where { UserTable.id eq studentId }.single()[UserTable.level]
+        val student = UserTable.selectAll().where { UserTable.id eq studentId }.single()
+        val level = student[UserTable.level]
+        val nativeLanguage = student[UserTable.nativeLanguage]
         val stored = VocabDisplay.of(row[TeacherStudentTable.vocabDisplayFields], row[TeacherStudentTable.allowTranslationToggle])
-        val effective = stored ?: VocabDisplay.defaultFor(level)
+        val effective = stored ?: VocabDisplay.defaultFor(level, nativeLanguage)
         return VocabSettingsResponse(
             studentId = studentId.toString(),
             teacherId = row[TeacherStudentTable.teacherId].value.toString(),
             level = level,
+            nativeLanguage = nativeLanguage,
             fields = effective.fields,
             allowTranslationToggle = effective.allowTranslationToggle,
             isDefault = stored == null,

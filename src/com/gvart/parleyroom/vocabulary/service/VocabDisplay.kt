@@ -2,6 +2,7 @@ package com.gvart.parleyroom.vocabulary.service
 
 import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
+import com.gvart.parleyroom.user.data.DEFAULT_NATIVE_LANGUAGE
 import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
 
 /**
@@ -9,13 +10,14 @@ import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
  * [TRANSLATION_LANGUAGES] to support a new language (translations are stored as JSONB).
  */
 object VocabDisplay {
-    val TRANSLATION_LANGUAGES = setOf("ru", "en")
+    val TRANSLATION_LANGUAGES = setOf("ru", "uk", "en")
     const val DE_EXPLANATION = "de_explanation"
     val DISPLAY_FIELDS = TRANSLATION_LANGUAGES + DE_EXPLANATION
 
-    /** A1–A2 (or unknown level): Russian translation. B1+: German explanation with a reveal toggle. */
-    fun defaultFor(level: LanguageLevel?): VocabDisplaySetting = when (level) {
-        null, LanguageLevel.A1, LanguageLevel.A2 -> VocabDisplaySetting(listOf("ru"), allowTranslationToggle = false)
+    /** A1–A2 (or unknown level): the student's native-language translation (ru when unset). B1+: German explanation with a reveal toggle. */
+    fun defaultFor(level: LanguageLevel?, nativeLanguage: String?): VocabDisplaySetting = when (level) {
+        null, LanguageLevel.A1, LanguageLevel.A2 ->
+            VocabDisplaySetting(listOf(nativeLanguage ?: DEFAULT_NATIVE_LANGUAGE), allowTranslationToggle = false)
         else -> VocabDisplaySetting(listOf(DE_EXPLANATION), allowTranslationToggle = true)
     }
 

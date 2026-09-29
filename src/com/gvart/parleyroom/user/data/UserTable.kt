@@ -17,7 +17,11 @@ object UserTable : UUIDTable("users") {
     val initials = varchar("initials", 4)
     val level = pgEnum<LanguageLevel>("level", "LANGUAGE_LEVEL").nullable()
     val status = pgEnum<UserStatus>("status", "USER_STATUS").default(UserStatus.ACTIVE)
-    val locale = varchar("locale", 5).default("en")
+    val locale = varchar("locale", 5).default(DEFAULT_LOCALE)
+    /** Null until the user confirmed the interface language once (the clients' first-run picker). */
+    val localeConfirmedAt = timestampWithTimeZone("locale_confirmed_at").nullable()
+    /** Students only (ru | uk | en): the language of their translations and explanations. */
+    val nativeLanguage = varchar("native_language", 5).nullable()
     val timezone = varchar("timezone", 64).default("Europe/Berlin")
     val bookingBufferMinutes = integer("booking_buffer_minutes").nullable()
     val bookingMinNoticeHours = integer("booking_min_notice_hours").nullable()

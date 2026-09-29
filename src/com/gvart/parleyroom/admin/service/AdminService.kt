@@ -13,7 +13,9 @@ import com.gvart.parleyroom.user.data.RefreshTokenTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
 import com.gvart.parleyroom.user.data.UserTable
+import com.gvart.parleyroom.user.data.DEFAULT_NATIVE_LANGUAGE
 import com.gvart.parleyroom.user.data.requireSupportedLocale
+import com.gvart.parleyroom.user.data.requireSupportedNativeLanguage
 import com.gvart.parleyroom.user.security.UserPrincipal
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.ResultRow
@@ -83,6 +85,7 @@ class AdminService {
 
     fun createUser(request: AdminCreateUserRequest): AdminUserResponse = transaction {
         request.locale?.let(::requireSupportedLocale)
+        request.nativeLanguage?.let(::requireSupportedNativeLanguage)
         val email = request.email.trim()
         val firstName = request.firstName.trim()
         val lastName = request.lastName.trim()
@@ -101,6 +104,8 @@ class AdminService {
             it[initials] = "${firstName[0]}${lastName[0]}"
             if (request.level != null) it[level] = request.level
             if (request.locale != null) it[locale] = request.locale
+            val native = request.nativeLanguage ?: DEFAULT_NATIVE_LANGUAGE.takeIf { request.role == UserRole.STUDENT }
+            if (native != null) it[nativeLanguage] = native
             it[UserTable.status] = UserStatus.ACTIVE
         }[UserTable.id].value
 
@@ -113,6 +118,7 @@ class AdminService {
         request: AdminUpdateUserRequest,
     ): AdminUserResponse = transaction {
         request.locale?.let(::requireSupportedLocale)
+        request.nativeLanguage?.let(::requireSupportedNativeLanguage)
         val current = loadById(id)
         val currentRole = current[UserTable.role]
         val currentStatus = current[UserTable.status]
@@ -145,6 +151,8 @@ class AdminService {
             if (request.status != null) it[status] = request.status
             if (request.level != null) it[level] = request.level
             if (request.locale != null) it[locale] = request.locale
+            if (request.nativeLanguage != null) it[nativeLanguage] = request.nativeLanguage
+            else if (request.role == UserRole.STUDENT && current[UserTable.nativeLanguage] == null) it[nativeLanguage] = DEFAULT_NATIVE_LANGUAGE
             it[updatedAt] = OffsetDateTime.now()
         }
 
@@ -239,6 +247,8 @@ class AdminService {
             level = row[UserTable.level],
             status = row[UserTable.status],
             locale = row[UserTable.locale],
+            nativeLanguage = row[UserTable.nativeLanguage],
+            localeConfirmedAt = row[UserTable.localeConfirmedAt],
             createdAt = row[UserTable.createdAt],
             updatedAt = row[UserTable.updatedAt],
             failedLoginAttempts = row[UserTable.failedLoginAttempts],

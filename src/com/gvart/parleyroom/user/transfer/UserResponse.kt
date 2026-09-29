@@ -19,6 +19,11 @@ data class UserResponse(
     val level: LanguageLevel?,
     val status: UserStatus,
     val locale: String,
+    /** Students: ru | uk | en (translation language); teachers/admins: usually null. */
+    val nativeLanguage: String? = null,
+    /** Null: the client shows the one-time language picker. */
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val localeConfirmedAt: OffsetDateTime? = null,
     val timezone: String,
     val bookingBufferMinutes: Int?,
     val bookingMinNoticeHours: Int?,

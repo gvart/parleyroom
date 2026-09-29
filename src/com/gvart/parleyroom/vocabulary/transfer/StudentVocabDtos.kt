@@ -54,7 +54,7 @@ data class StudentVocabPageResponse(
     val pageSize: Int,
 )
 
-/** Which fields a student sees: any of "ru", "en", "de_explanation". */
+/** Which fields a student sees: any of "ru", "uk", "en", "de_explanation". */
 @Serializable
 data class VocabDisplaySetting(
     val fields: List<String>,
@@ -69,6 +69,8 @@ data class VocabSettingsResponse(
     val studentId: String,
     val teacherId: String,
     val level: LanguageLevel? = null,
+    /** The student's translation language (ru | uk | en). */
+    val nativeLanguage: String? = null,
     val fields: List<String>,
     val allowTranslationToggle: Boolean,
     /** True when no explicit setting is stored and the level-based default applies. */
@@ -78,4 +80,10 @@ data class VocabSettingsResponse(
 @Serializable
 data class SetStudentLevelRequest(
     val level: LanguageLevel,
+)
+
+@Serializable
+data class SetStudentNativeLanguageRequest(
+    /** ru | uk | en */
+    val nativeLanguage: String,
 )

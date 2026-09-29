@@ -25,7 +25,6 @@ import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.vocabulary.data.StudentVocabTable
 import com.gvart.parleyroom.vocabulary.data.VocabEntryTable
-import com.gvart.parleyroom.vocabulary.service.VocabDisplay
 import com.gvart.parleyroom.vocabulary.service.VocabularyService
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
@@ -45,7 +44,6 @@ import java.util.UUID
 class SentenceService(
     private val config: PracticeConfig,
     private val ai: AiRuntime,
-    private val vocabularyService: VocabularyService,
 ) {
 
     private data class Request(val prompt: String, val translationLanguage: String?)
@@ -133,13 +131,13 @@ class SentenceService(
 
     /**
      * PRIVACY: the model only gets the sentence, the word's own data, the level and a language code.
-     * The explanation is translated for A1–A2 (or no level) when the word's display setting shows a translation.
+     * The explanation is translated into the student's native language for A1–A2 (or no level).
      */
     private fun buildRequest(row: ResultRow, sentence: String, principal: UserPrincipal): Request {
-        val level = UserTable.findByIdOrThrow(principal.id, "User")[UserTable.level]
-        val display = vocabularyService.toResponses(listOf(row), principal).single().display
+        val user = UserTable.findByIdOrThrow(principal.id, "User")
+        val level = user[UserTable.level]
         val translationLanguage = if (level == null || level == LanguageLevel.A1 || level == LanguageLevel.A2)
-            display.fields.firstOrNull { it in VocabDisplay.TRANSLATION_LANGUAGES }
+            user[UserTable.nativeLanguage]
         else null
         val targetWord = buildString {
             append("lemma: ").append(row[VocabEntryTable.lemma]).append('\n')

@@ -14,6 +14,8 @@ data class AdminCreateUserRequest(
     val password: String,
     val level: LanguageLevel? = null,
     val locale: String? = null,
+    /** ru | uk | en; students default to ru. */
+    val nativeLanguage: String? = null,
 ) {
     fun validate(): ValidationResult {
         val errors = buildList {

@@ -1,6 +1,5 @@
 package com.gvart.parleyroom.document.service
 
-import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
@@ -202,8 +201,8 @@ class DocumentSupport {
             .singleOrNull()
             ?.let { VocabDisplay.of(it[TeacherStudentTable.vocabDisplayFields], it[TeacherStudentTable.allowTranslationToggle]) }
             ?.let { return it }
-        val level: LanguageLevel? = UserTable.select(UserTable.level).where { UserTable.id eq studentId }.singleOrNull()?.get(UserTable.level)
-        return VocabDisplay.defaultFor(level)
+        val user = UserTable.select(UserTable.level, UserTable.nativeLanguage).where { UserTable.id eq studentId }.singleOrNull()
+        return VocabDisplay.defaultFor(user?.get(UserTable.level), user?.get(UserTable.nativeLanguage))
     }
 
     /** Batch-loaded link tables for a set of documents. */

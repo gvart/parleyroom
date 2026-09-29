@@ -27,5 +27,8 @@ data class UserListResponse(
         @Serializable(with = OffsetDateTimeSerializer::class)
         val createdAt: OffsetDateTime,
         val locale: String,
+        val nativeLanguage: String? = null,
+        @Serializable(with = OffsetDateTimeSerializer::class)
+        val localeConfirmedAt: OffsetDateTime? = null,
     )
 }

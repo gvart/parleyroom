@@ -142,13 +142,13 @@ class UserIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `new users default to en locale`() = testApp {
+    fun `new users default to ru locale`() = testApp {
         val client = createJsonClient(this)
         val token = getStudentToken(client)
 
         val body = client.get("/api/v1/users/me") { bearerAuth(token) }.body<UserResponse>()
 
-        assertEquals("en", body.locale)
+        assertEquals("ru", body.locale)
     }
 
     @Test
@@ -165,7 +165,7 @@ class UserIntegrationTest : IntegrationTest() {
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertEquals("UNSUPPORTED_LOCALE", response.body<ProblemDetail>().code)
         val me = client.get("/api/v1/users/me") { bearerAuth(token) }.body<UserResponse>()
-        assertEquals("en", me.locale)
+        assertEquals("ru", me.locale)
     }
 
     @Test

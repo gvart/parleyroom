@@ -1,11 +1,11 @@
 -- Test users
 -- password for all users is 'password123' (bcrypt hash)
-INSERT INTO users (id, email, first_name, last_name, password_hash, role, initials, created_at, updated_at)
+INSERT INTO users (id, email, first_name, last_name, password_hash, role, initials, created_at, updated_at, native_language)
 VALUES
-    ('00000000-0000-0000-0000-000000000001', 'admin@test.com', 'Test', 'Admin', '$2a$10$zikr3./cgtr3mqY8YhpbzOKijoUE4C2StC72a9L9swGo/KCSyhl/e', 'ADMIN', 'TA', now(), now()),
-    ('00000000-0000-0000-0000-000000000002', 'teacher@test.com', 'Test', 'Teacher', '$2a$10$zikr3./cgtr3mqY8YhpbzOKijoUE4C2StC72a9L9swGo/KCSyhl/e', 'TEACHER', 'TT', now(), now()),
-    ('00000000-0000-0000-0000-000000000003', 'student@test.com', 'Test', 'Student', '$2a$10$zikr3./cgtr3mqY8YhpbzOKijoUE4C2StC72a9L9swGo/KCSyhl/e', 'STUDENT', 'TS', now(), now()),
-    ('00000000-0000-0000-0000-000000000004', 'student2@test.com', 'Test', 'Student2', '$2a$10$zikr3./cgtr3mqY8YhpbzOKijoUE4C2StC72a9L9swGo/KCSyhl/e', 'STUDENT', 'T2', now(), now());
+    ('00000000-0000-0000-0000-000000000001', 'admin@test.com', 'Test', 'Admin', '$2a$10$zikr3./cgtr3mqY8YhpbzOKijoUE4C2StC72a9L9swGo/KCSyhl/e', 'ADMIN', 'TA', now(), now(), NULL),
+    ('00000000-0000-0000-0000-000000000002', 'teacher@test.com', 'Test', 'Teacher', '$2a$10$zikr3./cgtr3mqY8YhpbzOKijoUE4C2StC72a9L9swGo/KCSyhl/e', 'TEACHER', 'TT', now(), now(), NULL),
+    ('00000000-0000-0000-0000-000000000003', 'student@test.com', 'Test', 'Student', '$2a$10$zikr3./cgtr3mqY8YhpbzOKijoUE4C2StC72a9L9swGo/KCSyhl/e', 'STUDENT', 'TS', now(), now(), 'ru'),
+    ('00000000-0000-0000-0000-000000000004', 'student2@test.com', 'Test', 'Student2', '$2a$10$zikr3./cgtr3mqY8YhpbzOKijoUE4C2StC72a9L9swGo/KCSyhl/e', 'STUDENT', 'T2', now(), now(), 'ru');
 
 -- Teacher-Student relationship
 INSERT INTO teacher_students (id, teacher_id, student_id, lesson_types, status, started_at)

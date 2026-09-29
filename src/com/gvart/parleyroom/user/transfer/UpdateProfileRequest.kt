@@ -10,6 +10,10 @@ data class UpdateProfileRequest(
     val firstName: String? = null,
     val lastName: String? = null,
     val locale: String? = null,
+    /** Students only (ru | uk | en); anyone else gets 400 NATIVE_LANGUAGE_STUDENTS_ONLY. */
+    val nativeLanguage: String? = null,
+    /** true: marks the interface language as chosen (sets localeConfirmedAt = now). */
+    val confirmLocale: Boolean? = null,
     /** Not settable here (teachers: PUT /students/{id}/level, admins: PATCH /admin/users/{id}); always rejected. */
     val level: LanguageLevel? = null,
     val timezone: String? = null,
@@ -19,7 +23,7 @@ data class UpdateProfileRequest(
     fun validate(): ValidationResult {
         val errors = buildList {
             val noField = firstName == null && lastName == null && locale == null && level == null
-                    && timezone == null && bookingBufferMinutes == null && bookingMinNoticeHours == null
+                    && nativeLanguage == null && confirmLocale != true && timezone == null && bookingBufferMinutes == null && bookingMinNoticeHours == null
             if (noField) add("At least one field must be provided")
             if (level != null) add("level can't be changed here; it is set by the teacher")
             if (firstName != null && firstName.trim().isEmpty()) add("First name can't be blank")

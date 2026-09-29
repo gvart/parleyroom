@@ -208,7 +208,9 @@ fun Application.configureRouting() {
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Update current user profile"
-                    description = "Updates the authenticated user's profile. All fields are optional; at least one must be provided."
+                    description = "Updates the authenticated user's profile. All fields are optional; at least one must be provided. " +
+                        "locale: ru | de | en (400 UNSUPPORTED_LOCALE). nativeLanguage: ru | uk | en, students only " +
+                        "(400 UNSUPPORTED_NATIVE_LANGUAGE / NATIVE_LANGUAGE_STUDENTS_ONLY). confirmLocale: true sets localeConfirmedAt = now."
                     requestBody {
                         schema = jsonSchema<UpdateProfileRequest>()
                     }

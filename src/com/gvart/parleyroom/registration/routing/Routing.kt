@@ -71,7 +71,8 @@ fun Application.configureRegistrationModule() {
                     call.respond(HttpStatusCode.Created, result)
                 }.describe {
                     summary = "Invite user"
-                    description = "Sends an invitation to a new user with a specified role. Requires authentication."
+                    description = "Sends an invitation to a new user with a specified role. Requires authentication. " +
+                        "Student invites take an optional nativeLanguage (ru | uk | en, default ru; 400 UNSUPPORTED_NATIVE_LANGUAGE otherwise)."
                     requestBody {
                         schema = jsonSchema<InviteUserRequest>()
                     }
