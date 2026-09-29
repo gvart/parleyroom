@@ -614,6 +614,36 @@ fun Application.configureLessonRouting() {
                                 }
                             }
                         }
+
+                        post("/withdraw") {
+                            val principal = call.requirePrincipal()
+                            val id = call.getPathUUID()
+
+                            val result = rescheduleService.withdrawReschedule(id, principal)
+                            call.respond(HttpStatusCode.OK, result)
+                        }.describe {
+                            summary = "Withdraw reschedule"
+                            description = "Withdraws the caller's own pending reschedule request, so the lesson can be rescheduled or moved again."
+                            parameters {
+                                path("id") {
+                                    description = "UUID of the lesson"
+                                }
+                            }
+                            responses {
+                                HttpStatusCode.OK {
+                                    description = "Reschedule withdrawn; lesson without pendingReschedule"
+                                    schema = jsonSchema<LessonResponse>()
+                                }
+                                HttpStatusCode.Forbidden {
+                                    description = "Only the proposer can withdraw"
+                                    schema = jsonSchema<ProblemDetail>()
+                                }
+                                HttpStatusCode.NotFound {
+                                    description = "LESSON_NOT_FOUND or RESCHEDULE_NOT_FOUND (nothing pending)"
+                                    schema = jsonSchema<ProblemDetail>()
+                                }
+                            }
+                        }
                     }
                 }
             }

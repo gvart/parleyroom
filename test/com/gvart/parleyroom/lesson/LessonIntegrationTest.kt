@@ -918,6 +918,66 @@ class LessonIntegrationTest : IntegrationTest() {
         assertEquals(HttpStatusCode.Forbidden, response.status)
     }
 
+    private suspend fun requestReschedule(client: HttpClient, token: String, lessonId: String, at: String) =
+        client.post("/api/v1/lessons/$lessonId/reschedule") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(token)
+            setBody(RescheduleLessonRequest(newScheduledAt = OffsetDateTime.parse(at)))
+        }
+
+    @Test
+    fun `proposer can withdraw their reschedule and propose again`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        requestReschedule(client, teacherToken, lesson.id, "2027-04-12T14:00:00+02:00")
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/reschedule/withdraw") {
+            bearerAuth(teacherToken)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertNull(response.body<LessonResponse>().pendingReschedule)
+        assertNull(client.get("/api/v1/lessons/${lesson.id}") { bearerAuth(teacherToken) }
+            .body<LessonResponse>().pendingReschedule)
+
+        val again = requestReschedule(client, teacherToken, lesson.id, "2027-04-13T14:00:00+02:00")
+        assertEquals(HttpStatusCode.Created, again.status)
+    }
+
+    @Test
+    fun `other participant cannot withdraw a reschedule`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+        val studentToken = getStudentToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+        requestReschedule(client, teacherToken, lesson.id, "2027-04-12T14:00:00+02:00")
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/reschedule/withdraw") {
+            bearerAuth(studentToken)
+        }
+
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertNotNull(client.get("/api/v1/lessons/${lesson.id}") { bearerAuth(teacherToken) }
+            .body<LessonResponse>().pendingReschedule)
+    }
+
+    @Test
+    fun `withdraw without a pending reschedule returns not found`() = testApp {
+        val client = createJsonClient(this)
+        val teacherToken = getTeacherToken(client)
+
+        val lesson = createLesson(client, teacherToken).body<LessonResponse>()
+
+        val response = client.post("/api/v1/lessons/${lesson.id}/reschedule/withdraw") {
+            bearerAuth(teacherToken)
+        }
+
+        assertEquals(HttpStatusCode.NotFound, response.status)
+    }
+
     // -- Start --
 
     @Test
