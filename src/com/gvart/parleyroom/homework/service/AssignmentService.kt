@@ -3,15 +3,18 @@ package com.gvart.parleyroom.homework.service
 import com.gvart.parleyroom.common.storage.StorageService
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
+import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.document.data.DocumentTable
+import com.gvart.parleyroom.document.service.DocumentBlockValidator
 import com.gvart.parleyroom.group.data.GroupMemberTable
 import com.gvart.parleyroom.group.data.GroupTable
 import com.gvart.parleyroom.homework.data.AssignmentGroupTable
 import com.gvart.parleyroom.homework.data.AssignmentItemKind
 import com.gvart.parleyroom.homework.data.AssignmentItemTable
 import com.gvart.parleyroom.homework.data.AssignmentTable
+import com.gvart.parleyroom.homework.data.HomeworkAnswerTable
 import com.gvart.parleyroom.homework.data.HomeworkResponseType
 import com.gvart.parleyroom.homework.data.HomeworkStatus
 import com.gvart.parleyroom.homework.data.HomeworkTable
@@ -21,6 +24,7 @@ import com.gvart.parleyroom.homework.transfer.AssignmentPageResponse
 import com.gvart.parleyroom.homework.transfer.AssignmentResponse
 import com.gvart.parleyroom.homework.transfer.AssignmentSummary
 import com.gvart.parleyroom.homework.transfer.CreateAssignmentRequest
+import com.gvart.parleyroom.homework.transfer.UpdateAssignmentItemRequest
 import com.gvart.parleyroom.homework.transfer.UpdateAssignmentRequest
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.material.data.MaterialTable
@@ -29,6 +33,7 @@ import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.security.UserPrincipal
+import com.gvart.parleyroom.vocabulary.data.VocabEntryTable
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.json.JsonArray
 import org.jetbrains.exposed.v1.core.ResultRow
@@ -38,6 +43,7 @@ import org.jetbrains.exposed.v1.core.count
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.inSubQuery
+import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.Query
 import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.batchInsert
@@ -193,6 +199,102 @@ class AssignmentService(
         detail(views.requireAssignment(assignmentId, principal), principal)
     }
 
+    /** Appends an item; every homework of the assignment must still be OPEN. */
+    fun addItem(assignmentId: UUID, input: AssignmentItemInput, principal: UserPrincipal): AssignmentResponse = transaction {
+        val row = requireItemsEditable(assignmentId, principal)
+        val position = row[AssignmentTable.itemCount]
+        if (position >= CreateAssignmentRequest.MAX_ITEMS)
+            throw BadRequestException("At most ${CreateAssignmentRequest.MAX_ITEMS} items", code = "VALIDATION_FAILED")
+        val item = resolveItem(input, position, principal.id)
+        AssignmentItemTable.insert {
+            it[AssignmentItemTable.assignmentId] = assignmentId
+            it[AssignmentItemTable.position] = position
+            it[kind] = item.kind
+            it[title] = item.title
+            it[task] = item.task
+            it[responseType] = item.responseType
+            it[documentId] = item.documentId
+            it[documentRevision] = item.documentRevision
+            it[blocks] = item.blocks
+            it[materialId] = item.materialId
+        }
+        refreshCounts(assignmentId)
+        detail(views.requireAssignment(assignmentId, principal), principal)
+    }
+
+    /**
+     * Edits one item while every homework is OPEN. A new response type drops the item's answers and uploads;
+     * edited document blocks keep only the answers that still fit their unit.
+     */
+    fun updateItem(assignmentId: UUID, itemId: UUID, request: UpdateAssignmentItemRequest, principal: UserPrincipal): AssignmentResponse {
+        val (response, orphanedKeys) = transaction {
+            requireItemsEditable(assignmentId, principal)
+            val item = requireItem(assignmentId, itemId)
+            val kind = item[AssignmentItemTable.kind]
+            fun invalid(field: String, message: String): Nothing =
+                throw BadRequestException("Invalid item: $field $message", code = "HOMEWORK_ITEM_INVALID", pointer = "/$field")
+
+            val title = request.title?.trim()?.also {
+                if (it.isEmpty() || it.length > 255) invalid("title", "must be 1..255 characters")
+            }
+            request.task?.let { if (it.length > MAX_TASK) invalid("task", "longer than $MAX_TASK characters") }
+            val current = item[AssignmentItemTable.responseType]
+            val responseType = when {
+                request.clearResponseType -> if (kind == AssignmentItemKind.MATERIAL) null else invalid("clearResponseType", "only for MATERIAL")
+                request.responseType != null -> if (kind == AssignmentItemKind.DOCUMENT) invalid("responseType", "not allowed for DOCUMENT") else request.responseType
+                else -> current
+            }
+            val blocks = request.blocks?.also { blocks ->
+                if (kind != AssignmentItemKind.DOCUMENT) invalid("blocks", "only for DOCUMENT")
+                requireOwnedReferences(principal.id, DocumentBlockValidator.validate(blocks))
+                if (HomeworkUnits.documentUnits(itemId, blocks).isEmpty()) invalid("blocks", "no interactive exercise to answer")
+            }
+
+            AssignmentItemTable.update({ AssignmentItemTable.id eq itemId }) {
+                title?.let { value -> it[AssignmentItemTable.title] = value }
+                request.task?.let { value -> it[task] = value.takeIf(String::isNotBlank) }
+                it[AssignmentItemTable.responseType] = responseType
+                blocks?.let { value -> it[AssignmentItemTable.blocks] = value }
+            }
+
+            val orphaned = mutableListOf<String>()
+            if (responseType != current) {
+                orphaned += HomeworkUploadTable.select(HomeworkUploadTable.storageKey)
+                    .where { HomeworkUploadTable.assignmentItemId eq itemId }
+                    .map { it[HomeworkUploadTable.storageKey] }
+                HomeworkUploadTable.deleteWhere { HomeworkUploadTable.assignmentItemId eq itemId }
+                HomeworkAnswerTable.deleteWhere { HomeworkAnswerTable.assignmentItemId eq itemId }
+            }
+            if (blocks != null) pruneDocumentAnswers(itemId, blocks)
+            refreshCounts(assignmentId)
+            detail(views.requireAssignment(assignmentId, principal), principal) to orphaned
+        }
+        orphanedKeys.forEach(storage::delete)
+        return response
+    }
+
+    /** Removes an item with its answers and uploads; the last item cannot go. */
+    fun deleteItem(assignmentId: UUID, itemId: UUID, principal: UserPrincipal): AssignmentResponse {
+        val (response, keys) = transaction {
+            val row = requireItemsEditable(assignmentId, principal)
+            requireItem(assignmentId, itemId)
+            if (row[AssignmentTable.itemCount] <= 1)
+                throw ConflictException("An assignment needs at least one item", code = "ASSIGNMENT_LAST_ITEM")
+            val keys = HomeworkUploadTable.select(HomeworkUploadTable.storageKey)
+                .where { HomeworkUploadTable.assignmentItemId eq itemId }
+                .map { it[HomeworkUploadTable.storageKey] }
+            AssignmentItemTable.deleteWhere { AssignmentItemTable.id eq itemId }
+            views.itemRows(listOf(assignmentId))[assignmentId].orEmpty().forEachIndexed { index, item ->
+                if (item[AssignmentItemTable.position] != index)
+                    AssignmentItemTable.update({ AssignmentItemTable.id eq item[AssignmentItemTable.id] }) { it[position] = index }
+            }
+            refreshCounts(assignmentId)
+            detail(views.requireAssignment(assignmentId, principal), principal) to keys
+        }
+        keys.forEach(storage::delete)
+        return response
+    }
+
     fun delete(assignmentId: UUID, principal: UserPrincipal) {
         val keys = transaction {
             views.requireAssignment(assignmentId, principal)
@@ -204,6 +306,68 @@ class AssignmentService(
             keys
         }
         keys.forEach(storage::delete)
+    }
+
+    /** The owning teacher, and no student has handed in (or been graded on) this version yet. */
+    private fun requireItemsEditable(assignmentId: UUID, principal: UserPrincipal): ResultRow {
+        val row = views.requireAssignment(assignmentId, principal)
+        if (principal.role != UserRole.TEACHER) throw ForbiddenException("Only the teacher can change an assignment")
+        val locked = HomeworkTable.select(HomeworkTable.id)
+            .where { (HomeworkTable.assignmentId eq assignmentId) and (HomeworkTable.status neq HomeworkStatus.OPEN) }
+            .empty().not()
+        if (locked) throw ConflictException("Items can only change while every homework is open", code = "ASSIGNMENT_ITEMS_LOCKED")
+        return row
+    }
+
+    private fun requireItem(assignmentId: UUID, itemId: UUID): ResultRow = AssignmentItemTable.selectAll()
+        .where { (AssignmentItemTable.id eq itemId) and (AssignmentItemTable.assignmentId eq assignmentId) }
+        .singleOrNull() ?: throw NotFoundException("Item not found", code = "HOMEWORK_ITEM_NOT_FOUND")
+
+    private fun refreshCounts(assignmentId: UUID) {
+        val items = views.itemRows(listOf(assignmentId))[assignmentId].orEmpty()
+        AssignmentTable.update({ AssignmentTable.id eq assignmentId }) {
+            it[itemCount] = items.size
+            it[totalUnits] = views.units(items).size
+        }
+    }
+
+    /** After a snapshot edit: drop answers whose unit is gone or whose shape no longer fits; the rest are re-checked on submit. */
+    private fun pruneDocumentAnswers(itemId: UUID, blocks: JsonArray) {
+        val units = HomeworkUnits.documentUnits(itemId, blocks).associateBy { it.key }
+        HomeworkAnswerTable.selectAll().where { HomeworkAnswerTable.assignmentItemId eq itemId }.forEach { answer ->
+            val id = answer[HomeworkAnswerTable.id]
+            val unit = units[UnitKey(itemId, answer[HomeworkAnswerTable.blockId], answer[HomeworkAnswerTable.itemRef])]
+            val fits = unit != null && answer[HomeworkAnswerTable.answer]
+                ?.let { runCatching { HomeworkUnits.validateAnswer(unit, it, "") }.isSuccess } ?: true
+            if (!fits) HomeworkAnswerTable.deleteWhere { HomeworkAnswerTable.id eq id }
+            else HomeworkAnswerTable.update({ HomeworkAnswerTable.id eq id }) {
+                it[autoResult] = null
+                it[autoScore] = null
+                it[caseMismatch] = false
+                it[gapResults] = null
+            }
+        }
+    }
+
+    /** Every vocab entry and material a snapshot references must be the teacher's own. */
+    private fun requireOwnedReferences(teacherId: UUID, references: DocumentBlockValidator.References) {
+        fun check(refs: Map<String, UUID>, what: String, owned: (List<UUID>) -> Set<UUID>) {
+            if (refs.isEmpty()) return
+            val mine = owned(refs.values.distinct())
+            refs.entries.firstOrNull { it.value !in mine }?.let { (pointer, id) ->
+                throw DocumentBlockValidator.invalid(pointer, "$what $id is not in your library")
+            }
+        }
+        check(references.vocabEntries, "vocab entry") { ids ->
+            VocabEntryTable.select(VocabEntryTable.id)
+                .where { (VocabEntryTable.id inList ids) and (VocabEntryTable.teacherId eq teacherId) }
+                .map { it[VocabEntryTable.id].value }.toSet()
+        }
+        check(references.materials, "material") { ids ->
+            MaterialTable.select(MaterialTable.id)
+                .where { (MaterialTable.id inList ids) and (MaterialTable.teacherId eq teacherId) }
+                .map { it[MaterialTable.id].value }.toSet()
+        }
     }
 
     private fun detail(row: ResultRow, principal: UserPrincipal): AssignmentResponse {

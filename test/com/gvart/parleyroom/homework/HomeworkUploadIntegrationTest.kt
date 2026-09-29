@@ -72,7 +72,7 @@ class HomeworkUploadIntegrationTest : IntegrationTest() {
         }
 
     @Test
-    fun `student records audio, lists it in the answer, teacher downloads it after submit`() = testApp {
+    fun `student records audio, lists it in the answer, teacher can follow and download it`() = testApp {
         val client = createJsonClient(this)
         val teacher = getTeacherToken(client)
         val student = getStudentToken(client)
@@ -90,9 +90,9 @@ class HomeworkUploadIntegrationTest : IntegrationTest() {
         assertEquals(HttpStatusCode.OK, saved.status, saved.bodyAsText())
 
         assertContentEquals("OggS-audio".toByteArray(), client.get(uploaded.downloadUrl) { bearerAuth(student) }.bodyAsBytes())
-        // Drafts are private: the teacher cannot fetch it before submit.
-        assertEquals(HttpStatusCode.NotFound, client.get(uploaded.downloadUrl) { bearerAuth(teacher) }.status)
-        assertTrue(client.get("/api/v1/homework/$id") { bearerAuth(teacher) }.body<HomeworkResponse>().uploads.isEmpty())
+        // The teacher follows the work in progress.
+        assertEquals(HttpStatusCode.OK, client.get(uploaded.downloadUrl) { bearerAuth(teacher) }.status)
+        assertEquals(1, client.get("/api/v1/homework/$id") { bearerAuth(teacher) }.body<HomeworkResponse>().uploads.size)
 
         assertEquals(HttpStatusCode.OK, client.post("/api/v1/homework/$id/submit") { bearerAuth(student) }.status)
         val download = client.get(uploaded.downloadUrl) { bearerAuth(teacher) }

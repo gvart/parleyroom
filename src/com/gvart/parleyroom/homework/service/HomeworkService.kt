@@ -202,6 +202,122 @@ class HomeworkService(
     fun submit(homeworkId: UUID, principal: UserPrincipal): HomeworkResponse = transaction {
         val row = views.requireOwnHomework(homeworkId, principal)
         requireOpen(row)
+        autoCheck(row)
+        HomeworkTable.update({ HomeworkTable.id eq homeworkId }) {
+            it[status] = HomeworkStatus.SUBMITTED
+            it[attempt] = row[HomeworkTable.attempt] + 1
+            it[submittedAt] = OffsetDateTime.now()
+        }
+        LearningActivityRecorder.record(principal.id, ActivityKind.HOMEWORK_SUBMITTED, homeworkId)
+        notificationService.createNotification(row[AssignmentTable.teacherId].value, principal.id, NotificationType.HOMEWORK_SUBMITTED, homeworkId)
+
+        views.detail(views.requireReadable(homeworkId, principal), principal)
+    }
+
+    /**
+     * Teacher autosave of the review: OPEN (grading while the student works) or SUBMITTED, no status change.
+     * Hidden from the student until the review is sent, except on a returned homework whose feedback is already out.
+     */
+    fun saveReview(homeworkId: UUID, feedback: String?, units: List<ReviewUnitInput>, principal: UserPrincipal): HomeworkResponse = transaction {
+        val row = views.requireTeacherOf(homeworkId, principal)
+        val status = row[HomeworkTable.status]
+        if (status != HomeworkStatus.OPEN && status != HomeworkStatus.SUBMITTED)
+            throw ConflictException("Homework in status $status cannot be draft-reviewed", code = "HOMEWORK_INVALID_STATE")
+        applyReview(row, feedback, units)
+        views.detail(views.requireReadable(homeworkId, principal), principal)
+    }
+
+    /**
+     * Sends the review. From OPEN (the student never submitted) REVIEWED / DONE grade the current answers as an
+     * attempt, as a submit would; RETURNED keeps it OPEN and just shows the feedback.
+     */
+    fun review(homeworkId: UUID, feedback: String?, units: List<ReviewUnitInput>, outcome: HomeworkOutcome, principal: UserPrincipal): HomeworkResponse = transaction {
+        val row = views.requireTeacherOf(homeworkId, principal)
+        val previous = row[HomeworkTable.status]
+        if (previous == HomeworkStatus.DONE)
+            throw ConflictException("Homework in status $previous cannot be reviewed", code = "HOMEWORK_INVALID_STATE")
+        val gradeDraft = previous == HomeworkStatus.OPEN && outcome != HomeworkOutcome.RETURNED
+        if (gradeDraft) autoCheck(row)
+        applyReview(row, feedback, units)
+
+        val now = OffsetDateTime.now()
+        HomeworkTable.update({ HomeworkTable.id eq homeworkId }) {
+            it[lastOutcome] = outcome
+            if (gradeDraft) it[attempt] = row[HomeworkTable.attempt] + 1
+            when (outcome) {
+                HomeworkOutcome.REVIEWED -> {
+                    it[status] = HomeworkStatus.REVIEWED
+                    it[reviewedAt] = now
+                }
+                HomeworkOutcome.RETURNED -> {
+                    it[status] = HomeworkStatus.OPEN
+                    it[returnedAt] = now
+                }
+                HomeworkOutcome.DONE -> {
+                    it[status] = HomeworkStatus.DONE
+                    it[doneAt] = now
+                    if (row[HomeworkTable.reviewedAt] == null) it[reviewedAt] = now
+                }
+            }
+        }
+        val type = when (outcome) {
+            HomeworkOutcome.RETURNED -> NotificationType.HOMEWORK_RETURNED
+            HomeworkOutcome.REVIEWED -> NotificationType.HOMEWORK_REVIEWED
+            // Closing an already reviewed homework tells the student nothing new.
+            HomeworkOutcome.DONE -> if (previous != HomeworkStatus.REVIEWED) NotificationType.HOMEWORK_REVIEWED else null
+        }
+        type?.let { notificationService.createNotification(row[HomeworkTable.studentId].value, principal.id, it, homeworkId) }
+
+        views.detail(views.requireReadable(homeworkId, principal), principal)
+    }
+
+    /** Removes one student's homework (the assignment's teacher or an admin). */
+    fun delete(homeworkId: UUID, principal: UserPrincipal) {
+        val keys = transaction {
+            views.requireTeacherOf(homeworkId, principal)
+            val keys = HomeworkUploadTable.select(HomeworkUploadTable.storageKey)
+                .where { HomeworkUploadTable.homeworkId eq homeworkId }
+                .map { it[HomeworkUploadTable.storageKey] }
+            HomeworkTable.deleteWhere { HomeworkTable.id eq homeworkId }
+            keys
+        }
+        keys.forEach(storage::delete)
+    }
+
+    private fun applyReview(row: ResultRow, feedback: String?, units: List<ReviewUnitInput>) {
+        val homeworkId = row[HomeworkTable.id].value
+        val known = unitsOf(row)
+        val existing = answerRows(homeworkId)
+        units.forEachIndexed { index, input ->
+            val unit = views.unitFor(known, input.assignmentItemId, input.blockId, input.itemId, "/units/$index")
+            val current = existing[unit.key]
+            if (current == null) {
+                HomeworkAnswerTable.insert {
+                    it[HomeworkAnswerTable.homeworkId] = homeworkId
+                    it[assignmentItemId] = unit.assignmentItemId
+                    it[blockId] = unit.blockId
+                    it[itemRef] = unit.itemRef
+                    it[teacherCorrect] = input.correct
+                    it[comment] = input.comment?.takeIf(String::isNotBlank)
+                }
+            } else {
+                HomeworkAnswerTable.update({ HomeworkAnswerTable.id eq current[HomeworkAnswerTable.id] }) {
+                    it[teacherCorrect] = input.correct
+                    it[comment] = input.comment?.takeIf(String::isNotBlank)
+                }
+            }
+        }
+        HomeworkTable.update({ HomeworkTable.id eq homeworkId }) {
+            it[HomeworkTable.feedback] = feedback?.takeIf(String::isNotBlank)
+        }
+    }
+
+    /**
+     * Auto-checks every unit against the current answers, snapshots them as the graded attempt and stores the
+     * score. After a return, a changed answer loses the previous verdict and comment.
+     */
+    private fun autoCheck(row: ResultRow) {
+        val homeworkId = row[HomeworkTable.id].value
         val resubmit = row[HomeworkTable.attempt] > 0
         val existing = answerRows(homeworkId)
         var closedCorrect = 0
@@ -249,104 +365,10 @@ class HomeworkService(
         }
 
         HomeworkTable.update({ HomeworkTable.id eq homeworkId }) {
-            it[status] = HomeworkStatus.SUBMITTED
-            it[attempt] = row[HomeworkTable.attempt] + 1
-            it[submittedAt] = OffsetDateTime.now()
             it[HomeworkTable.closedCorrect] = closedCorrect
             it[HomeworkTable.closedTotal] = closedTotal
             it[HomeworkTable.pendingReview] = pendingReview
             it[HomeworkTable.unanswered] = unanswered
-        }
-        LearningActivityRecorder.record(principal.id, ActivityKind.HOMEWORK_SUBMITTED, homeworkId)
-        notificationService.createNotification(row[AssignmentTable.teacherId].value, principal.id, NotificationType.HOMEWORK_SUBMITTED, homeworkId)
-
-        views.detail(views.requireReadable(homeworkId, principal), principal)
-    }
-
-    /** Teacher autosave of the review: SUBMITTED only, no status change, not visible to the student. */
-    fun saveReview(homeworkId: UUID, feedback: String?, units: List<ReviewUnitInput>, principal: UserPrincipal): HomeworkResponse = transaction {
-        val row = views.requireTeacherOf(homeworkId, principal)
-        if (row[HomeworkTable.status] != HomeworkStatus.SUBMITTED)
-            throw ConflictException("Only submitted homework can be reviewed", code = "HOMEWORK_INVALID_STATE")
-        applyReview(row, feedback, units)
-        views.detail(views.requireReadable(homeworkId, principal), principal)
-    }
-
-    fun review(homeworkId: UUID, feedback: String?, units: List<ReviewUnitInput>, outcome: HomeworkOutcome, principal: UserPrincipal): HomeworkResponse = transaction {
-        val row = views.requireTeacherOf(homeworkId, principal)
-        val previous = row[HomeworkTable.status]
-        if (previous != HomeworkStatus.SUBMITTED && previous != HomeworkStatus.REVIEWED)
-            throw ConflictException("Homework in status $previous cannot be reviewed", code = "HOMEWORK_INVALID_STATE")
-        applyReview(row, feedback, units)
-
-        val now = OffsetDateTime.now()
-        HomeworkTable.update({ HomeworkTable.id eq homeworkId }) {
-            it[lastOutcome] = outcome
-            when (outcome) {
-                HomeworkOutcome.REVIEWED -> {
-                    it[status] = HomeworkStatus.REVIEWED
-                    it[reviewedAt] = now
-                }
-                HomeworkOutcome.RETURNED -> {
-                    it[status] = HomeworkStatus.OPEN
-                    it[returnedAt] = now
-                }
-                HomeworkOutcome.DONE -> {
-                    it[status] = HomeworkStatus.DONE
-                    it[doneAt] = now
-                    if (row[HomeworkTable.reviewedAt] == null) it[reviewedAt] = now
-                }
-            }
-        }
-        val type = when (outcome) {
-            HomeworkOutcome.RETURNED -> NotificationType.HOMEWORK_RETURNED
-            HomeworkOutcome.REVIEWED -> NotificationType.HOMEWORK_REVIEWED
-            // Closing an already reviewed homework tells the student nothing new.
-            HomeworkOutcome.DONE -> if (previous == HomeworkStatus.SUBMITTED) NotificationType.HOMEWORK_REVIEWED else null
-        }
-        type?.let { notificationService.createNotification(row[HomeworkTable.studentId].value, principal.id, it, homeworkId) }
-
-        views.detail(views.requireReadable(homeworkId, principal), principal)
-    }
-
-    /** Removes one student's homework (the assignment's teacher or an admin). */
-    fun delete(homeworkId: UUID, principal: UserPrincipal) {
-        val keys = transaction {
-            views.requireTeacherOf(homeworkId, principal)
-            val keys = HomeworkUploadTable.select(HomeworkUploadTable.storageKey)
-                .where { HomeworkUploadTable.homeworkId eq homeworkId }
-                .map { it[HomeworkUploadTable.storageKey] }
-            HomeworkTable.deleteWhere { HomeworkTable.id eq homeworkId }
-            keys
-        }
-        keys.forEach(storage::delete)
-    }
-
-    private fun applyReview(row: ResultRow, feedback: String?, units: List<ReviewUnitInput>) {
-        val homeworkId = row[HomeworkTable.id].value
-        val known = unitsOf(row)
-        val existing = answerRows(homeworkId)
-        units.forEachIndexed { index, input ->
-            val unit = views.unitFor(known, input.assignmentItemId, input.blockId, input.itemId, "/units/$index")
-            val current = existing[unit.key]
-            if (current == null) {
-                HomeworkAnswerTable.insert {
-                    it[HomeworkAnswerTable.homeworkId] = homeworkId
-                    it[assignmentItemId] = unit.assignmentItemId
-                    it[blockId] = unit.blockId
-                    it[itemRef] = unit.itemRef
-                    it[teacherCorrect] = input.correct
-                    it[comment] = input.comment?.takeIf(String::isNotBlank)
-                }
-            } else {
-                HomeworkAnswerTable.update({ HomeworkAnswerTable.id eq current[HomeworkAnswerTable.id] }) {
-                    it[teacherCorrect] = input.correct
-                    it[comment] = input.comment?.takeIf(String::isNotBlank)
-                }
-            }
-        }
-        HomeworkTable.update({ HomeworkTable.id eq homeworkId }) {
-            it[HomeworkTable.feedback] = feedback?.takeIf(String::isNotBlank)
         }
     }
 

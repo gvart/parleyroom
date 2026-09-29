@@ -12,7 +12,6 @@ import com.gvart.parleyroom.homework.data.HomeworkStatus
 import com.gvart.parleyroom.homework.data.HomeworkTable
 import com.gvart.parleyroom.homework.data.HomeworkUploadTable
 import com.gvart.parleyroom.homework.transfer.HomeworkUploadResponse
-import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.security.UserPrincipal
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -99,8 +98,7 @@ class HomeworkUploadService(
 
     /** The student always; the teacher / admin only once the homework was submitted (drafts are private). */
     fun downloadTarget(homeworkId: UUID, uploadId: UUID, principal: UserPrincipal): DownloadTarget = transaction {
-        val row = views.requireReadable(homeworkId, principal)
-        if (principal.role != UserRole.STUDENT && row[HomeworkTable.status] == HomeworkStatus.OPEN) throw uploadNotFound()
+        views.requireReadable(homeworkId, principal)
         val upload = findUpload(homeworkId, uploadId)
         DownloadTarget(upload[HomeworkUploadTable.storageKey], upload[HomeworkUploadTable.fileName], upload[HomeworkUploadTable.contentType])
     }
