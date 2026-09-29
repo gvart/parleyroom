@@ -1286,7 +1286,9 @@ DraftWord {
                                    // explanationDe, exampleSentence, level, synonyms, sourceLessonId
                                    // (entry.topicIds is ignored — tags live in `topics`)
   topics: [DraftTopic], grammarTopics: [DraftGrammarTopic],
-  matchedEntryId: uuid | null,     // read-only: library entry with the same lower(lemma)+article+wordType (recomputed on every edit)
+  libraryEntryId: uuid | null,     // read-only: library entry with the same lower(lemma)+article+wordType (recomputed on every edit)
+  matched: bool,                   // read-only: = libraryEntryId != null. Send assigns that library entry AS IS and ignores
+                                   // the draft's display fields, so the UI should show them read-only (lemma/article/type stay editable)
   alreadyAssigned: bool            // read-only: every recipient already has that entry
 }
 DraftDocument {                    // EXERCISE_DOCUMENT (homework) or NOTES_DOCUMENT (club)
@@ -1358,7 +1360,10 @@ GenerateDraftRequest {
   prompt: string = "",           // ≤ 10 000
   promptTemplateId?: uuid,       // the template's text is put BEFORE prompt (404 PROMPT_TEMPLATE_NOT_FOUND)
   pastLessonIds?: [uuid],        // ≤ 5; null = the latest earlier lesson with notes, [] = none
-  topicIds?: [uuid], grammarTopicIds?: [uuid]   // library focus (≤ 20 each; 404 TOPIC_NOT_FOUND / GRAMMAR_TOPIC_NOT_FOUND)
+  topicIds?: [uuid], grammarTopicIds?: [uuid],  // library focus (≤ 20 each; 404 TOPIC_NOT_FOUND / GRAMMAR_TOPIC_NOT_FOUND)
+  kinds?: [WORDS | HOMEWORK]     // what to generate (non-empty). Lesson scope default: both. Student scope: REQUIRED
+                                 // (400 AI_DRAFT_KINDS_REQUIRED): "Add words" -> [WORDS], "New homework" -> [HOMEWORK].
+                                 // Ignored for clubs (always the notes document). Stored in bundle.input.kinds.
 }
 ```
 Creates the open draft of this lesson / student or **reuses it** (its items are replaced when the
@@ -1367,8 +1372,8 @@ be queued (429) is removed again. Needs at least one source (notes, past notes, 
 focus) → else 400 `AI_DRAFT_NOTHING_TO_GENERATE`. `pastLessonIds` must be earlier COMPLETED
 lessons of the same student (1:1) / group (club) → else 400 `AI_DRAFT_PAST_LESSON_INVALID`.
 
-**One job generates words and homework together** (1:1):
-- **Words**: lemma + display fields, matched against the teacher's library (`matchedEntryId`), each
+**One job generates what `kinds` asks for** (1:1; only those parts are required and kept):
+- **Words**: lemma + display fields, matched against the teacher's library (`libraryEntryId`), each
   with AI-suggested topic / grammar tags (matched to library ids by name where possible).
 - **Homework**: exactly **one exercise document** (existing block types, validated by
   `DocumentBlockValidator` + the strict completeness profile, at least one interactive exercise,
@@ -1402,7 +1407,8 @@ editable without code changes.
   }
 }
 ```
-Club: `{ "notes": { "title", "blocks", "topics", "grammarTopics" } }`. An item refine answers with
+The user message has `<produce>` = `words`, `homework` or `words, homework`; the answer contains
+only those parts (`words` only → at least one word). Club: `{ "notes": { "title", "blocks", "topics", "grammarTopics" } }`. An item refine answers with
 only that part (`{ "words": [one] }`, `{ "homework": { "document" } }`, `{ "homework": { "tasks": [one] } }`,
 `{ "notes" }`). `AiBlock` = a document block with short string ids (`"b1"`, `"o2"`; the server
 assigns uuids and remaps `correctOptionIds`).
@@ -1437,11 +1443,14 @@ a job of the draft runs → 409 `AI_DRAFT_BUSY`. Unknown item → 404 `AI_DRAFT_
 ### Refine
 
 ```
-POST /api/v1/ai/draft-bundles/{id}/refine   Body: { instruction (1..4 000), itemId?: uuid } -> 202 DraftBundle
+POST /api/v1/ai/draft-bundles/{id}/refine   Body: { instruction (1..4 000), itemId?: uuid, kinds?: [WORDS | HOMEWORK] } -> 202 DraftBundle
 ```
 Queues a REFINE job. The model gets the same context plus the **current** items (the teacher's
 edits included) in the output format, and the instruction. With `itemId` only that item is sent and
-replaced (other items keep their approval); without it the whole draft is replaced. Refined items
+replaced (other items keep their approval). Without it the draft's `kinds` are regenerated
+(`kinds` in the body, default `bundle.input.kinds`): only items of those kinds are sent and
+replaced, the others stay untouched (club: the notes document). `kinds` together with `itemId` → 400
+`VALIDATION_FAILED`. Refined items
 are **unapproved**. 409 `AI_DRAFT_EMPTY` (nothing generated yet), `AI_DRAFT_BUSY`,
 `AI_DRAFT_NOT_EDITABLE`.
 
@@ -1584,7 +1593,7 @@ that article; a capitalised single word → noun, article by suffix; a lowercase
 → verb; else phrase), translations `"<lemma> (ru)"` / `"<lemma> (en)"`, explanation
 `"Erklärung: <lemma>"`, topic tag `Alltag`. Homework: a document (heading, `gap_fill`,
 `multiple_choice` on the first noun; tags Alltag / Perfekt) and 2 tasks (AUDIO "Sprachnachricht",
-TEXT "Kurzer Text"). Club: a notes document (heading, word list, `grammar_box` TIP,
+TEXT "Kurzer Text"); only the parts in `<produce>`. Club: a notes document (heading, word list, `grammar_box` TIP,
 `free_sentences` SPEAKING). Refine: a word gets `exampleSentence = "Überarbeitet: <instruction>"`, a
 task gets `" (überarbeitet: <instruction>)"` appended, a document gets a rich-text block
 "Überarbeitet: …" and " (überarbeitet)" in its title. Test markers in the prompt: `[fake:invalid-once]`,
@@ -1606,6 +1615,7 @@ task gets `" (überarbeitet: <instruction>)"` appended, a document gets a rich-t
 | `AI_DRAFT_BUSY` | 409 | a job of this draft is QUEUED / RUNNING |
 | `AI_DRAFT_EMPTY` | 409 | refine before anything was generated |
 | `AI_DRAFT_NOTHING_TO_GENERATE` | 400 | no notes, past notes, prompt or focus |
+| `AI_DRAFT_KINDS_REQUIRED` | 400 | student-scope generate without `kinds` |
 | `AI_DRAFT_PAST_LESSON_INVALID` | 400 | not an earlier COMPLETED lesson of the learner(s) |
 | `AI_DRAFT_ITEM_KIND_MISMATCH` | 400 | PATCH content does not match the item kind |
 | `AI_DRAFT_DOCUMENT_INVALID` | 400 | vocab_table in a draft document / homework document without an interactive exercise |
