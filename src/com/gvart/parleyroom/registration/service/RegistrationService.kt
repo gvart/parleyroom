@@ -2,10 +2,12 @@ package com.gvart.parleyroom.registration.service
 
 import com.gvart.parleyroom.registration.data.RegistrationTable
 import com.gvart.parleyroom.registration.transfer.RegisterUserRequest
+import com.gvart.parleyroom.user.data.DEFAULT_NATIVE_LANGUAGE
 import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
 import com.gvart.parleyroom.user.data.UserTable
+import com.gvart.parleyroom.user.data.requireSupportedNativeLanguage
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greaterEq
@@ -40,6 +42,8 @@ class RegistrationService {
             UserRole.ADMIN -> {}
         }
 
+        request.nativeLanguage?.let(::requireSupportedNativeLanguage)
+
         return transaction {
             val alreadyExists = UserTable.selectAll()
                 .where { UserTable.email eq request.email }
@@ -65,6 +69,7 @@ class RegistrationService {
                 it[role] = request.role
                 it[expiresAt] = OffsetDateTime.now().plusDays(INVITATION_EXPIRY_DAYS)
                 it[invitedBy] = principal.id
+                if (request.role == UserRole.STUDENT) it[nativeLanguage] = request.nativeLanguage ?: DEFAULT_NATIVE_LANGUAGE
             }
 
             InviteUserResponse(registrationToken)
@@ -96,6 +101,8 @@ class RegistrationService {
             it[passwordHash] = BCrypt.hashpw(request.password, BCrypt.gensalt())
             it[role] = entry[RegistrationTable.role]
             it[initials] = "${trimmedFirstName[0]}${trimmedLastName[0]}"
+            if (entry[RegistrationTable.role] == UserRole.STUDENT)
+                it[nativeLanguage] = entry[RegistrationTable.nativeLanguage] ?: DEFAULT_NATIVE_LANGUAGE
         }
 
         RegistrationTable.update({ RegistrationTable.id eq entry[RegistrationTable.id] }) {

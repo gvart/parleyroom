@@ -139,13 +139,14 @@ class VocabularyService {
     private class DisplaySettingResolver(
         private val lessonOverrides: Map<UUID, VocabDisplaySetting>,
         private val pairSettings: Map<Pair<UUID, UUID>, VocabDisplaySetting>,
-        private val levels: Map<UUID, LanguageLevel?>,
+        private val levels: Map<UUID, Pair<LanguageLevel?, String?>>,
     ) {
         fun resolve(row: ResultRow): VocabDisplaySetting {
             val studentId = row[StudentVocabTable.studentId].value
             row[StudentVocabTable.lessonId]?.value?.let { lessonOverrides[it] }?.let { return it }
             pairSettings[row[VocabEntryTable.teacherId].value to studentId]?.let { return it }
-            return VocabDisplay.defaultFor(levels[studentId])
+            val (level, nativeLanguage) = levels[studentId] ?: (null to null)
+            return VocabDisplay.defaultFor(level, nativeLanguage)
         }
 
         companion object {
@@ -168,9 +169,9 @@ class VocabularyService {
                             ?.let { (ts[TeacherStudentTable.teacherId].value to ts[TeacherStudentTable.studentId].value) to it }
                     }.toMap()
 
-                val levels = UserTable.select(UserTable.id, UserTable.level)
+                val levels = UserTable.select(UserTable.id, UserTable.level, UserTable.nativeLanguage)
                     .where { UserTable.id inList studentIds }
-                    .associate { it[UserTable.id].value to it[UserTable.level] }
+                    .associate { it[UserTable.id].value to (it[UserTable.level] to it[UserTable.nativeLanguage]) }
 
                 return DisplaySettingResolver(lessonOverrides, pairSettings, levels)
             }

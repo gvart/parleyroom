@@ -9,6 +9,7 @@ import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.data.requireSupportedLocale
+import com.gvart.parleyroom.user.data.requireSupportedNativeLanguage
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import com.gvart.parleyroom.user.transfer.UserListResponse
@@ -68,6 +69,8 @@ class UserService(
                 it[UserTable.status],
                 it[UserTable.createdAt],
                 it[UserTable.locale],
+                it[UserTable.nativeLanguage],
+                it[UserTable.localeConfirmedAt],
             ) }
 
         UserListResponse(
@@ -85,7 +88,10 @@ class UserService(
 
     fun updateProfile(principal: UserPrincipal, request: UpdateProfileRequest): UserResponse = transaction {
         request.locale?.let(::requireSupportedLocale)
+        request.nativeLanguage?.let(::requireSupportedNativeLanguage)
         val current = UserTable.findByIdOrThrow(principal.id, "User")
+        if (request.nativeLanguage != null && current[UserTable.role] != UserRole.STUDENT)
+            throw BadRequestException("Only students have a native language", code = "NATIVE_LANGUAGE_STUDENTS_ONLY")
 
         val newFirstName = request.firstName?.trim() ?: current[UserTable.firstName]
         val newLastName = request.lastName?.trim() ?: current[UserTable.lastName]
@@ -96,6 +102,8 @@ class UserService(
             if (request.lastName != null) it[lastName] = newLastName
             if (nameChanged) it[initials] = "${newFirstName[0]}${newLastName[0]}"
             if (request.locale != null) it[locale] = request.locale
+            if (request.nativeLanguage != null) it[nativeLanguage] = request.nativeLanguage
+            if (request.confirmLocale == true) it[localeConfirmedAt] = OffsetDateTime.now()
             if (request.timezone != null) it[timezone] = request.timezone
             if (request.bookingBufferMinutes != null) it[bookingBufferMinutes] = request.bookingBufferMinutes
             if (request.bookingMinNoticeHours != null) it[bookingMinNoticeHours] = request.bookingMinNoticeHours
@@ -208,6 +216,8 @@ class UserService(
             level = row[UserTable.level],
             status = row[UserTable.status],
             locale = row[UserTable.locale],
+            nativeLanguage = row[UserTable.nativeLanguage],
+            localeConfirmedAt = row[UserTable.localeConfirmedAt],
             timezone = row[UserTable.timezone],
             bookingBufferMinutes = row[UserTable.bookingBufferMinutes],
             bookingMinNoticeHours = row[UserTable.bookingMinNoticeHours],

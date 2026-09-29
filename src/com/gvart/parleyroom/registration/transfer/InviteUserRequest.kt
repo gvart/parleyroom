@@ -8,6 +8,8 @@ import kotlinx.serialization.Serializable
 data class InviteUserRequest(
     val email: String,
     val role: UserRole,
+    /** Student invites only: ru | uk | en (default ru). Ignored for other roles. */
+    val nativeLanguage: String? = null,
 ) {
     fun validate(): ValidationResult {
         val errors = buildList {

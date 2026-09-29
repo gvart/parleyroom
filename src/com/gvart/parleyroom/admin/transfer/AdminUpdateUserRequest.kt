@@ -15,10 +15,11 @@ data class AdminUpdateUserRequest(
     val status: UserStatus? = null,
     val level: LanguageLevel? = null,
     val locale: String? = null,
+    val nativeLanguage: String? = null,
 ) {
     fun validate(): ValidationResult {
         val errors = buildList {
-            val anyProvided = listOf(email, firstName, lastName, role, status, level, locale).any { it != null }
+            val anyProvided = listOf(email, firstName, lastName, role, status, level, locale, nativeLanguage).any { it != null }
             if (!anyProvided) add("At least one field must be provided")
             if (email != null) {
                 if (email.isBlank()) add("Email can't be empty")

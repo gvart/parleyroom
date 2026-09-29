@@ -14,6 +14,7 @@ import com.gvart.parleyroom.vocabulary.service.VocabularyService
 import com.gvart.parleyroom.vocabulary.transfer.QuickAddVocabRequest
 import com.gvart.parleyroom.vocabulary.transfer.QuickAddVocabResponse
 import com.gvart.parleyroom.vocabulary.transfer.SetStudentLevelRequest
+import com.gvart.parleyroom.vocabulary.transfer.SetStudentNativeLanguageRequest
 import com.gvart.parleyroom.vocabulary.transfer.StudentVocabPageResponse
 import com.gvart.parleyroom.vocabulary.transfer.VocabDisplaySetting
 import com.gvart.parleyroom.vocabulary.transfer.VocabEntryInput
@@ -198,7 +199,7 @@ fun Application.configureVocabularyRouting() {
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Set vocab display setting"
-                        description = "Teacher only. fields: any of ru, en, de_explanation."
+                        description = "Teacher only. fields: any of ru, uk, en, de_explanation."
                         parameters { path("studentId") { description = "Student UUID" } }
                         requestBody { schema = jsonSchema<VocabDisplaySetting>() }
                         responses {
@@ -212,7 +213,7 @@ fun Application.configureVocabularyRouting() {
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Reset vocab display setting"
-                        description = "Teacher only. Falls back to the level default (A1–A2: ru; B1+: de_explanation with toggle)."
+                        description = "Teacher only. Falls back to the level default (A1–A2: the student's nativeLanguage; B1+: de_explanation with toggle)."
                         parameters { path("studentId") { description = "Student UUID" } }
                         responses { HttpStatusCode.OK { schema = jsonSchema<VocabSettingsResponse>() } }
                     }
@@ -227,6 +228,21 @@ fun Application.configureVocabularyRouting() {
                     parameters { path("studentId") { description = "Student UUID" } }
                     requestBody { schema = jsonSchema<SetStudentLevelRequest>() }
                     responses { HttpStatusCode.OK { schema = jsonSchema<VocabSettingsResponse>() } }
+                }
+
+                put<SetStudentNativeLanguageRequest>("/native-language") {
+                    val result = vocabSettingsService.setNativeLanguage(call.getPathUUID("studentId"), it.nativeLanguage, call.requirePrincipal())
+                    call.respond(HttpStatusCode.OK, result)
+                }.describe {
+                    summary = "Set student native language"
+                    description = "Teacher only. Sets the language (ru | uk | en) the student gets translations and explanations in; " +
+                        "returns the resulting vocab setting (A1–A2 default shows this language)."
+                    parameters { path("studentId") { description = "Student UUID" } }
+                    requestBody { schema = jsonSchema<SetStudentNativeLanguageRequest>() }
+                    responses {
+                        HttpStatusCode.OK { schema = jsonSchema<VocabSettingsResponse>() }
+                        HttpStatusCode.BadRequest { description = "UNSUPPORTED_NATIVE_LANGUAGE"; schema = jsonSchema<ProblemDetail>() }
+                    }
                 }
             }
         }

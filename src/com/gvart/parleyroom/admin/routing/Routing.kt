@@ -91,7 +91,7 @@ fun Application.configureAdminRouting() {
                     call.respond(HttpStatusCode.Created, result)
                 }.describe {
                     summary = "Create user (admin)"
-                    description = "Create a new user directly with a chosen password. Admin only."
+                    description = "Create a new user directly with a chosen password. Admin only. locale: ru | de | en (default ru); nativeLanguage: ru | uk | en (students default to ru)."
                     requestBody { schema = jsonSchema<AdminCreateUserRequest>() }
                     responses {
                         HttpStatusCode.Created { schema = jsonSchema<AdminUserResponse>() }
@@ -109,7 +109,7 @@ fun Application.configureAdminRouting() {
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Update user (admin)"
-                    description = "Partial update. Admins cannot change their own role or deactivate themselves."
+                    description = "Partial update. Admins cannot change their own role or deactivate themselves. nativeLanguage: ru | uk | en."
                     parameters { path("id") { description = "User UUID" } }
                     requestBody { schema = jsonSchema<AdminUpdateUserRequest>() }
                     responses {
