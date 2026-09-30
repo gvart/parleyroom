@@ -3,6 +3,7 @@ package com.gvart.parleyroom.notification.routing
 import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
+import com.gvart.parleyroom.config.SSE_AUTH
 import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.notification.service.NotificationSseManager
 import com.gvart.parleyroom.notification.transfer.MarkViewedRequest
@@ -92,7 +93,11 @@ fun Application.configureNotificationRouting() {
                         }
                     }
                 }
+            }
+        }
 
+        authenticate(SSE_AUTH) {
+            route("/api/v1/notifications") {
                 get("/stream") {
                     val principal = call.requirePrincipal()
                     val flow = sseManager.subscribe(principal.id)
@@ -137,7 +142,8 @@ fun Application.configureNotificationRouting() {
                     }
                 }.describe {
                     summary = "SSE notification stream"
-                    description = "Server-Sent Events endpoint that pushes new notifications to the connected user in real time."
+                    description = "Server-Sent Events endpoint that pushes new notifications to the connected user in real time. " +
+                        "Accepts the token as a Bearer header or, for EventSource clients, as the access_token query parameter."
                     responses {
                         HttpStatusCode.OK {
                             description = "SSE stream of notifications"
