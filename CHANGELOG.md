@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/gvart/parleyroom/compare/v1.2.0...v1.2.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* **notifications:** accept query token on SSE stream and return 401 instead of 406 ([#63](https://github.com/gvart/parleyroom/issues/63)) ([84dc618](https://github.com/gvart/parleyroom/commit/84dc618bed1cb2ca4f82a9d08d92fa905f4c3f58))
+
 ## [1.2.0](https://github.com/gvart/parleyroom/compare/v1.1.0...v1.2.0) (2026-09-30)
 
 
