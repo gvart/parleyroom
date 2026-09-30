@@ -1,0 +1,37 @@
+test/com/gvart/parleyroom/lesson/AutoApproveIntegrationTest.kt
+  s_4985e1aeba0736::t_78c656ebb8ce3d 1-190
+resources/db/migration/V23__teacher_auto_approve.sql
+  s_4985e1aeba0736::t_397f70f00e73d8 1-8
+src/com/gvart/parleyroom/lesson/routing/Routing.kt
+  s_4985e1aeba0736::t_36183c3e0a7fde 141,339
+src/com/gvart/parleyroom/lesson/service/LessonLifecycleService.kt
+  s_4985e1aeba0736::t_26c418cad0ec1a 38,103-105,166-173,191-195
+src/com/gvart/parleyroom/lesson/service/LessonParticipantService.kt
+  s_4985e1aeba0736::t_c89672f20214ff 16,23,80-84,90,96,100-120
+src/com/gvart/parleyroom/notification/data/NotificationTable.kt
+  s_4985e1aeba0736::t_0ac3c1fcf5d7d1 31-34
+src/com/gvart/parleyroom/user/data/UserTable.kt
+  s_4985e1aeba0736::t_e19a55b125bb11 28-31
+src/com/gvart/parleyroom/user/service/UserService.kt
+  s_4985e1aeba0736::t_3fb5151a23727b 95-96,112-113,228-229
+src/com/gvart/parleyroom/user/transfer/UpdateProfileRequest.kt
+  s_4985e1aeba0736::t_9631dac82ed5da 22-25,31
+src/com/gvart/parleyroom/user/transfer/UserResponse.kt
+  s_4985e1aeba0736::t_1d7026ad332e84 30-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "f77508986306a8183e655af6ed02373d5f528c0a",
+  "prompts": {},
+  "sessions": {
+    "s_4985e1aeba0736": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "67d7b6f0-b72a-461c-a3eb-bc1269097f4b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
