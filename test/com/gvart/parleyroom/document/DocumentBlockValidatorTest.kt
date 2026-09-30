@@ -4,6 +4,7 @@ import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.document.service.DocumentBlockValidator
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -78,6 +79,14 @@ class DocumentBlockValidatorTest {
             )
         }
         assertEquals("DOCUMENT_INVALID_BLOCK", error.code)
+    }
+
+    @Test
+    fun `media can attach a file material`() {
+        val references = DocumentBlockValidator.validate(
+            blocks("""[{"id":"$ID1","type":"media","kind":"FILE","materialId":"$ID2","questions":[]}]""")
+        )
+        assertEquals(mapOf("/blocks/0/materialId" to UUID.fromString(ID2)), references.materials)
     }
 
     @Test
