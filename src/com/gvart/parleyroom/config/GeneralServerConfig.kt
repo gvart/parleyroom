@@ -64,6 +64,12 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.auth.Authentication
 import io.ktor.server.auth.jwt.jwt
+import io.ktor.server.auth.jwt.JWTAuthenticationProvider
+import io.ktor.server.auth.parseAuthorizationHeader
+import io.ktor.http.auth.HttpAuthHeader
+import io.ktor.http.ContentType
+import io.ktor.serialization.kotlinx.json.DefaultJson
+import io.ktor.server.response.respondText
 import io.ktor.server.plugins.callid.CallId
 import io.ktor.server.plugins.callid.callIdMdc
 import io.ktor.server.plugins.calllogging.CallLogging
@@ -86,6 +92,8 @@ import io.ktor.server.routing.routing
 import org.slf4j.event.Level
 import java.util.UUID
 import kotlin.time.Duration
+
+const val SSE_AUTH = "jwt-sse"
 
 fun Application.generalConfig() {
     val config = environment.config
@@ -282,33 +290,50 @@ fun Application.generalConfig() {
     }
 
     val jwtConfig: JwtConfig by dependencies
-    install(Authentication) {
-        jwt {
-            realm = jwtConfig.realm
-            verifier(
-                JWT.require(Algorithm.HMAC256(jwtConfig.secret))
-                    .withAudience(jwtConfig.audience)
-                    .withIssuer(jwtConfig.issuer)
-                    .build()
-            )
+    fun JWTAuthenticationProvider.Config.configureJwt() {
+        realm = jwtConfig.realm
+        verifier(
+            JWT.require(Algorithm.HMAC256(jwtConfig.secret))
+                .withAudience(jwtConfig.audience)
+                .withIssuer(jwtConfig.issuer)
+                .build()
+        )
 
-            validate {
-                val id = it.payload.getClaim("id").asString()
-                val email = it.payload.getClaim("email").asString()
-                val role = UserRole.valueOf(it.payload.getClaim("role").asString())
+        validate {
+            val id = it.payload.getClaim("id").asString()
+            val email = it.payload.getClaim("email").asString()
+            val role = UserRole.valueOf(it.payload.getClaim("role").asString())
 
-                if (id != null && email != null) UserPrincipal(
-                    UUID.fromString(id),
-                    email,
-                    role,
-                ) else null
-            }
+            if (id != null && email != null) UserPrincipal(
+                UUID.fromString(id),
+                email,
+                role,
+            ) else null
+        }
 
-            challenge { _, _ ->
-                call.respond(
-                    HttpStatusCode.Unauthorized,
+        // Serialized by hand: an SSE client sends Accept: text/event-stream, and ContentNegotiation
+        // would turn a negotiated JSON body into an empty 406 instead of the 401.
+        challenge { _, _ ->
+            call.respondText(
+                DefaultJson.encodeToString(
+                    ProblemDetail.serializer(),
                     ProblemDetail.of(HttpStatusCode.Unauthorized, "Missing or invalid access token", "UNAUTHORIZED"),
-                )
+                ),
+                ContentType.Application.Json,
+                HttpStatusCode.Unauthorized,
+            )
+        }
+    }
+
+    install(Authentication) {
+        jwt { configureJwt() }
+
+        // EventSource cannot set headers, so the notification stream also takes ?access_token=.
+        jwt(SSE_AUTH) {
+            configureJwt()
+            authHeader { call ->
+                runCatching { call.request.parseAuthorizationHeader() }.getOrNull()
+                    ?: call.request.queryParameters["access_token"]?.let { HttpAuthHeader.Single("Bearer", it) }
             }
         }
     }
