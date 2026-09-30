@@ -66,6 +66,12 @@ class DocumentDraftService(
         toResponse(requireDraft(documentId), document)
     }
 
+    /** Like [get], but null instead of 404 when there is no draft. */
+    fun find(documentId: UUID, principal: UserPrincipal): DocumentDraftResponse? = transaction {
+        val document = support.requireOwned(documentId, principal)
+        DocumentDraftTable.selectAll().where { DocumentDraftTable.documentId eq documentId }.singleOrNull()?.let { toResponse(it, document) }
+    }
+
     /** Manual edits of the draft before publishing. */
     fun update(documentId: UUID, input: DocumentDraftInput, principal: UserPrincipal): DocumentDraftResponse = transaction {
         val document = support.requireOwned(documentId, principal)

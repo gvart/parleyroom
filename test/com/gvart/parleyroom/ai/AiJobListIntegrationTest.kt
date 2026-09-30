@@ -8,6 +8,7 @@ import com.gvart.parleyroom.ai.transfer.AiJobEvent
 import com.gvart.parleyroom.ai.transfer.AiJobSummary
 import com.gvart.parleyroom.ai.transfer.AiJobTargetType
 import com.gvart.parleyroom.ai.transfer.DraftBundleResponse
+import com.gvart.parleyroom.ai.transfer.DocumentDraftResponse
 import com.gvart.parleyroom.ai.transfer.DraftKind
 import com.gvart.parleyroom.ai.transfer.GenerationJobResponse
 import com.gvart.parleyroom.ai.transfer.RefineRequest
@@ -97,6 +98,25 @@ class AiJobListIntegrationTest : IntegrationTest() {
         assertEquals(AiJobTargetType.DOCUMENT, summary.targetType)
         assertEquals(documentId.toString(), summary.documentId)
         assertEquals("Urlaub am Meer", summary.documentTitle)
+    }
+
+    @Test
+    fun `optional draft lookup answers 204 instead of 404 when there is no draft`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val documentId = LibraryFixtures.document("Ohne Entwurf")
+
+        assertEquals(HttpStatusCode.NoContent, client.get("/api/v1/documents/$documentId/draft?optional=true") { bearerAuth(token) }.status)
+        assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/documents/$documentId/draft") { bearerAuth(token) }.status)
+
+        val job = client.post("/api/v1/documents/$documentId/ai-refine") {
+            contentType(ContentType.Application.Json); bearerAuth(token); setBody(RefineRequest("Mehr Beispiele"))
+        }.body<GenerationJobResponse>()
+        client.awaitJob(token, job.id)
+        val found = client.get("/api/v1/documents/$documentId/draft?optional=true") { bearerAuth(token) }
+        assertEquals(HttpStatusCode.OK, found.status)
+        assertEquals(documentId.toString(), found.body<DocumentDraftResponse>().documentId)
+        assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/documents/$documentId/draft?optional=true") { bearerAuth(getStudentToken(client)) }.status)
     }
 
     @Test
