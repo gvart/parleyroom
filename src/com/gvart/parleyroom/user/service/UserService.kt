@@ -92,6 +92,8 @@ class UserService(
         val current = UserTable.findByIdOrThrow(principal.id, "User")
         if (request.nativeLanguage != null && current[UserTable.role] != UserRole.STUDENT)
             throw BadRequestException("Only students have a native language", code = "NATIVE_LANGUAGE_STUDENTS_ONLY")
+        if ((request.autoConfirmBookings != null || request.autoAcceptClubJoins != null) && current[UserTable.role] != UserRole.TEACHER)
+            throw BadRequestException("Only teachers have approval settings", code = "APPROVAL_SETTINGS_TEACHERS_ONLY")
 
         val newFirstName = request.firstName?.trim() ?: current[UserTable.firstName]
         val newLastName = request.lastName?.trim() ?: current[UserTable.lastName]
@@ -107,6 +109,8 @@ class UserService(
             if (request.timezone != null) it[timezone] = request.timezone
             if (request.bookingBufferMinutes != null) it[bookingBufferMinutes] = request.bookingBufferMinutes
             if (request.bookingMinNoticeHours != null) it[bookingMinNoticeHours] = request.bookingMinNoticeHours
+            if (request.autoConfirmBookings != null) it[autoConfirmBookings] = request.autoConfirmBookings
+            if (request.autoAcceptClubJoins != null) it[autoAcceptClubJoins] = request.autoAcceptClubJoins
             it[updatedAt] = OffsetDateTime.now()
         }
 
@@ -221,6 +225,8 @@ class UserService(
             timezone = row[UserTable.timezone],
             bookingBufferMinutes = row[UserTable.bookingBufferMinutes],
             bookingMinNoticeHours = row[UserTable.bookingMinNoticeHours],
+            autoConfirmBookings = row[UserTable.autoConfirmBookings],
+            autoAcceptClubJoins = row[UserTable.autoAcceptClubJoins],
             createdAt = row[UserTable.createdAt],
             telegramId = row[UserTable.telegramId],
             telegramUsername = row[UserTable.telegramUsername],

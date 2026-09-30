@@ -25,6 +25,10 @@ object UserTable : UUIDTable("users") {
     val timezone = varchar("timezone", 64).default("Europe/Berlin")
     val bookingBufferMinutes = integer("booking_buffer_minutes").nullable()
     val bookingMinNoticeHours = integer("booking_min_notice_hours").nullable()
+    /** Teachers: a student's valid 1:1 booking is confirmed without a request step. */
+    val autoConfirmBookings = bool("auto_confirm_bookings").default(false)
+    /** Teachers: a club join with a free spot is accepted without a request step. */
+    val autoAcceptClubJoins = bool("auto_accept_club_joins").default(false)
     val createdAt = timestampWithTimeZone("created_at")
     val updatedAt = timestampWithTimeZone("updated_at")
     val failedLoginAttempts = integer("failed_login_attempts").default(0)
