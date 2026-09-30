@@ -1838,7 +1838,7 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 |---|---|
 | Auth | `INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `INVALID_REFRESH_TOKEN`, `REFRESH_TOKEN_EXPIRED` |
 | Telegram | `TELEGRAM_NOT_LINKED`, `TELEGRAM_ALREADY_LINKED`, `TELEGRAM_NOT_CONFIGURED`, `TELEGRAM_AUTH_INVALID`, `TELEGRAM_AUTH_EXPIRED` |
-| Users | `USER_NOT_FOUND`, `TEACHER_NOT_FOUND`, `EMAIL_ALREADY_EXISTS`, `UNSUPPORTED_LOCALE`, `UNSUPPORTED_NATIVE_LANGUAGE`, `NATIVE_LANGUAGE_STUDENTS_ONLY`, `AVATAR_INVALID`, `AVATAR_NOT_FOUND`, `ADMIN_SELF_ACTION` |
+| Users | `USER_NOT_FOUND`, `TEACHER_NOT_FOUND`, `EMAIL_ALREADY_EXISTS`, `UNSUPPORTED_LOCALE`, `UNSUPPORTED_NATIVE_LANGUAGE`, `NATIVE_LANGUAGE_STUDENTS_ONLY`, `APPROVAL_SETTINGS_TEACHERS_ONLY`, `AVATAR_INVALID`, `AVATAR_NOT_FOUND`, `ADMIN_SELF_ACTION` |
 | Registration / reset | `INVITATION_ALREADY_PENDING`, `REGISTRATION_LINK_INVALID`, `REGISTRATION_LINK_EXPIRED`, `REGISTRATION_LINK_USED`, `RESET_TOKEN_INVALID`, `RESET_TOKEN_EXPIRED`, `RESET_TOKEN_USED` |
 | Lessons | `LESSON_NOT_FOUND`, `LESSON_INVALID_STATE`, `CLUB_FULL`, `NOT_TEACHERS_STUDENT`, `LESSON_NOT_JOINABLE`, `LESSON_ALREADY_STARTED`, `LESSON_NOT_STARTED`, `ALREADY_PARTICIPANT`, `STUDENT_NOT_IN_LESSON`, `JOIN_REQUEST_ALREADY_PENDING`, `JOIN_REQUEST_NOT_FOUND`, `RESCHEDULE_ALREADY_PENDING`, `RESCHEDULE_NOT_FOUND`, `VIDEO_ROOM_NOT_READY` |
 | Availability | `AVAILABILITY_SLOT_BLOCKED`, `AVAILABILITY_MIN_NOTICE`, `AVAILABILITY_OVERLAP`, `AVAILABILITY_BUFFER_CONFLICT`, `AVAILABILITY_EXCEPTION_NOT_FOUND` |
@@ -1872,6 +1872,12 @@ changed by the student (`PATCH /api/v1/users/me { "nativeLanguage": "uk" }`), th
 (`PUT /api/v1/students/{studentId}/native-language`) or an admin (`PATCH /api/v1/admin/users/{id}`).
 Values outside `ru | uk | en` return 400 `UNSUPPORTED_NATIVE_LANGUAGE`. A teacher or admin sending
 `nativeLanguage` on `PATCH /api/v1/users/me` gets 400 `NATIVE_LANGUAGE_STUDENTS_ONLY` (nothing is updated).
+
+Teachers' approval settings are `autoConfirmBookings` (a student's 1:1 booking that passes the availability and
+overlap checks is created `CONFIRMED`, and the teacher gets `LESSON_BOOKED`) and `autoAcceptClubJoins` (a club join with a
+free spot is `CONFIRMED` at once; the student gets `JOIN_ACCEPTED`, the teacher `CLUB_JOINED`). Both default to `false`, are
+returned on `GET /api/v1/users/me` and set with `PATCH /api/v1/users/me`; anyone else sending them gets 400
+`APPROVAL_SETTINGS_TEACHERS_ONLY`.
 
 `PATCH /api/v1/users/me` does **not** change `level`: sending it returns 400 `VALIDATION_FAILED`
 ("level can't be changed here; it is set by the teacher") and nothing is updated. Teachers set a

@@ -13,12 +13,14 @@ import com.gvart.parleyroom.notification.data.NotificationType
 import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserStatus
+import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.security.UserPrincipal
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
@@ -75,27 +77,47 @@ class LessonParticipantService(
             countStudents(lessonId, LessonStudentStatus.CONFIRMED, LessonStudentStatus.REQUESTED) >= maxParticipants
         ) throw ConflictException("Club is full", code = "CLUB_FULL")
 
+        val autoAccept = UserTable.select(UserTable.autoAcceptClubJoins)
+            .where { UserTable.id eq teacherId }
+            .single()[UserTable.autoAcceptClubJoins]
+        val newStatus = if (autoAccept) LessonStudentStatus.CONFIRMED else LessonStudentStatus.REQUESTED
+
         if (existing != null) {
             LessonStudentTable.update({
                 (LessonStudentTable.lessonId eq lessonId) and
                         (LessonStudentTable.studentId eq principal.id)
             }) {
-                it[status] = LessonStudentStatus.REQUESTED
+                it[status] = newStatus
             }
         } else {
             LessonStudentTable.insert {
                 it[LessonStudentTable.lessonId] = lessonId
                 it[LessonStudentTable.studentId] = principal.id
-                it[LessonStudentTable.status] = LessonStudentStatus.REQUESTED
+                it[LessonStudentTable.status] = newStatus
             }
         }
 
-        notificationService.createNotification(
-            userId = teacherId,
-            actorId = principal.id,
-            type = NotificationType.JOIN_REQUESTED,
-            referenceId = lessonId,
-        )
+        if (autoAccept) {
+            notificationService.createNotification(
+                userId = principal.id,
+                actorId = teacherId,
+                type = NotificationType.JOIN_ACCEPTED,
+                referenceId = lessonId,
+            )
+            notificationService.createNotification(
+                userId = teacherId,
+                actorId = principal.id,
+                type = NotificationType.CLUB_JOINED,
+                referenceId = lessonId,
+            )
+        } else {
+            notificationService.createNotification(
+                userId = teacherId,
+                actorId = principal.id,
+                type = NotificationType.JOIN_REQUESTED,
+                referenceId = lessonId,
+            )
+        }
     }
 
     fun withdrawJoinRequest(lessonId: UUID, principal: UserPrincipal) = transaction {

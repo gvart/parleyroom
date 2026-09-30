@@ -28,6 +28,10 @@ enum class NotificationType {
     HOMEWORK_SUBMITTED,
     HOMEWORK_REVIEWED,
     HOMEWORK_RETURNED,
+    /** To the teacher: a student booked a 1:1 that was auto-confirmed. */
+    LESSON_BOOKED,
+    /** To the teacher: a student joined a club that auto-accepts joins. */
+    CLUB_JOINED,
 }
 
 object NotificationTable : UUIDTable("notifications") {

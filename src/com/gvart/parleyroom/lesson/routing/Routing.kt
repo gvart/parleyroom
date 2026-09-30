@@ -138,7 +138,7 @@ fun Application.configureLessonRouting() {
                     call.respond(HttpStatusCode.Created, result)
                 }.describe {
                     summary = "Create lesson"
-                    description = "Creates a new lesson. Students can only create ONE_ON_ONE lessons; teachers and admins can create any type."
+                    description = "Creates a new lesson. Students can only create ONE_ON_ONE lessons, as a REQUEST (or CONFIRMED when the teacher has autoConfirmBookings on); teachers and admins can create any type."
                     requestBody {
                         schema = jsonSchema<CreateLessonRequest>()
                     }
@@ -336,7 +336,7 @@ fun Application.configureLessonRouting() {
                         call.respond(HttpStatusCode.Created)
                     }.describe {
                         summary = "Request to join lesson"
-                        description = "Requests to join an upcoming club of a teacher the student is actively linked to. A pending request holds a spot until the teacher accepts or rejects it, or the student withdraws. Not allowed for ONE_ON_ONE lessons."
+                        description = "Requests to join an upcoming club of a teacher the student is actively linked to. A pending request holds a spot until the teacher accepts or rejects it, or the student withdraws. When the teacher has autoAcceptClubJoins on, a join with a free spot is confirmed straight away. Not allowed for ONE_ON_ONE lessons."
                         parameters {
                             path("id") {
                                 description = "UUID of the lesson"

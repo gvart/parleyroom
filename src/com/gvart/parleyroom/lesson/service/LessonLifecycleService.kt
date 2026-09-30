@@ -35,6 +35,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
@@ -99,7 +100,9 @@ class LessonLifecycleService(
                     throw ForbiddenException("Students can only request one-on-one lessons")
                 if (principal.id !in studentIds)
                     throw ForbiddenException("Students can only request lessons for themselves")
-                LessonStatus.REQUEST
+                // The booking still goes through availability + overlap checks below;
+                // this only skips the teacher's accept step.
+                if (teacherAutoConfirmsBookings(teacherId)) LessonStatus.CONFIRMED else LessonStatus.REQUEST
             }
             UserRole.ADMIN -> LessonStatus.CONFIRMED
         }
@@ -160,6 +163,14 @@ class LessonLifecycleService(
                 type = NotificationType.LESSON_REQUESTED,
                 referenceId = lessonId.value,
             )
+        } else if (principal.role == UserRole.STUDENT) {
+            // Auto-confirmed booking: the student booked it, so only the teacher hears about it.
+            notificationService.createNotification(
+                userId = teacherId,
+                actorId = principal.id,
+                type = NotificationType.LESSON_BOOKED,
+                referenceId = lessonId.value,
+            )
         } else if (status == LessonStatus.CONFIRMED) {
             for (studentId in studentIds) {
                 notificationService.createNotification(
@@ -176,6 +187,11 @@ class LessonLifecycleService(
             .single()
             .let { support.toResponse(it, principal) }
     }
+
+    private fun teacherAutoConfirmsBookings(teacherId: UUID): Boolean =
+        UserTable.select(UserTable.autoConfirmBookings)
+            .where { UserTable.id eq teacherId }
+            .singleOrNull()?.get(UserTable.autoConfirmBookings) ?: false
 
     fun acceptLesson(lessonId: UUID, principal: UserPrincipal): LessonResponse = transaction {
         val lesson = support.findLesson(lessonId)

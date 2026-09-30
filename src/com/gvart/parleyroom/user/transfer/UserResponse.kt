@@ -27,6 +27,10 @@ data class UserResponse(
     val timezone: String,
     val bookingBufferMinutes: Int?,
     val bookingMinNoticeHours: Int?,
+    /** Teachers: students' valid 1:1 bookings are confirmed straight away. */
+    val autoConfirmBookings: Boolean = false,
+    /** Teachers: club joins with a free spot are accepted straight away. */
+    val autoAcceptClubJoins: Boolean = false,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
     val telegramId: Long? = null,
