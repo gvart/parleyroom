@@ -1,0 +1,23 @@
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_4985e1aeba0736::t_1a59e44dd85ce1 67-72,96-97,293-300,302-305,307-312,314-319,321-336
+src/com/gvart/parleyroom/notification/routing/Routing.kt
+  s_4985e1aeba0736::t_73f2266869d6ee 6,96-97,99-100,145-146
+test/com/gvart/parleyroom/notification/NotificationIntegrationTest.kt
+  s_4985e1aeba0736::t_73584f30e9dc06 6,15-25,27,74-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "55d0700b60fb922dc4ba2dc79dd51c35e760ba1c",
+  "prompts": {},
+  "sessions": {
+    "s_4985e1aeba0736": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "67d7b6f0-b72a-461c-a3eb-bc1269097f4b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
