@@ -64,6 +64,13 @@ class LessonIntegrationTest : IntegrationTest() {
         )
     }
 
+    private fun linkStudent2() = transaction {
+        exec(
+            "INSERT INTO teacher_students (teacher_id, student_id, lesson_types, status, started_at) " +
+                "VALUES ('$TEACHER_ID', '$STUDENT_2_ID', '{ONE_ON_ONE}', 'ACTIVE', now())"
+        )
+    }
+
     // -- Create --
 
     @Test
@@ -533,6 +540,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
         val student2Token = getStudent2Token(client)
+        linkStudent2()
 
         val lesson = createLesson(client, teacherToken, type = LessonType.SPEAKING_CLUB).body<LessonResponse>()
 
@@ -548,6 +556,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
         val student2Token = getStudent2Token(client)
+        linkStudent2()
 
         val lesson = createLesson(client, teacherToken).body<LessonResponse>()
 
@@ -579,6 +588,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
         val student2Token = getStudent2Token(client)
+        linkStudent2()
 
         val lesson = createLesson(client, teacherToken, type = LessonType.SPEAKING_CLUB).body<LessonResponse>()
 
@@ -598,6 +608,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
         val student2Token = getStudent2Token(client)
+        linkStudent2()
 
         // maxParticipants=1, student already confirmed
         val lesson = createLesson(client, teacherToken, type = LessonType.SPEAKING_CLUB, maxParticipants = 1)
@@ -607,7 +618,8 @@ class LessonIntegrationTest : IntegrationTest() {
             bearerAuth(student2Token)
         }
 
-        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertEquals(HttpStatusCode.Conflict, response.status)
+        assertEquals("CLUB_FULL", response.body<ProblemDetail>().code)
     }
 
     @Test
@@ -615,6 +627,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
         val student2Token = getStudent2Token(client)
+        linkStudent2()
 
         val lesson = createLesson(client, teacherToken, type = LessonType.SPEAKING_CLUB).body<LessonResponse>()
 
@@ -649,6 +662,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
         val student2Token = getStudent2Token(client)
+        linkStudent2()
 
         val lesson = createLesson(client, teacherToken, type = LessonType.SPEAKING_CLUB).body<LessonResponse>()
 
@@ -662,12 +676,10 @@ class LessonIntegrationTest : IntegrationTest() {
 
         assertEquals(HttpStatusCode.OK, response.status)
 
-        // Student2 should not see the lesson
-        val lessons = client.get("/api/v1/lessons") {
-            bearerAuth(student2Token)
-        }.body<LessonPageResponse>().lessons
-
-        assertEquals(0, lessons.size)
+        val updated = client.get("/api/v1/lessons/${lesson.id}") {
+            bearerAuth(teacherToken)
+        }.body<LessonResponse>()
+        assertTrue(updated.students.any { it.id == STUDENT_2_ID && it.status == "REJECTED" })
     }
 
     @Test
@@ -676,6 +688,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val teacherToken = getTeacherToken(client)
         val studentToken = getStudentToken(client)
         val student2Token = getStudent2Token(client)
+        linkStudent2()
 
         val lesson = createLesson(client, teacherToken, type = LessonType.SPEAKING_CLUB).body<LessonResponse>()
 
@@ -695,6 +708,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val teacherToken = getTeacherToken(client)
         val student2Token = getStudent2Token(client)
+        linkStudent2()
 
         val lesson = createLesson(client, teacherToken, type = LessonType.SPEAKING_CLUB).body<LessonResponse>()
 

@@ -16,6 +16,7 @@ import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.MoveLessonRequest
 import com.gvart.parleyroom.lesson.transfer.MoveLessonResponse
+import com.gvart.parleyroom.lesson.transfer.OpenClubResponse
 import com.gvart.parleyroom.lesson.transfer.PublicCalendarResponse
 import com.gvart.parleyroom.lesson.transfer.RescheduleLessonRequest
 import com.gvart.parleyroom.lesson.transfer.StartLessonResponse
@@ -156,6 +157,28 @@ fun Application.configureLessonRouting() {
                         }
                         HttpStatusCode.Forbidden {
                             description = "Insufficient permissions for the requested lesson type"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                    }
+                }
+
+                get("/open-clubs") {
+                    val principal = call.requirePrincipal()
+                    call.respond(HttpStatusCode.OK, lessonService.getOpenClubs(principal))
+                }.describe {
+                    summary = "List open clubs"
+                    description = "Student-only. Upcoming confirmed speaking/reading clubs of the student's actively linked teachers, ordered by start. Each club carries taken spots (confirmed + pending requests) and the viewer's own status; other participants are never named."
+                    responses {
+                        HttpStatusCode.OK {
+                            description = "Upcoming clubs"
+                            schema = jsonSchema<List<OpenClubResponse>>()
+                        }
+                        HttpStatusCode.Unauthorized {
+                            description = "Missing or invalid authentication token"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.Forbidden {
+                            description = "Caller is not a student"
                             schema = jsonSchema<ProblemDetail>()
                         }
                     }
@@ -313,7 +336,7 @@ fun Application.configureLessonRouting() {
                         call.respond(HttpStatusCode.Created)
                     }.describe {
                         summary = "Request to join lesson"
-                        description = "Requests to join a group lesson. Not allowed for ONE_ON_ONE lessons. Teacher must accept the request."
+                        description = "Requests to join an upcoming club of a teacher the student is actively linked to. A pending request holds a spot until the teacher accepts or rejects it, or the student withdraws. Not allowed for ONE_ON_ONE lessons."
                         parameters {
                             path("id") {
                                 description = "UUID of the lesson"
@@ -324,15 +347,48 @@ fun Application.configureLessonRouting() {
                                 description = "Join request submitted"
                             }
                             HttpStatusCode.BadRequest {
-                                description = "Cannot join this lesson type or lesson is full"
+                                description = "Cannot join this lesson type, or the lesson is not upcoming and confirmed"
                                 schema = jsonSchema<ProblemDetail>()
                             }
                             HttpStatusCode.Unauthorized {
                                 description = "Missing or invalid authentication token"
                                 schema = jsonSchema<ProblemDetail>()
                             }
+                            HttpStatusCode.Forbidden {
+                                description = "NOT_TEACHERS_STUDENT: caller is not actively linked to the club's teacher"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
                             HttpStatusCode.Conflict {
-                                description = "Already a participant or request already pending"
+                                description = "ALREADY_PARTICIPANT, JOIN_REQUEST_ALREADY_PENDING, or CLUB_FULL"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
+                        }
+                    }
+
+                    delete("/join") {
+                        val principal = call.requirePrincipal()
+                        val id = call.getPathUUID()
+
+                        participantService.withdrawJoinRequest(id, principal)
+                        call.respond(HttpStatusCode.NoContent)
+                    }.describe {
+                        summary = "Withdraw join request"
+                        description = "Withdraws the caller's pending join request, freeing the spot it held."
+                        parameters {
+                            path("id") {
+                                description = "UUID of the lesson"
+                            }
+                        }
+                        responses {
+                            HttpStatusCode.NoContent {
+                                description = "Request withdrawn"
+                            }
+                            HttpStatusCode.Unauthorized {
+                                description = "Missing or invalid authentication token"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
+                            HttpStatusCode.NotFound {
+                                description = "Lesson not found, or JOIN_REQUEST_NOT_FOUND when nothing is pending"
                                 schema = jsonSchema<ProblemDetail>()
                             }
                         }
@@ -512,6 +568,10 @@ fun Application.configureLessonRouting() {
                                 }
                                 HttpStatusCode.Forbidden {
                                     description = "Only the teacher can accept join requests"
+                                    schema = jsonSchema<ProblemDetail>()
+                                }
+                                HttpStatusCode.Conflict {
+                                    description = "CLUB_FULL: every spot is already confirmed"
                                     schema = jsonSchema<ProblemDetail>()
                                 }
                                 HttpStatusCode.NotFound {

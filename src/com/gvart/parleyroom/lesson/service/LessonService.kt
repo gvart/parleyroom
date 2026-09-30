@@ -4,6 +4,7 @@ import com.gvart.parleyroom.common.service.singleOrNotFound
 import com.gvart.parleyroom.availability.service.AvailabilityService
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.transfer.PageRequest
+import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentStatus
@@ -11,6 +12,8 @@ import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
+import com.gvart.parleyroom.lesson.transfer.LessonTeacherResponse
+import com.gvart.parleyroom.lesson.transfer.OpenClubResponse
 import com.gvart.parleyroom.lesson.transfer.PublicCalendarResponse
 import com.gvart.parleyroom.lesson.transfer.PublicLesson
 import com.gvart.parleyroom.lesson.transfer.PublicTeacher
@@ -22,6 +25,7 @@ import com.gvart.parleyroom.user.security.UserPrincipal
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.core.greaterEq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.lessEq
@@ -143,6 +147,73 @@ class LessonService(
             response.copy(
                 students = emptyList(),
                 correctedSentences = emptyList(),
+            )
+        }
+    }
+
+    /**
+     * Upcoming clubs from the student's actively linked teachers, with spot
+     * counts and the student's own request status.
+     */
+    fun getOpenClubs(principal: UserPrincipal): List<OpenClubResponse> = transaction {
+        if (principal.role != UserRole.STUDENT)
+            throw ForbiddenException("Only students can browse open clubs")
+
+        val teacherIds = TeacherStudentTable
+            .select(TeacherStudentTable.teacherId)
+            .where {
+                (TeacherStudentTable.studentId eq principal.id) and
+                        (TeacherStudentTable.status eq UserStatus.ACTIVE)
+            }
+            .map { it[TeacherStudentTable.teacherId].value }
+
+        val rows = LessonTable.selectAll()
+            .where {
+                (LessonTable.teacherId inList teacherIds) and
+                        (LessonTable.type inList listOf(LessonType.SPEAKING_CLUB, LessonType.READING_CLUB)) and
+                        (LessonTable.status eq LessonStatus.CONFIRMED) and
+                        (LessonTable.scheduledAt greater OffsetDateTime.now())
+            }
+            .orderBy(LessonTable.scheduledAt to SortOrder.ASC, LessonTable.id to SortOrder.ASC)
+            .toList()
+        if (rows.isEmpty()) return@transaction emptyList()
+        val lessonIds = rows.map { it[LessonTable.id].value }
+
+        val participants = LessonStudentTable.selectAll()
+            .where { LessonStudentTable.lessonId inList lessonIds }
+            .toList()
+        val takenByLesson = participants
+            .filter { it[LessonStudentTable.status] != LessonStudentStatus.REJECTED }
+            .groupingBy { it[LessonStudentTable.lessonId].value }
+            .eachCount()
+        val myStatusByLesson = participants
+            .filter { it[LessonStudentTable.studentId].value == principal.id }
+            .associate { it[LessonStudentTable.lessonId].value to it[LessonStudentTable.status] }
+
+        val teachersById = UserTable.selectAll()
+            .where { UserTable.id inList teacherIds }
+            .associate {
+                it[UserTable.id].value to LessonTeacherResponse(
+                    id = it[UserTable.id].value.toString(),
+                    firstName = it[UserTable.firstName],
+                    lastName = it[UserTable.lastName],
+                )
+            }
+
+        rows.map { row ->
+            val lessonId = row[LessonTable.id].value
+            OpenClubResponse(
+                id = lessonId.toString(),
+                title = row[LessonTable.title],
+                type = row[LessonTable.type],
+                scheduledAt = row[LessonTable.scheduledAt],
+                durationMinutes = row[LessonTable.durationMinutes],
+                topic = row[LessonTable.topic],
+                level = row[LessonTable.level],
+                teacher = teachersById.getValue(row[LessonTable.teacherId].value),
+                maxParticipants = row[LessonTable.maxParticipants],
+                takenSpots = takenByLesson[lessonId] ?: 0,
+                myStatus = myStatusByLesson[lessonId],
             )
         }
     }
