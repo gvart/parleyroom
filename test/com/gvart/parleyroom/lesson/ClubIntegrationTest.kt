@@ -5,6 +5,7 @@ import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
+import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.OpenClubResponse
 import com.gvart.parleyroom.notification.data.NotificationType
@@ -236,6 +237,15 @@ class ClubIntegrationTest : IntegrationTest() {
         assertEquals(6, clubs[1].maxParticipants)
         assertNull(clubs[1].myStatus)
         assertEquals("Test", clubs[1].teacher.firstName)
+
+        // A pending request doesn't reveal the roster in the lesson list either.
+        val laterAsSeen = client.get("/api/v1/lessons") { bearerAuth(student2) }
+            .body<LessonPageResponse>().lessons.single { it.id == later.id }
+        assertTrue(laterAsSeen.students.isEmpty())
+        join(client, later.id, student2)
+        val pendingAsSeen = client.get("/api/v1/lessons") { bearerAuth(student2) }
+            .body<LessonPageResponse>().lessons.single { it.id == later.id }
+        assertTrue(pendingAsSeen.students.isEmpty())
 
         val forStudent = openClubs(client, getStudentToken(client))
         assertEquals(LessonStudentStatus.CONFIRMED, forStudent.single { it.id == later.id }.myStatus)

@@ -123,7 +123,10 @@ class LessonService(
      */
     private fun scrubForStudent(response: LessonResponse, studentId: UUID): LessonResponse {
         val studentIdStr = studentId.toString()
-        val isParticipant = response.students.any { it.id == studentIdStr }
+        // Only a confirmed seat reveals the roster; a pending or rejected request doesn't.
+        val isParticipant = response.students.any {
+            it.id == studentIdStr && it.status == LessonStudentStatus.CONFIRMED.name
+        }
         if (isParticipant) return response
 
         val isOneOnOne = response.type == LessonType.ONE_ON_ONE
