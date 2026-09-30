@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/gvart/parleyroom/compare/v1.1.0...v1.2.0) (2026-09-30)
+
+
+### Features
+
+* **clubs:** open clubs list, spot-holding join requests and withdraw ([#61](https://github.com/gvart/parleyroom/issues/61)) ([d0967d8](https://github.com/gvart/parleyroom/commit/d0967d82c5125276aae22b08c86f7c075f93bd73))
+
 ## [1.1.0](https://github.com/gvart/parleyroom/compare/v1.0.0...v1.1.0) (2026-09-30)
 
 
