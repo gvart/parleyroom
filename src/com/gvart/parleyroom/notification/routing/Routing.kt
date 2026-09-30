@@ -28,7 +28,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.json.Json
 import java.io.IOException
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
@@ -120,9 +119,9 @@ fun Application.configureNotificationRouting() {
                                     }
                                 }
                                 try {
-                                    flow.collect { notification ->
+                                    flow.collect { data ->
                                         writeMutex.withLock {
-                                            write("data: ${Json.encodeToString(notification)}\n\n")
+                                            write("data: $data\n\n")
                                             flush()
                                         }
                                     }

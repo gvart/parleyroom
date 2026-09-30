@@ -246,12 +246,24 @@ fun Application.configureDraftRouting() {
 
                 route("/draft") {
                     get {
-                        call.respond(HttpStatusCode.OK, documentDrafts.get(call.getPathUUID(), call.requirePrincipal()))
+                        val id = call.getPathUUID()
+                        val principal = call.requirePrincipal()
+                        if (call.request.queryParameters["optional"] == "true") {
+                            val draft = documentDrafts.find(id, principal)
+                            if (draft == null) call.respond(HttpStatusCode.NoContent) else call.respond(HttpStatusCode.OK, draft)
+                        } else {
+                            call.respond(HttpStatusCode.OK, documentDrafts.get(id, principal))
+                        }
                     }.describe {
                         summary = "Get the document's draft revision"
-                        parameters { path("id") { description = "Document UUID" } }
+                        description = "With optional=true, no draft is 204 instead of 404 (for pages that only check whether one exists)."
+                        parameters {
+                            path("id") { description = "Document UUID" }
+                            query("optional") { description = "true: 204 when there is no draft"; required = false }
+                        }
                         responses {
                             HttpStatusCode.OK { schema = jsonSchema<DocumentDraftResponse>() }
+                            HttpStatusCode.NoContent { description = "No draft (optional=true)" }
                             HttpStatusCode.NotFound { description = "DOCUMENT_DRAFT_NOT_FOUND"; schema = jsonSchema<ProblemDetail>() }
                         }
                     }

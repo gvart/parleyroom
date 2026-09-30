@@ -40,6 +40,7 @@ import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.lesson.data.LessonTopicTable
 import com.gvart.parleyroom.library.LibraryFixtures
+import com.gvart.parleyroom.notification.service.NotificationSseManager
 import com.gvart.parleyroom.notification.data.NotificationType
 import com.gvart.parleyroom.notification.transfer.NotificationPageResponse
 import com.gvart.parleyroom.practice.transfer.PracticeQueueResponse
@@ -385,7 +386,7 @@ class DraftBundleIntegrationTest : IntegrationTest() {
         val job = client.startGenerate(token, seedLesson(), "[fake:delay=3000]").body<DraftBundleResponse>().job!!
 
         // Simulates the next boot: a fresh runner fails what the previous process left behind.
-        val runner = GenerationJobRunner(AiConfig("fake", "fake", "", 2, 3, Duration.parse("30s")))
+        val runner = GenerationJobRunner(AiConfig("fake", "fake", "", 2, 3, Duration.parse("30s")), NotificationSseManager())
         assertEquals(1, runner.failInterruptedJobs())
         val failed = client.get("/api/v1/ai/jobs/${job.id}") { bearerAuth(token) }.body<GenerationJobResponse>()
         assertEquals(GenerationJobStatus.FAILED, failed.status)

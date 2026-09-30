@@ -5,7 +5,9 @@ import com.gvart.parleyroom.ai.data.GenerationJobKind
 import com.gvart.parleyroom.ai.data.GenerationJobStatus
 import com.gvart.parleyroom.ai.data.GenerationJobTable
 import com.gvart.parleyroom.ai.llm.LlmException
+import com.gvart.parleyroom.ai.transfer.AiJobEvent
 import com.gvart.parleyroom.common.transfer.exception.TooManyRequestsException
+import com.gvart.parleyroom.notification.service.NotificationSseManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,8 +56,9 @@ data class JobSuccess(
  * Runs generation jobs in-process (single backend pod) on coroutines. Jobs are rows in
  * `generation_jobs`; clients poll them. A teacher may have [AiConfig.maxActiveJobsPerTeacher]
  * active jobs; at most [AiConfig.maxConcurrentJobs] run at once, the rest wait QUEUED.
+ * Queued and finished jobs are pushed to the teacher's notification stream as [AiJobEvent]s.
  */
-class GenerationJobRunner(private val config: AiConfig) {
+class GenerationJobRunner(private val config: AiConfig, private val sse: NotificationSseManager) {
 
     private val log = LoggerFactory.getLogger(GenerationJobRunner::class.java)
     private val supervisor = SupervisorJob()
@@ -78,7 +81,7 @@ class GenerationJobRunner(private val config: AiConfig) {
         bundleId: UUID? = null,
         modelId: String,
     ): UUID = synchronized(admission) {
-        transaction {
+        val jobId = transaction {
             val active = GenerationJobTable.selectAll()
                 .where {
                     (GenerationJobTable.teacherId eq teacherId) and
@@ -104,6 +107,7 @@ class GenerationJobRunner(private val config: AiConfig) {
                 it[createdAt] = OffsetDateTime.now()
             }.value
         }
+        jobId.also { push(it, AiJobEvent.STARTED) }
     }
 
     /** Starts [work] for a QUEUED job once a slot is free, and records its outcome. */
@@ -124,6 +128,7 @@ class GenerationJobRunner(private val config: AiConfig) {
                     onSuccess = { markSucceeded(jobId, it) },
                     onFailure = { markFailed(jobId, it) },
                 )
+                push(jobId, AiJobEvent.FINISHED)
             }
         }
     }
@@ -142,6 +147,14 @@ class GenerationJobRunner(private val config: AiConfig) {
 
     fun shutdown() {
         supervisor.cancel()
+    }
+
+    /** Best effort: the tray also polls, so a lost push only delays it. */
+    private fun push(jobId: UUID, type: String) {
+        runCatching {
+            val (teacherId, summary) = transaction { AiJobSummaries.find(jobId) } ?: return
+            sse.emit(teacherId, GenerationJobs.json.encodeToString(AiJobEvent(type, summary)))
+        }.onFailure { log.warn("AI job {} event push failed", jobId, it) }
     }
 
     private fun markRunning(jobId: UUID) = transaction {

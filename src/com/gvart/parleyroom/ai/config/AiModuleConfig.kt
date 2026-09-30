@@ -15,6 +15,7 @@ import com.gvart.parleyroom.ai.service.LibrarySuggestionService
 import com.gvart.parleyroom.ai.service.MaterialSources
 import com.gvart.parleyroom.ai.service.PromptTemplateService
 import com.gvart.parleyroom.ai.service.SuggestTagsService
+import com.gvart.parleyroom.notification.service.NotificationSseManager
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.plugins.di.dependencies
@@ -41,7 +42,8 @@ fun Application.configureAiModule() {
     if (gateway == null) environment.log.warn("AI provider '${aiConfig.provider}' is not configured (ANTHROPIC_API_KEY empty?): AI endpoints return 503")
     else environment.log.info("AI provider: ${aiConfig.provider}, model ${gateway.modelId}")
 
-    val runner = GenerationJobRunner(aiConfig)
+    val sseManager: NotificationSseManager by dependencies
+    val runner = GenerationJobRunner(aiConfig, sseManager)
     val interrupted = runner.failInterruptedJobs()
     if (interrupted > 0) environment.log.warn("Marked $interrupted interrupted AI jobs as FAILED")
     monitor.subscribe(ApplicationStopping) { runner.shutdown() }
