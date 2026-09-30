@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.0](https://github.com/gvart/parleyroom/compare/v1.0.0...v1.1.0) (2026-09-30)
+
+
+### Features
+
+* **ai:** list the teacher's AI jobs and push queued/finished events ([#60](https://github.com/gvart/parleyroom/issues/60)) ([c023c45](https://github.com/gvart/parleyroom/commit/c023c45e5e15a6c9599d763d7ca07e792a7a1b6f))
+* **ai:** only new words in AI drafts, tagged with the teacher's topics and grammar ([#57](https://github.com/gvart/parleyroom/issues/57)) ([4ddf0b7](https://github.com/gvart/parleyroom/commit/4ddf0b77a718c3cb99e4be75d0b0921bf418968a))
+* **documents:** allow FILE media blocks for attached documents ([#58](https://github.com/gvart/parleyroom/issues/58)) ([e71c90e](https://github.com/gvart/parleyroom/commit/e71c90efe3ae2b06dc5f9e0faf266128eb3fb6b3))
+* **homework:** teacher can follow, edit and grade open homework ([#56](https://github.com/gvart/parleyroom/issues/56)) ([2ce3dee](https://github.com/gvart/parleyroom/commit/2ce3deec2bc8bc1ae98d46832b4dcd3831183752))
+
 ## [1.0.0](https://github.com/gvart/parleyroom/compare/v0.13.0...v1.0.0) (2026-09-29)
 
 

@@ -32,7 +32,7 @@ plugins:
       name: ghcr.io/gvart/parleyroom
       tags:
         - latest
-        - 1.0.0 # x-release-please-version
+        - 1.1.0 # x-release-please-version
 
 dependencies:
   - $ktor.server.core
