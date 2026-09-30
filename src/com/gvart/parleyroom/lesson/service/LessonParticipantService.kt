@@ -9,6 +9,7 @@ import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
+import com.gvart.parleyroom.lesson.transfer.JoinLessonResponse
 import com.gvart.parleyroom.notification.data.NotificationType
 import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.user.data.TeacherStudentTable
@@ -32,7 +33,7 @@ class LessonParticipantService(
     private val support: LessonSupport,
 ) {
 
-    fun joinLesson(lessonId: UUID, principal: UserPrincipal) = transaction {
+    fun joinLesson(lessonId: UUID, principal: UserPrincipal): JoinLessonResponse = transaction {
         // Row lock on the lesson serialises concurrent joins, so two students can't
         // both take the last spot.
         val lesson = support.findLessonForUpdate(lessonId)
@@ -118,6 +119,7 @@ class LessonParticipantService(
                 referenceId = lessonId,
             )
         }
+        JoinLessonResponse(newStatus)
     }
 
     fun withdrawJoinRequest(lessonId: UUID, principal: UserPrincipal) = transaction {

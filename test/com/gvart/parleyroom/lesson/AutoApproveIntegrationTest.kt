@@ -6,6 +6,7 @@ import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
+import com.gvart.parleyroom.lesson.transfer.JoinLessonResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.OpenClubResponse
 import com.gvart.parleyroom.notification.data.NotificationType
@@ -154,7 +155,8 @@ class AutoApproveIntegrationTest : IntegrationTest() {
         val teacher = getTeacherToken(client)
         val club = createLesson(client, teacher, LessonType.SPEAKING_CLUB, emptyList(), 2).body<LessonResponse>()
 
-        client.post("/api/v1/lessons/${club.id}/join") { bearerAuth(getStudentToken(client)) }
+        val joined = client.post("/api/v1/lessons/${club.id}/join") { bearerAuth(getStudentToken(client)) }
+        assertEquals(LessonStudentStatus.REQUESTED, joined.body<JoinLessonResponse>().status)
 
         val seen = client.get("/api/v1/lessons/open-clubs") { bearerAuth(getStudentToken(client)) }
             .body<List<OpenClubResponse>>().single()
@@ -172,7 +174,9 @@ class AutoApproveIntegrationTest : IntegrationTest() {
         patchMe(client, teacher, UpdateProfileRequest(autoAcceptClubJoins = true))
         val club = createLesson(client, teacher, LessonType.SPEAKING_CLUB, emptyList(), 1).body<LessonResponse>()
 
-        assertEquals(HttpStatusCode.Created, client.post("/api/v1/lessons/${club.id}/join") { bearerAuth(student) }.status)
+        val joined = client.post("/api/v1/lessons/${club.id}/join") { bearerAuth(student) }
+        assertEquals(HttpStatusCode.Created, joined.status)
+        assertEquals(LessonStudentStatus.CONFIRMED, joined.body<JoinLessonResponse>().status)
 
         val seen = client.get("/api/v1/lessons/open-clubs") { bearerAuth(student) }
             .body<List<OpenClubResponse>>().single()

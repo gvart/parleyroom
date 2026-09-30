@@ -12,6 +12,7 @@ import com.gvart.parleyroom.lesson.service.LessonRescheduleService
 import com.gvart.parleyroom.lesson.service.LessonService
 import com.gvart.parleyroom.lesson.transfer.CancelLessonRequest
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
+import com.gvart.parleyroom.lesson.transfer.JoinLessonResponse
 import com.gvart.parleyroom.lesson.transfer.LessonPageResponse
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.MoveLessonRequest
@@ -332,8 +333,7 @@ fun Application.configureLessonRouting() {
                         val principal = call.requirePrincipal()
                         val id = call.getPathUUID()
 
-                        participantService.joinLesson(id, principal)
-                        call.respond(HttpStatusCode.Created)
+                        call.respond(HttpStatusCode.Created, participantService.joinLesson(id, principal))
                     }.describe {
                         summary = "Request to join lesson"
                         description = "Requests to join an upcoming club of a teacher the student is actively linked to. A pending request holds a spot until the teacher accepts or rejects it, or the student withdraws. When the teacher has autoAcceptClubJoins on, a join with a free spot is confirmed straight away. Not allowed for ONE_ON_ONE lessons."
@@ -344,7 +344,8 @@ fun Application.configureLessonRouting() {
                         }
                         responses {
                             HttpStatusCode.Created {
-                                description = "Join request submitted"
+                                description = "Join request submitted, or accepted straight away"
+                                schema = jsonSchema<JoinLessonResponse>()
                             }
                             HttpStatusCode.BadRequest {
                                 description = "Cannot join this lesson type, or the lesson is not upcoming and confirmed"
