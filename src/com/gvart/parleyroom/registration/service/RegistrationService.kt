@@ -1,5 +1,10 @@
 package com.gvart.parleyroom.registration.service
 
+import com.gvart.parleyroom.material.data.MaterialFolderTable
+import com.gvart.parleyroom.material.data.MaterialShareTable
+import com.gvart.parleyroom.material.data.MaterialTable
+import com.gvart.parleyroom.material.data.MaterialType
+import com.gvart.parleyroom.registration.data.RegistrationMaterialTable
 import com.gvart.parleyroom.registration.data.RegistrationTable
 import com.gvart.parleyroom.registration.transfer.RegisterUserRequest
 import com.gvart.parleyroom.user.data.DEFAULT_NATIVE_LANGUAGE
@@ -11,8 +16,13 @@ import com.gvart.parleyroom.user.data.requireSupportedNativeLanguage
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greaterEq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.lowerCase
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
+import org.jetbrains.exposed.v1.jdbc.insertIgnore
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
@@ -30,6 +40,9 @@ import com.gvart.parleyroom.user.security.UserPrincipal
 
 private const val INVITATION_EXPIRY_DAYS = 7L
 
+/** The user created by [RegistrationService.registerUser]; [teacherId] is set when a teacher link was created. */
+data class RegisteredUser(val userId: UUID, val teacherId: UUID?)
+
 class RegistrationService {
 
     fun inviteUser(request: InviteUserRequest, principal: UserPrincipal): InviteUserResponse {
@@ -43,6 +56,10 @@ class RegistrationService {
         }
 
         request.nativeLanguage?.let(::requireSupportedNativeLanguage)
+
+        val materialIds = request.materialIds.map(UUID::fromString).distinct()
+        if (materialIds.isNotEmpty() && principal.role != UserRole.TEACHER)
+            throw BadRequestException("Only teachers can attach materials to an invite", code = "INVITE_MATERIALS_NOT_ALLOWED")
 
         return transaction {
             val alreadyExists = UserTable.selectAll()
@@ -63,20 +80,25 @@ class RegistrationService {
 
             val registrationToken = UUID.randomUUID().toString()
             val hashedToken = hashToken(registrationToken)
-            RegistrationTable.insert {
+            val registrationId = RegistrationTable.insertAndGetId {
                 it[email] = request.email
                 it[token] = hashedToken
                 it[role] = request.role
                 it[expiresAt] = OffsetDateTime.now().plusDays(INVITATION_EXPIRY_DAYS)
                 it[invitedBy] = principal.id
-                if (request.role == UserRole.STUDENT) it[nativeLanguage] = request.nativeLanguage ?: DEFAULT_NATIVE_LANGUAGE
+                if (request.role == UserRole.STUDENT) {
+                    it[nativeLanguage] = request.nativeLanguage ?: DEFAULT_NATIVE_LANGUAGE
+                    it[level] = request.level
+                }
             }
+
+            if (materialIds.isNotEmpty()) attachMaterials(registrationId.value, materialIds, principal.id, request.email)
 
             InviteUserResponse(registrationToken)
         }
     }
 
-    fun registerUser(request: RegisterUserRequest) = transaction {
+    fun registerUser(request: RegisterUserRequest): RegisteredUser = transaction {
         val hashedToken = hashToken(request.token)
         val entry = RegistrationTable.selectAll()
             .where { (RegistrationTable.token eq hashedToken).and { RegistrationTable.email eq request.email } }
@@ -101,12 +123,15 @@ class RegistrationService {
             it[passwordHash] = BCrypt.hashpw(request.password, BCrypt.gensalt())
             it[role] = entry[RegistrationTable.role]
             it[initials] = "${trimmedFirstName[0]}${trimmedLastName[0]}"
-            if (entry[RegistrationTable.role] == UserRole.STUDENT)
+            if (entry[RegistrationTable.role] == UserRole.STUDENT) {
                 it[nativeLanguage] = entry[RegistrationTable.nativeLanguage] ?: DEFAULT_NATIVE_LANGUAGE
+                it[level] = entry[RegistrationTable.level]
+            }
         }
 
         RegistrationTable.update({ RegistrationTable.id eq entry[RegistrationTable.id] }) {
             it[RegistrationTable.used] = true
+            it[RegistrationTable.userId] = newUserId
         }
 
         val invitedById = entry[RegistrationTable.invitedBy]
@@ -123,6 +148,69 @@ class RegistrationService {
                     it[status] = UserStatus.ACTIVE
                     it[startedAt] = OffsetDateTime.now()
                 }
+                shareInviteMaterials(entry[RegistrationTable.id].value, invitedById.value, newUserId.value)
+                return@transaction RegisteredUser(newUserId.value, invitedById.value)
+            }
+        }
+        RegisteredUser(newUserId.value, null)
+    }
+
+    /**
+     * Validates the inviter owns every material (none of them links), links them to the
+     * registration and files them into the teacher's "Onboarding – <email>" root folder.
+     */
+    private fun attachMaterials(registrationId: UUID, materialIds: List<UUID>, teacherId: UUID, email: String) {
+        val rows = MaterialTable.selectAll()
+            .where { (MaterialTable.id inList materialIds) and (MaterialTable.teacherId eq teacherId) }
+            .toList()
+        if (rows.size != materialIds.size) throw NotFoundException("One or more materials not found", code = "MATERIAL_NOT_FOUND")
+        if (rows.any { it[MaterialTable.type] == MaterialType.LINK })
+            throw BadRequestException("Links cannot be attached to an invite", code = "INVITE_MATERIAL_LINK_NOT_ALLOWED")
+
+        materialIds.forEach { id ->
+            RegistrationMaterialTable.insert {
+                it[RegistrationMaterialTable.registrationId] = registrationId
+                it[materialId] = id
+            }
+        }
+
+        val folderId = onboardingFolder(teacherId, "Onboarding – $email".take(255))
+        MaterialTable.update({ MaterialTable.id inList materialIds }) {
+            it[MaterialTable.folderId] = folderId
+        }
+    }
+
+    /** The teacher's root folder with this name (matched case-insensitively, like folder uniqueness), created if missing. */
+    private fun onboardingFolder(teacherId: UUID, name: String): UUID =
+        MaterialFolderTable.selectAll()
+            .where {
+                (MaterialFolderTable.teacherId eq teacherId) and
+                    MaterialFolderTable.parentFolderId.isNull() and
+                    (MaterialFolderTable.name.lowerCase() eq name.lowercase())
+            }
+            .firstOrNull()?.get(MaterialFolderTable.id)?.value
+            ?: OffsetDateTime.now().let { now ->
+                MaterialFolderTable.insertAndGetId {
+                    it[MaterialFolderTable.teacherId] = teacherId
+                    it[MaterialFolderTable.name] = name
+                    it[createdAt] = now
+                    it[updatedAt] = now
+                }.value
+            }
+
+    /** Shares the invite's still-existing materials of the inviter with the new student, without notifications. */
+    private fun shareInviteMaterials(registrationId: UUID, teacherId: UUID, studentId: UUID) {
+        val materialIds = (RegistrationMaterialTable innerJoin MaterialTable)
+            .select(RegistrationMaterialTable.materialId)
+            .where { (RegistrationMaterialTable.registrationId eq registrationId) and (MaterialTable.teacherId eq teacherId) }
+            .map { it[RegistrationMaterialTable.materialId].value }
+        val now = OffsetDateTime.now()
+        materialIds.forEach { id ->
+            MaterialShareTable.insertIgnore {
+                it[materialId] = id
+                it[MaterialShareTable.studentId] = studentId
+                it[sharedBy] = teacherId
+                it[sharedAt] = now
             }
         }
     }

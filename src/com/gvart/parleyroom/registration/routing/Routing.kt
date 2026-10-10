@@ -44,7 +44,9 @@ fun Application.configureRegistrationModule() {
                 call.respond(HttpStatusCode.Created)
             }.describe {
                 summary = "Register user"
-                description = "Registers a new user using an invitation token."
+                description = "Registers a new user using an invitation token. For a student invited by a teacher, " +
+                    "the invite's level is copied to the student and its attached materials (those still existing) " +
+                    "are shared with the student, without notifications."
                 requestBody {
                     schema = jsonSchema<RegisterUserRequest>()
                 }
@@ -72,7 +74,10 @@ fun Application.configureRegistrationModule() {
                 }.describe {
                     summary = "Invite user"
                     description = "Sends an invitation to a new user with a specified role. Requires authentication. " +
-                        "Student invites take an optional nativeLanguage (ru | uk | en, default ru; 400 UNSUPPORTED_NATIVE_LANGUAGE otherwise)."
+                        "Student invites take an optional nativeLanguage (ru | uk | en, default ru; 400 UNSUPPORTED_NATIVE_LANGUAGE otherwise) " +
+                        "and an optional level. Teachers inviting a student may attach up to 5 of their own materials via materialIds " +
+                        "(400 INVITE_MATERIALS_NOT_ALLOWED for other inviters, 400 INVITE_MATERIAL_LINK_NOT_ALLOWED for links); " +
+                        "they are filed into the teacher's \"Onboarding – <email>\" folder and shared with the student on signup."
                     requestBody {
                         schema = jsonSchema<InviteUserRequest>()
                     }
@@ -91,6 +96,14 @@ fun Application.configureRegistrationModule() {
                         }
                         HttpStatusCode.Forbidden {
                             description = "Insufficient permissions to invite users"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.NotFound {
+                            description = "An attached material does not exist or is not owned by the inviter (MATERIAL_NOT_FOUND)"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.Conflict {
+                            description = "User or pending invitation already exists for this email"
                             schema = jsonSchema<ProblemDetail>()
                         }
                     }

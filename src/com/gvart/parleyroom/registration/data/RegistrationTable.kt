@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.registration.data
 
+import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.data.pgEnum
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
@@ -15,4 +16,7 @@ object RegistrationTable : UUIDTable("registrations") {
     val createdAt = timestampWithTimeZone("created_at")
     val role = pgEnum<UserRole>("role", "USER_ROLE")
     val nativeLanguage = varchar("native_language", 5).nullable()
+    val level = pgEnum<LanguageLevel>("level", "LANGUAGE_LEVEL").nullable()
+    /** The user created from this invite, set on signup. */
+    val userId = reference("user_id", UserTable).nullable()
 }
