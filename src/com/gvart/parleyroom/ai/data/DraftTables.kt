@@ -30,6 +30,8 @@ object DraftBundleTable : UUIDTable("ai_draft_bundles") {
     val sendResult = jsonb<JsonElement>("send_result", Json.Default).nullable()
     /** [DraftMaterialSource]s of a words-from-material generation. */
     val materialSources = jsonb<JsonElement>("material_sources", Json.Default).nullable()
+    /** A student draft from the invite's materials (onboarding); its Send marks the grammar covered. */
+    val onboarding = bool("onboarding").default(false)
     val sentAt = timestampWithTimeZone("sent_at").nullable()
     // Database clock only: the update trigger sets updated_at with now(), so inserts must too.
     val createdAt = timestampWithTimeZone("created_at").defaultExpression(CurrentTimestampWithTimeZone)

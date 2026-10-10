@@ -4,6 +4,7 @@ import com.gvart.parleyroom.ai.data.DraftBundleTable
 import com.gvart.parleyroom.ai.data.DraftItemKind
 import com.gvart.parleyroom.ai.data.DraftItemTable
 import com.gvart.parleyroom.ai.data.DraftMode
+import com.gvart.parleyroom.ai.data.DraftScope
 import com.gvart.parleyroom.ai.data.DraftStatus
 import com.gvart.parleyroom.ai.transfer.DraftDocument
 import com.gvart.parleyroom.ai.transfer.DraftGrammarTopic
@@ -12,6 +13,7 @@ import com.gvart.parleyroom.ai.transfer.SendDraftRequest
 import com.gvart.parleyroom.ai.transfer.SendDraftResponse
 import com.gvart.parleyroom.ai.transfer.SentWord
 import com.gvart.parleyroom.common.data.LanguageLevel
+import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.document.data.DocumentAudience
@@ -25,8 +27,10 @@ import com.gvart.parleyroom.homework.transfer.AssignmentItemInput
 import com.gvart.parleyroom.homework.transfer.CreateAssignmentRequest
 import com.gvart.parleyroom.lesson.data.LessonGrammarTopicTable
 import com.gvart.parleyroom.lesson.data.LessonTopicTable
+import com.gvart.parleyroom.progress.service.GrammarCoverageService
 import com.gvart.parleyroom.topic.data.GrammarTopicTable
 import com.gvart.parleyroom.topic.data.TopicTable
+import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.vocabulary.service.VocabEntryService
 import com.gvart.parleyroom.vocabulary.transfer.QuickAddVocabRequest
@@ -54,6 +58,7 @@ class DraftSendService(
     private val vocabEntryService: VocabEntryService,
     private val documentService: DocumentService,
     private val assignmentService: AssignmentService,
+    private val grammarCoverage: GrammarCoverageService,
 ) {
 
     fun send(bundleId: UUID, request: SendDraftRequest, principal: UserPrincipal): SendDraftResponse = transaction {
@@ -83,7 +88,9 @@ class DraftSendService(
         val exercise = ofKind(DraftItemKind.EXERCISE_DOCUMENT).firstOrNull()?.let(DraftItems::document)
         val tasks = ofKind(DraftItemKind.TASK).map(DraftItems::task)
         val notes = ofKind(DraftItemKind.NOTES_DOCUMENT).firstOrNull()?.let(DraftItems::document)
-        val tags = Tags(principal.id, (exercise ?: notes)?.level)
+        // A student draft's new tags fall back to the student's level (progress lists grammar by level).
+        val studentLevel = bundle[DraftBundleTable.studentId]?.let { UserTable.findByIdOrThrow(it.value, "User")[UserTable.level] }
+        val tags = Tags(principal.id, (exercise ?: notes)?.level ?: studentLevel)
 
         // 1. Words: find-or-create in the library (a matching entry is reused as is), assign to the recipients.
         // Suggested new topics / grammar topics are created here, not at generation.
@@ -156,6 +163,13 @@ class DraftSendService(
                     tasks.flatMap { it.grammarTopics }).map(tags::grammar).distinct()
             topicIds.forEach { id -> LessonTopicTable.insertIgnore { it[LessonTopicTable.lessonId] = lessonId; it[topicId] = id } }
             grammarIds.forEach { id -> LessonGrammarTopicTable.insertIgnore { it[LessonGrammarTopicTable.lessonId] = lessonId; it[grammarTopicId] = id } }
+        }
+
+        // 5. An onboarding draft: its grammar was studied before, so it counts as covered.
+        if (bundle[DraftBundleTable.scope] == DraftScope.STUDENT && bundle[DraftBundleTable.onboarding]) {
+            val grammarIds = (words.flatMap { it.second.grammarTopics } + exercise?.grammarTopics.orEmpty() + tasks.flatMap { it.grammarTopics })
+                .map(tags::grammar)
+            grammarCoverage.markCovered(principal.id, recipients, grammarIds, bundleId)
         }
 
         val now = OffsetDateTime.now()

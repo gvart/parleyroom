@@ -122,10 +122,16 @@ class DraftBundleService(
             val notes = request.notes ?: lesson[LessonTable.rawNotes].orEmpty()
             Prepared(ctx, notes, instructions(request, principal))
         }
-        return start(DraftScope.LESSON, prepared, request, principal, lessonId = lessonId, studentId = null)
+        return start(DraftScope.LESSON, prepared, request, principal, lessonId = lessonId, studentId = null, onboarding = false)
     }
 
-    fun generateForStudent(studentId: UUID, request: GenerateDraftRequest, principal: UserPrincipal): DraftBundleResponse {
+    /**
+     * [onboarding] marks the bundle (also a reused open one, so a normal generate clears it). Without
+     * [requireText] materials without text are left out; only none readable fails (AI_MATERIAL_NO_TEXT).
+     */
+    fun generateForStudent(
+        studentId: UUID, request: GenerateDraftRequest, principal: UserPrincipal, onboarding: Boolean = false, requireText: Boolean = true,
+    ): DraftBundleResponse {
         GenerationJobs.requireGateway(ai)
         val materialIds = request.materialIds?.map { parse(it, "materialIds") }
         val (prepared, materialRows) = transaction {
@@ -141,9 +147,13 @@ class DraftBundleService(
         }
         // Reads the files: outside the transaction.
         val materials = materialRows?.let { rows ->
-            MaterialContext(materialSources.extract(rows, requireText = true), transaction { MaterialSources.studentWords(studentId) })
+            val sources = materialSources.extract(rows, requireText)
+            if (sources.isEmpty()) throw BadRequestException("No text could be read from the materials", code = "AI_MATERIAL_NO_TEXT")
+            MaterialContext(sources, transaction { MaterialSources.studentWords(studentId) })
         }
-        return start(DraftScope.STUDENT, prepared.copy(materials = materials), request, principal, lessonId = null, studentId = studentId)
+        // Only the materials that were read are the draft's source.
+        @Suppress("NAME_SHADOWING") val request = materials?.let { m -> request.copy(materialIds = m.sources.map { it.id.toString() }) } ?: request
+        return start(DraftScope.STUDENT, prepared.copy(materials = materials), request, principal, lessonId = null, studentId = studentId, onboarding)
     }
 
     private data class Prepared(val ctx: LessonContext, val notes: String, val instructions: String, val materials: MaterialContext? = null)
@@ -163,7 +173,7 @@ class DraftBundleService(
 
     private fun start(
         scope: DraftScope, prepared: Prepared, request: GenerateDraftRequest, principal: UserPrincipal,
-        lessonId: UUID?, studentId: UUID?,
+        lessonId: UUID?, studentId: UUID?, onboarding: Boolean,
     ): DraftBundleResponse {
         val (ctx, notes, instructions, materials) = prepared
         // Stored with the effective kinds, so a whole refine regenerates the same parts.
@@ -182,6 +192,7 @@ class DraftBundleService(
                 DraftBundleTable.update({ DraftBundleTable.id eq open[DraftBundleTable.id] }) {
                     it[input] = GenerationJobs.json.encodeToJsonElement(request)
                     it[materialSources] = materialRefs
+                    it[DraftBundleTable.onboarding] = onboarding
                 }
                 open[DraftBundleTable.id].value to false
             } else {
@@ -193,6 +204,7 @@ class DraftBundleService(
                     it[mode] = ctx.mode
                     it[input] = GenerationJobs.json.encodeToJsonElement(request)
                     it[materialSources] = materialRefs
+                    it[DraftBundleTable.onboarding] = onboarding
                 }.value to true
             }
         }
@@ -455,13 +467,14 @@ class DraftBundleService(
             approvedCount = items.count { it[DraftItemTable.approved] },
             recipients = recipients(bundle),
             sendResult = bundle[DraftBundleTable.sendResult]?.let { GenerationJobs.json.decodeFromJsonElement<SendDraftResponse>(it) },
+            onboarding = bundle[DraftBundleTable.onboarding],
             createdAt = bundle[DraftBundleTable.createdAt],
             updatedAt = bundle[DraftBundleTable.updatedAt],
             sentAt = bundle[DraftBundleTable.sentAt],
         )
     }
 
-    private fun summary(bundle: ResultRow): DraftBundleSummary {
+    fun summary(bundle: ResultRow): DraftBundleSummary {
         val bundleId = bundle[DraftBundleTable.id].value
         val count = DraftItemTable.id.count()
         val counts = DraftItemTable.select(DraftItemTable.approved, count)
@@ -486,6 +499,7 @@ class DraftBundleService(
             approvedCount = counts[true] ?: 0,
             materials = materials(bundle),
             job = latestJob(bundleId)?.let(GenerationJobs::toResponse),
+            onboarding = bundle[DraftBundleTable.onboarding],
             createdAt = bundle[DraftBundleTable.createdAt],
             updatedAt = bundle[DraftBundleTable.updatedAt],
             sentAt = bundle[DraftBundleTable.sentAt],
@@ -587,7 +601,7 @@ class DraftBundleService(
 
     private fun recipientIds(bundle: ResultRow) = recipients(bundle).map { UUID.fromString(it.id) }
 
-    private fun openBundle(scope: DraftScope, teacherId: UUID, lessonId: UUID?, studentId: UUID?): ResultRow? {
+    fun openBundle(scope: DraftScope, teacherId: UUID, lessonId: UUID?, studentId: UUID?): ResultRow? {
         val query = DraftBundleTable.selectAll().where { (DraftBundleTable.scope eq scope) and (DraftBundleTable.status eq DraftStatus.DRAFT) }
         if (lessonId != null) query.andWhere { DraftBundleTable.lessonId eq lessonId }
         else query.andWhere { (DraftBundleTable.teacherId eq teacherId) and (DraftBundleTable.studentId eq studentId!!) }

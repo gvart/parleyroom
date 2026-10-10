@@ -1566,6 +1566,36 @@ Errors: 400 `AI_DRAFT_NOTHING_APPROVED`, `AI_DRAFT_RECIPIENT_INVALID` (not a rec
 `AI_DRAFT_NO_RECIPIENTS`, `VALIDATION_FAILED` (dueDate), 409 `AI_DRAFT_NOT_EDITABLE` (discarded),
 `AI_DRAFT_BUSY`, 404 `AI_DRAFT_NOT_FOUND`.
 
+New tags created by name in a **student** draft get the student's level when the draft has none (so
+they show in the student's progress). Sending an **onboarding** draft (`onboarding: true`) also marks
+every approved grammar topic **covered** for the recipients (`student_grammar_coverage`, a COVERED
+floor in progress); other drafts never write coverage.
+
+### Onboarding draft (invited students)
+
+When a student registers with a teacher's invite that has materials attached, the server starts a
+student-scope draft in the background (never blocks or fails the signup): `kinds: [WORDS]`, the
+invite's AI-readable materials (≤ 5; files without text are skipped), a fixed prompt ("materials from
+the student's previous lessons elsewhere: extract the vocabulary they studied, tag topics and
+grammar"), as the inviting teacher. Nothing happens without AI or readable materials, and the start
+is skipped (logged) when it fails (job limit, an open non-onboarding draft, …): the teacher can start
+it again. The bundle has `onboarding: true`; a normal generate on the same open draft resets it to
+false. Words enter practice as normal NEW cards after Send.
+```
+GET  /api/v1/students/{studentId}/onboarding        -> 200 OnboardingResponse
+POST /api/v1/students/{studentId}/onboarding/draft  -> 202 DraftBundle (synchronous start: errors are problem responses)
+
+OnboardingResponse {
+  aiAvailable: bool,
+  materials: [{ id, name, aiReadable: bool }],   // the invite's materials (still existing)
+  bundle?: DraftBundleSummary                    // latest onboarding draft, any status; null if none
+}
+DraftBundle.onboarding / DraftBundleSummary.onboarding: bool
+```
+Teacher of the student only (403 otherwise). POST errors: 400 `AI_MATERIAL_NO_TEXT` (no invite
+material with readable text), 409 `AI_DRAFT_OPEN` (an open non-onboarding draft for the student),
+`AI_DRAFT_BUSY`, 429 `AI_RATE_LIMITED`, 503 `AI_NOT_CONFIGURED`.
+
 ### Document draft revisions (AI refine of an existing document)
 
 ```
@@ -1678,6 +1708,7 @@ task gets `" (überarbeitet: <instruction>)"` appended, a document gets a rich-t
 | `AI_DRAFT_NOT_EDITABLE` | 409 | write on a SENT / DISCARDED draft |
 | `AI_DRAFT_BUSY` | 409 | a job of this draft is QUEUED / RUNNING |
 | `AI_DRAFT_EMPTY` | 409 | refine before anything was generated |
+| `AI_DRAFT_OPEN` | 409 | onboarding draft while another open draft exists for the student |
 | `AI_DRAFT_NOTHING_TO_GENERATE` | 400 | no notes, past notes, prompt or focus |
 | `AI_DRAFT_KINDS_REQUIRED` | 400 | student-scope generate without `kinds` |
 | `AI_DRAFT_PAST_LESSON_INVALID` | 400 | not an earlier COMPLETED lesson of the learner(s) |

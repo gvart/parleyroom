@@ -16,6 +16,7 @@ import com.gvart.parleyroom.ai.service.GenerationJobRunner
 import com.gvart.parleyroom.ai.service.LessonContextService
 import com.gvart.parleyroom.ai.service.LibrarySuggestionService
 import com.gvart.parleyroom.ai.service.MaterialSources
+import com.gvart.parleyroom.ai.service.OnboardingService
 import com.gvart.parleyroom.ai.service.PromptTemplateService
 import com.gvart.parleyroom.ai.service.SuggestTagsService
 import com.gvart.parleyroom.notification.service.NotificationSseManager
@@ -52,7 +53,11 @@ fun Application.configureAiModule() {
     val runner = GenerationJobRunner(aiConfig, sseManager)
     val interrupted = runner.failInterruptedJobs()
     if (interrupted > 0) environment.log.warn("Marked $interrupted interrupted AI jobs as FAILED")
-    monitor.subscribe(ApplicationStopping) { runner.shutdown() }
+    val onboarding: OnboardingService by dependencies
+    monitor.subscribe(ApplicationStopping) {
+        runner.shutdown()
+        onboarding.shutdown()
+    }
 
     dependencies {
         provide { AiRuntime(aiConfig, gateway, models, ledger) }
@@ -68,6 +73,7 @@ fun Application.configureAiModule() {
         provide(LibrarySuggestionService::class)
         provide(FillTranslationsService::class)
         provide(SuggestTagsService::class)
+        provide(OnboardingService::class)
     }
 
     configureAiRouting()
