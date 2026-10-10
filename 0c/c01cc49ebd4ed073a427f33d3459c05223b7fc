@@ -1,0 +1,44 @@
+resources/db/migration/V24__lesson_offline.sql
+  s_18b07bb0396451::t_9a42ea51b45041 1-2
+src/com/gvart/parleyroom/lesson/transfer/CreateLessonRequest.kt
+  s_18b07bb0396451::t_9a42ea51b45041 23-24
+src/com/gvart/parleyroom/lesson/transfer/StartLessonResponse.kt
+  s_18b07bb0396451::t_9a42ea51b45041 8-9
+test/com/gvart/parleyroom/lesson/LessonIntegrationTest.kt
+  s_18b07bb0396451::t_4c7f9c5e503f15 1013-1014,1260
+src/com/gvart/parleyroom/lesson/service/LessonContentService.kt
+  s_18b07bb0396451::t_5525dcf429da7e 5,11
+  s_18b07bb0396451::t_9a42ea51b45041 49-51,58
+src/com/gvart/parleyroom/lesson/service/LessonLifecycleService.kt
+  s_18b07bb0396451::t_9a42ea51b45041 103-104,143,407,508-509
+  s_18b07bb0396451::t_91528397725a4f 510
+src/com/gvart/parleyroom/lesson/routing/Routing.kt
+  s_18b07bb0396451::t_9ed3c7031fdcec 142,406,444,459-460
+  s_18b07bb0396451::t_83cc9523317859 461-462
+test/com/gvart/parleyroom/lesson/OfflineLessonIntegrationTest.kt
+  s_18b07bb0396451::t_d1ccd655266e2f 1-154
+src/com/gvart/parleyroom/lesson/data/LessonTable.kt
+  s_18b07bb0396451::t_9a42ea51b45041 25
+src/com/gvart/parleyroom/lesson/service/LessonSupport.kt
+  s_18b07bb0396451::t_9a42ea51b45041 285
+src/com/gvart/parleyroom/lesson/transfer/LessonResponse.kt
+  s_18b07bb0396451::t_9a42ea51b45041 29-30
+src/com/gvart/parleyroom/lesson/transfer/LessonContentDtos.kt
+  s_18b07bb0396451::t_9a42ea51b45041 22-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "0cc01cc49ebd4ed073a427f33d3459c05223b7fc",
+  "prompts": {},
+  "sessions": {
+    "s_18b07bb0396451": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2bd228f4-0742-4e79-9f6c-b599bc9978a1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
