@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.registration.routing
 
 
+import com.gvart.parleyroom.ai.service.OnboardingService
 import com.gvart.parleyroom.common.routing.getPathUUID
 import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.ProblemDetail
@@ -15,6 +16,7 @@ import com.gvart.parleyroom.registration.transfer.ResetPasswordResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.jsonSchema
 import io.ktor.server.application.Application
+import io.ktor.server.application.log
 import io.ktor.server.auth.authenticate
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.request.receive
@@ -40,13 +42,21 @@ fun Application.configureRegistrationModule() {
         route("/api/v1/registration") {
             post<RegisterUserRequest> {
 
-                registrationService.registerUser(it)
+                val registered = registrationService.registerUser(it)
+                registered.teacherId?.let { teacherId ->
+                    // Resolved per request: the AI module is configured after the registration module. Never fails the signup.
+                    runCatching {
+                        val onboarding: OnboardingService = call.application.dependencies.resolve()
+                        onboarding.startInBackground(registered.userId, teacherId)
+                    }.onFailure { e -> call.application.log.warn("Onboarding draft not started for user ${registered.userId}", e) }
+                }
                 call.respond(HttpStatusCode.Created)
             }.describe {
                 summary = "Register user"
                 description = "Registers a new user using an invitation token. For a student invited by a teacher, " +
                     "the invite's level is copied to the student and its attached materials (those still existing) " +
-                    "are shared with the student, without notifications."
+                    "are shared with the student, without notifications. If AI is available, an onboarding words draft is then started " +
+                    "in the background from the readable materials (see GET /api/v1/students/{studentId}/onboarding)."
                 requestBody {
                     schema = jsonSchema<RegisterUserRequest>()
                 }

@@ -156,6 +156,8 @@ data class DraftBundleResponse(
     /** Who Send targets by default: the lesson's confirmed attendees, or the student. */
     val recipients: List<AttendeeRef>,
     val sendResult: SendDraftResponse? = null,
+    /** Started from the invite's materials on signup; Send also marks its grammar covered. */
+    val onboarding: Boolean = false,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
     @Serializable(with = OffsetDateTimeSerializer::class)
@@ -179,12 +181,25 @@ data class DraftBundleSummary(
     val approvedCount: Int,
     val materials: List<DraftMaterialSource> = emptyList(),
     val job: GenerationJobResponse? = null,
+    val onboarding: Boolean = false,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val updatedAt: OffsetDateTime,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val sentAt: OffsetDateTime? = null,
+)
+
+/** A material attached to the student's invite; [aiReadable]: a PDF / DOCX / text file the onboarding draft can read. */
+@Serializable
+data class OnboardingMaterial(val id: String, val name: String, val aiReadable: Boolean)
+
+/** The student's onboarding: the invite's materials and the latest onboarding draft (any status), if any. */
+@Serializable
+data class OnboardingResponse(
+    val aiAvailable: Boolean,
+    val materials: List<OnboardingMaterial>,
+    val bundle: DraftBundleSummary? = null,
 )
 
 /** PATCH an item: any subset. The content field must match the item's kind and replaces its content. */

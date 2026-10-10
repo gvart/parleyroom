@@ -4,6 +4,7 @@ import com.gvart.parleyroom.ai.data.DraftStatus
 import com.gvart.parleyroom.ai.service.DocumentDraftService
 import com.gvart.parleyroom.ai.service.DraftBundleService
 import com.gvart.parleyroom.ai.service.DraftSendService
+import com.gvart.parleyroom.ai.service.OnboardingService
 import com.gvart.parleyroom.ai.transfer.DocumentDraftInput
 import com.gvart.parleyroom.ai.transfer.DocumentDraftResponse
 import com.gvart.parleyroom.ai.transfer.DraftBundleResponse
@@ -12,6 +13,7 @@ import com.gvart.parleyroom.ai.transfer.DraftContextResponse
 import com.gvart.parleyroom.ai.transfer.DraftItemResponse
 import com.gvart.parleyroom.ai.transfer.GenerateDraftRequest
 import com.gvart.parleyroom.ai.transfer.GenerationJobResponse
+import com.gvart.parleyroom.ai.transfer.OnboardingResponse
 import com.gvart.parleyroom.ai.transfer.PatchDraftItemRequest
 import com.gvart.parleyroom.ai.transfer.RefineDraftRequest
 import com.gvart.parleyroom.ai.transfer.RefineRequest
@@ -42,6 +44,7 @@ fun Application.configureDraftRouting() {
     val drafts: DraftBundleService by dependencies
     val sender: DraftSendService by dependencies
     val documentDrafts: DocumentDraftService by dependencies
+    val onboarding: OnboardingService by dependencies
 
     routing {
         authenticate {
@@ -109,6 +112,44 @@ fun Application.configureDraftRouting() {
                         }
                         HttpStatusCode.NotFound { description = "MATERIAL_NOT_FOUND (unknown or another teacher's)"; schema = jsonSchema<ProblemDetail>() }
                         HttpStatusCode.Conflict { description = "AI_DRAFT_BUSY"; schema = jsonSchema<ProblemDetail>() }
+                    }
+                }
+
+                get("/onboarding") {
+                    call.respond(HttpStatusCode.OK, onboarding.status(call.getPathUUID("studentId"), call.requirePrincipal()))
+                }.describe {
+                    summary = "The student's onboarding draft"
+                    description = "The materials attached to the student's invite (aiReadable: PDF / DOCX / text the AI can read) and the " +
+                            "latest onboarding draft (any status; null if none was started). On signup the draft is started in the " +
+                            "background from the readable materials (≤ 5): a student-scope WORDS draft whose Send also marks its grammar " +
+                            "topics covered in the student's progress. Teacher of the student."
+                    parameters { path("studentId") { description = "Student UUID" } }
+                    responses {
+                        HttpStatusCode.OK { schema = jsonSchema<OnboardingResponse>() }
+                        HttpStatusCode.Forbidden { description = "Not a teacher of the student"; schema = jsonSchema<ProblemDetail>() }
+                    }
+                }
+
+                post("/onboarding/draft") {
+                    call.respond(HttpStatusCode.Accepted, onboarding.retry(call.getPathUUID("studentId"), call.requirePrincipal()))
+                }.describe {
+                    summary = "Start the onboarding draft again"
+                    description = "Queues the onboarding GENERATE job from the invite's readable materials (reuses an open onboarding draft). " +
+                            "For when the automatic start on signup did not happen (AI off, job limit, failure). Teacher of the student."
+                    parameters { path("studentId") { description = "Student UUID" } }
+                    responses {
+                        HttpStatusCode.Accepted { schema = jsonSchema<DraftBundleResponse>() }
+                        HttpStatusCode.BadRequest {
+                            description = "AI_MATERIAL_NO_TEXT (no invite material with readable text)"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.Forbidden { description = "Not a teacher of the student"; schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.Conflict {
+                            description = "AI_DRAFT_OPEN (another open draft for the student), AI_DRAFT_BUSY"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.TooManyRequests { description = "AI_RATE_LIMITED"; schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.ServiceUnavailable { description = "AI_NOT_CONFIGURED"; schema = jsonSchema<ProblemDetail>() }
                     }
                 }
             }

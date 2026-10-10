@@ -28,6 +28,12 @@ object Prompts {
         "The teacher refers to exercises as 'Übung N': N counts only exercise blocks (types ${EXERCISE_BLOCK_TYPES.joinToString()}) " +
                 "in document order, starting at 1. The app shows these numbers itself, so do not write numbers into titles or instructions."
 
+    /** The teacher instructions of an onboarding draft (words from the invite's materials). */
+    const val ONBOARDING_INSTRUCTIONS =
+        "These materials are from the student's previous lessons with another teacher or school, before joining this teacher. " +
+                "Extract the vocabulary the student studied in them, so it can be reviewed here. " +
+                "Tag every word with its topics and the grammar topics it practices."
+
     private fun resource(name: String): String =
         Prompts::class.java.classLoader.getResource("ai/$name")!!.readText()
 

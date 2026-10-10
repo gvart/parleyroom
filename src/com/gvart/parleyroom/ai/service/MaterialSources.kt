@@ -47,7 +47,7 @@ class MaterialSources(private val storage: StorageService) {
             .associateBy { it[MaterialTable.id].value }
         return ids.map { id ->
             val row = rows[id] ?: throw NotFoundException("Material not found", code = "MATERIAL_NOT_FOUND")
-            if (kindOf(row) == null)
+            if (!isReadable(row))
                 throw BadRequestException("\"${row[MaterialTable.name]}\" is not a PDF, DOCX or text file", code = "AI_MATERIAL_UNSUPPORTED")
             row
         }
@@ -78,6 +78,9 @@ class MaterialSources(private val storage: StorageService) {
         /** All materials of one generation together (~15k input tokens). */
         const val TOTAL_CHARS = 60_000
         const val MAX_EXCLUDE_WORDS = 2_000
+
+        /** A file material whose text can be read (PDF / DOCX / text). */
+        fun isReadable(row: ResultRow): Boolean = kindOf(row) != null
 
         private fun kindOf(row: ResultRow): TextSourceKind? {
             val key = row[MaterialTable.url]
