@@ -150,6 +150,12 @@ class GrammarTopicService {
                     "(SELECT student_id FROM grammar_progress_overrides WHERE grammar_topic_id = ?)",
             targetId, sourceId, targetId,
         )
+        // Coverage rows move too; a student's existing coverage of the target wins (source rows cascade away).
+        Sql.update(
+            "UPDATE student_grammar_coverage SET grammar_topic_id = ? WHERE grammar_topic_id = ? AND student_id NOT IN " +
+                    "(SELECT student_id FROM student_grammar_coverage WHERE grammar_topic_id = ?)",
+            targetId, sourceId, targetId,
+        )
         GrammarTopicTable.deleteWhere { GrammarTopicTable.id eq sourceId }
         toResponse(find(targetId))
     }

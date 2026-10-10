@@ -137,6 +137,12 @@ class ProgressCalculator(val config: ProgressConfig) {
             topicIds, teacherId, students,
         ) { rs -> (rs.uuid(1) to rs.uuid(2)) to ScoredCount(correct = rs.getInt(4), total = rs.getInt(3)) }.toMap()
 
+        val coverage = Sql.rows(
+            "SELECT grammar_topic_id, student_id, covered_at FROM student_grammar_coverage " +
+                    "WHERE teacher_id = ? AND student_id = ANY(?::uuid[]) AND grammar_topic_id = ANY(?::uuid[])",
+            teacherId, students, topicIds,
+        ) { rs -> (rs.uuid(1) to rs.uuid(2)) to rs.time(3)!! }.toMap()
+
         val overrides = GrammarProgressOverrideTable.selectAll()
             .where {
                 (GrammarProgressOverrideTable.studentId inList studentIds) and
@@ -157,26 +163,29 @@ class ProgressCalculator(val config: ProgressConfig) {
                 val lesson = lessons[key]
                 val hw = homework[key]
                 val scored = scored[key] ?: ScoredCount(0, 0)
+                val coveredAt = coverage[key]
                 GrammarEvaluation(
                     topic = topic,
-                    derived = derive(lesson?.count ?: 0, hw?.count ?: 0, scored),
+                    derived = derive(lesson?.count ?: 0, hw?.count ?: 0, scored, covered = coveredAt != null),
                     override = overrides[key],
                     evidence = GrammarEvidence(
                         lessonCount = lesson?.count ?: 0,
                         lastLessonAt = lesson?.last,
                         homeworkScored = scored,
                         lastPracticedAt = hw?.last,
+                        coveredAt = coveredAt,
                     ),
                 )
             }
         }
     }
 
-    fun derive(lessonCount: Int, practicedCount: Int, scored: ScoredCount): GrammarProgressStatus = when {
+    /** [covered]: a student_grammar_coverage row exists, a floor of COVERED. */
+    fun derive(lessonCount: Int, practicedCount: Int, scored: ScoredCount, covered: Boolean = false): GrammarProgressStatus = when {
         scored.total >= config.minScoredItems && scored.correct.toDouble() / scored.total < config.needsWorkBelow ->
             GrammarProgressStatus.NEEDS_WORK
         practicedCount > 0 -> GrammarProgressStatus.PRACTICED
-        lessonCount > 0 -> GrammarProgressStatus.COVERED
+        lessonCount > 0 || covered -> GrammarProgressStatus.COVERED
         else -> GrammarProgressStatus.NOT_COVERED
     }
 
