@@ -29,4 +29,6 @@ data class AdminUserResponse(
     val failedLoginAttempts: Int,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val lockedUntil: OffsetDateTime?,
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val lastLoginAt: OffsetDateTime? = null,
 )

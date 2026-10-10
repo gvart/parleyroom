@@ -124,6 +124,9 @@ class AuthenticationService(
         )
         val refreshToken = generateRefreshToken()
         persistRefreshToken(userId, refreshToken)
+        UserTable.update({ UserTable.id eq userId }) {
+            it[lastLoginAt] = OffsetDateTime.now()
+        }
         return AuthenticateResponse(
             accessToken = accessToken,
             refreshToken = refreshToken,
