@@ -1,0 +1,27 @@
+resources/db/migration/V26__user_last_login.sql
+  s_4d705bdf15dc1c::t_2b965ba1f1ce87 1-2
+src/com/gvart/parleyroom/admin/service/AdminService.kt
+  s_4d705bdf15dc1c::t_5f6e9cc2eeb54c 256
+src/com/gvart/parleyroom/admin/transfer/AdminUserResponse.kt
+  s_4d705bdf15dc1c::t_05bc69f01a9d91 32-33
+src/com/gvart/parleyroom/user/data/UserTable.kt
+  s_4d705bdf15dc1c::t_e811e1242cbdf4 36-37
+src/com/gvart/parleyroom/user/service/AuthenticationService.kt
+  s_4d705bdf15dc1c::t_48c53936b368d1 127-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "71cb45cd1d3dbb662a4311d16482ef286fe6f822",
+  "prompts": {},
+  "sessions": {
+    "s_4d705bdf15dc1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0014f31a-3e93-40e3-a544-f35a8095bc10",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
