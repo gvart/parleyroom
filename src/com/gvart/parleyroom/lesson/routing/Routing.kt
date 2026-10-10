@@ -139,7 +139,7 @@ fun Application.configureLessonRouting() {
                     call.respond(HttpStatusCode.Created, result)
                 }.describe {
                     summary = "Create lesson"
-                    description = "Creates a new lesson. Students can only create ONE_ON_ONE lessons, as a REQUEST (or CONFIRMED when the teacher has autoConfirmBookings on); teachers and admins can create any type."
+                    description = "Creates a new lesson. Students can only create ONE_ON_ONE lessons, as a REQUEST (or CONFIRMED when the teacher has autoConfirmBookings on); teachers and admins can create any type. offline = true (teachers/admins only) creates an in-person lesson without a video room."
                     requestBody {
                         schema = jsonSchema<CreateLessonRequest>()
                     }
@@ -403,7 +403,7 @@ fun Application.configureLessonRouting() {
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Start lesson"
-                        description = "Starts a lesson: sets startedAt, marks confirmed students as attended, and returns a LiveKit room + access token for the teacher."
+                        description = "Starts a lesson: sets startedAt, marks confirmed students as attended, and returns a LiveKit room + access token for the teacher. Offline (in-person) lessons get videoRoom = null."
                         parameters {
                             path("id") {
                                 description = "UUID of the lesson"
@@ -441,7 +441,7 @@ fun Application.configureLessonRouting() {
                         call.respond(HttpStatusCode.OK, result)
                     }.describe {
                         summary = "Get video room access token"
-                        description = "Returns a LiveKit access token for the authenticated participant to join the lesson's video room. Teachers/admins can request a token while the lesson is CONFIRMED or IN_PROGRESS; students can request one while IN_PROGRESS or within 10 minutes of scheduledAt."
+                        description = "Returns a LiveKit access token for the authenticated participant to join the lesson's video room. Teachers/admins can request a token while the lesson is CONFIRMED or IN_PROGRESS; students can request one while IN_PROGRESS or within 10 minutes of scheduledAt. Offline lessons have no video room (409 LESSON_OFFLINE)."
                         parameters {
                             path("id") {
                                 description = "UUID of the lesson"
@@ -454,6 +454,10 @@ fun Application.configureLessonRouting() {
                             }
                             HttpStatusCode.BadRequest {
                                 description = "Video room not yet available (outside early-join window or lesson not confirmed)"
+                                schema = jsonSchema<ProblemDetail>()
+                            }
+                            HttpStatusCode.Conflict {
+                                description = "Offline lesson, no video room (LESSON_OFFLINE)"
                                 schema = jsonSchema<ProblemDetail>()
                             }
                             HttpStatusCode.Forbidden {

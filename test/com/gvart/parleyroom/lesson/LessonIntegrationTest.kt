@@ -1010,8 +1010,8 @@ class LessonIntegrationTest : IntegrationTest() {
 
         assertEquals(HttpStatusCode.OK, response.status)
         val start = response.body<StartLessonResponse>()
-        assertEquals("lesson-${lesson.id}", start.videoRoom.roomName)
-        assertTrue(start.videoRoom.accessToken.isNotBlank())
+        assertEquals("lesson-${lesson.id}", assertNotNull(start.videoRoom).roomName)
+        assertTrue(start.videoRoom!!.accessToken.isNotBlank())
     }
 
     @Test
@@ -1257,7 +1257,7 @@ class LessonIntegrationTest : IntegrationTest() {
         val start = client.post("/api/v1/lessons/${lesson.id}/start") {
             bearerAuth(teacherToken)
         }.body<StartLessonResponse>()
-        assertEquals("lesson-${lesson.id}", start.videoRoom.roomName)
+        assertEquals("lesson-${lesson.id}", assertNotNull(start.videoRoom).roomName)
 
         // Verify startedAt is set and status is IN_PROGRESS via GET
         val afterStart = client.get("/api/v1/lessons/${lesson.id}") {

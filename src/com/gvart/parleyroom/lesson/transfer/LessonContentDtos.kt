@@ -19,6 +19,8 @@ data class UpdateLessonContentRequest(
     val grammarTopicIds: List<String>? = null,
     val vocabEntryIds: List<String>? = null,
     val correctedSentences: List<CorrectedSentenceInput>? = null,
+    /** Switch between online and in-person; only before the lesson starts. */
+    val offline: Boolean? = null,
 ) {
     fun validate(): ValidationResult {
         val errors = buildList {

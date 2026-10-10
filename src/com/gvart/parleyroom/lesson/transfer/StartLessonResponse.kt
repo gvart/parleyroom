@@ -5,5 +5,6 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class StartLessonResponse(
-    val videoRoom: VideoAccess,
+    /** Null for offline lessons. */
+    val videoRoom: VideoAccess?,
 )

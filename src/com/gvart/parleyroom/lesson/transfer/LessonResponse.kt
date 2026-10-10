@@ -26,6 +26,8 @@ data class LessonResponse(
     val level: LanguageLevel? = null,
     val maxParticipants: Int? = null,
     val groupId: String? = null,
+    /** In-person lesson: no video room, start opens the notes workspace only. */
+    val offline: Boolean = false,
     val students: List<LessonStudentResponse> = emptyList(),
     @Serializable(with = OffsetDateTimeSerializer::class)
     val startedAt: OffsetDateTime? = null,
