@@ -1,0 +1,51 @@
+src/com/gvart/parleyroom/ai/llm/LlmGateway.kt
+  s_4d705bdf15dc1c::t_9ba90017d9d2ce 13-24,29,31
+src/com/gvart/parleyroom/ai/service/AiModelSettingsService.kt
+  s_4d705bdf15dc1c::t_7c6f2ffd153e2f 1-59
+src/com/gvart/parleyroom/ai/transfer/AiAdminDtos.kt
+  s_4d705bdf15dc1c::t_ad2ad3ae0cabf2 1-80
+src/com/gvart/parleyroom/ai/service/AiUsageLedger.kt
+  s_4d705bdf15dc1c::t_43c4278c5f6e81 1-123
+src/com/gvart/parleyroom/ai/routing/AdminAiRouting.kt
+  s_4d705bdf15dc1c::t_913cf20635b59b 1-94
+src/com/gvart/parleyroom/ai/config/AiConfig.kt
+  s_4d705bdf15dc1c::t_e150823d118b6c 4-5,11,28
+src/com/gvart/parleyroom/ai/config/AiModuleConfig.kt
+  s_4d705bdf15dc1c::t_eb032b1d1d54e7 6,9-10,33,42,46-49,58-60,75
+src/com/gvart/parleyroom/ai/llm/FakeLlmGateway.kt
+  s_4d705bdf15dc1c::t_1dcc86a7a352c5 34,36-37
+src/com/gvart/parleyroom/ai/llm/KoogAnthropicGateway.kt
+  s_4d705bdf15dc1c::t_5484177418cf9e 5,15,18-19,21,25-26,36-37,42,48-57,62,68-69,78,93-94,102-103
+src/com/gvart/parleyroom/ai/service/DocumentDraftService.kt
+  s_4d705bdf15dc1c::t_fac419119603f6 4,55,58,60-61,120,145
+src/com/gvart/parleyroom/ai/service/DraftBundleService.kt
+  s_4d705bdf15dc1c::t_fa88960e107215 4,114,125,129,146,165,204,207,212,217,223,242,254,256-257,261,290
+src/com/gvart/parleyroom/ai/service/FillTranslationsService.kt
+  s_4d705bdf15dc1c::t_f3b8af66aad5cf 4,65-66,77-79,83,111
+src/com/gvart/parleyroom/ai/service/GenerationJobs.kt
+  s_4d705bdf15dc1c::t_244288a066dbde 4,94,97-98,104,109,111,114
+src/com/gvart/parleyroom/ai/service/SuggestTagsService.kt
+  s_4d705bdf15dc1c::t_758fb10e06281c 4,40,43,49,51-53,57,69
+src/com/gvart/parleyroom/practice/service/SentenceService.kt
+  s_4d705bdf15dc1c::t_4351d982cb4990 6-7,76-77,81,106
+test/com/gvart/parleyroom/ai/AiOutputParserTest.kt
+  s_4d705bdf15dc1c::t_38439be736df33 34
+test/com/gvart/parleyroom/ai/KoogAnthropicGatewayTest.kt
+  s_4d705bdf15dc1c::t_684652ae644ae4 44-45,78-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "bd03381decb696114ab1f620f30317c6fe921fb2",
+  "prompts": {},
+  "sessions": {
+    "s_4d705bdf15dc1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0014f31a-3e93-40e3-a544-f35a8095bc10",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
