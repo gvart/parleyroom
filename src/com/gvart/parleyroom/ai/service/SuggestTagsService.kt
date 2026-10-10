@@ -1,8 +1,8 @@
 package com.gvart.parleyroom.ai.service
 
 import com.gvart.parleyroom.ai.config.AiRuntime
+import com.gvart.parleyroom.ai.data.AiUseCase
 import com.gvart.parleyroom.ai.data.GenerationJobKind
-import com.gvart.parleyroom.ai.llm.LlmGateway
 import com.gvart.parleyroom.ai.transfer.JobInput
 import com.gvart.parleyroom.ai.transfer.SuggestTagsResult
 import com.gvart.parleyroom.ai.transfer.SuggestedGrammarTopic
@@ -37,23 +37,24 @@ class SuggestTagsService(
 
     /** Auto-start after an upload: never fails the upload; null when AI is off or the teacher is at the job limit. */
     fun tryStart(materialId: UUID, principal: UserPrincipal): String? {
-        val gateway = ai.gateway ?: return null
+        if (ai.gateway == null) return null
         if (principal.role != UserRole.TEACHER) return null
         return try {
-            enqueue(gateway, materialId, principal.id).toString()
+            enqueue(materialId, principal.id).toString()
         } catch (_: TooManyRequestsException) {
             null
         }
     }
 
-    private fun enqueue(gateway: LlmGateway, materialId: UUID, teacherId: UUID): UUID {
+    private fun enqueue(materialId: UUID, teacherId: UUID): UUID {
         val input = GenerationJobs.json.encodeToJsonElement(JobInput())
-        val jobId = runner.enqueue(teacherId, null, GenerationJobKind.SUGGEST_TAGS, input, materialId = materialId, modelId = gateway.modelId)
-        runner.launch(jobId) { run(gateway, materialId, teacherId) }
+        val model = ai.models.modelFor(AiUseCase.SUGGEST_TAGS)
+        val jobId = runner.enqueue(teacherId, null, GenerationJobKind.SUGGEST_TAGS, input, materialId = materialId, modelId = model)
+        runner.launch(jobId) { run(AiCall(teacherId, AiUseCase.SUGGEST_TAGS, model, jobId), materialId, teacherId) }
         return jobId
     }
 
-    private suspend fun run(gateway: LlmGateway, materialId: UUID, teacherId: UUID): JobSuccess {
+    private suspend fun run(call: AiCall, materialId: UUID, teacherId: UUID): JobSuccess {
         val material = transaction { MaterialTable.selectAll().where { MaterialTable.id eq materialId }.singleOrNull() }
             ?: throw AiJobFailure("MATERIAL_NOT_FOUND", "The material was deleted")
         val extracted = extract(material)
@@ -65,7 +66,7 @@ class SuggestTagsService(
                 .map { row -> row[GrammarTopicTable.level]?.let { "${row[GrammarTopicTable.name]} ($it)" } ?: row[GrammarTopicTable.name] }
         }
         val request = Prompts.suggestTags(material[MaterialTable.name], extracted.kind.name, extracted.text, topicPaths, grammar)
-        val completion = GenerationJobs.completeValidated(gateway, Prompts.suggestTagsSystem, request, MAX_TOKENS, AiOutputParser::parseSuggestTags)
+        val completion = GenerationJobs.completeValidated(ai, call, Prompts.suggestTagsSystem, request, MAX_TOKENS, AiOutputParser::parseSuggestTags)
 
         val output = completion.value
         val result = transaction {

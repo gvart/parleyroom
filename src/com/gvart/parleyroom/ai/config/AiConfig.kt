@@ -1,11 +1,14 @@
 package com.gvart.parleyroom.ai.config
 
 import com.gvart.parleyroom.ai.llm.LlmGateway
+import com.gvart.parleyroom.ai.service.AiModelSettingsService
+import com.gvart.parleyroom.ai.service.AiUsageLedger
 import kotlin.time.Duration
 
 data class AiConfig(
     /** `anthropic` or `fake`. */
     val provider: String,
+    /** Fallback when a use case has no ai_model_settings row. */
     val model: String,
     val anthropicApiKey: String,
     val maxActiveJobsPerTeacher: Int,
@@ -22,4 +25,4 @@ data class AiConfig(
 }
 
 /** The configured provider; [gateway] is null when AI is not configured (job starts return 503). */
-class AiRuntime(val config: AiConfig, val gateway: LlmGateway?)
+class AiRuntime(val config: AiConfig, val gateway: LlmGateway?, val models: AiModelSettingsService, val ledger: AiUsageLedger)

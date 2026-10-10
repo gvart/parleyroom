@@ -31,12 +31,10 @@ import java.util.concurrent.CopyOnWriteArrayList
  */
 class FakeLlmGateway : LlmGateway {
 
-    override val modelId = "fake"
+    data class Call(val model: String, val system: String, val messages: List<LlmMessage>)
 
-    data class Call(val system: String, val messages: List<LlmMessage>)
-
-    override suspend fun complete(system: String, messages: List<LlmMessage>, maxTokens: Int): LlmReply {
-        received += Call(system, messages)
+    override suspend fun complete(model: String, system: String, messages: List<LlmMessage>, maxTokens: Int): LlmReply {
+        received += Call(model, system, messages)
         val request = messages.first().text
         val isRetry = Prompts.section(messages.last().text, Prompts.VALIDATION_ERRORS) != null
 

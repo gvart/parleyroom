@@ -31,7 +31,7 @@ class AiOutputParserTest {
 
     private fun fakeAnswer(mode: DraftMode, prompt: String = ""): String = runBlocking {
         val request = Prompts.generate(mode, "Level: B1", ANNA_NOTES, "", prompt)
-        FakeLlmGateway().complete(Prompts.draftSystem(mode), listOf(LlmMessage.user(request)), 1000).text
+        FakeLlmGateway().complete("fake", Prompts.draftSystem(mode), listOf(LlmMessage.user(request)), 1000).text
     }
 
     private fun answer(): JsonObject = Json.parseToJsonElement(fakeAnswer(DraftMode.ONE_ON_ONE)).jsonObject

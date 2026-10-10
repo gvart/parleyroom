@@ -1,8 +1,8 @@
 package com.gvart.parleyroom.ai.service
 
 import com.gvart.parleyroom.ai.config.AiRuntime
+import com.gvart.parleyroom.ai.data.AiUseCase
 import com.gvart.parleyroom.ai.data.GenerationJobKind
-import com.gvart.parleyroom.ai.llm.LlmGateway
 import com.gvart.parleyroom.ai.transfer.FillMissingRequest
 import com.gvart.parleyroom.ai.data.GenerationJobTable
 import com.gvart.parleyroom.ai.transfer.ApplyFillProposalsRequest
@@ -62,8 +62,8 @@ class FillTranslationsService(
     }
 
     fun start(request: FillMissingRequest, principal: UserPrincipal): GenerationJobResponse {
-        val gateway = ai.gateway
-            ?: throw ServiceUnavailableException("AI is not configured on this server", code = "AI_NOT_CONFIGURED")
+        if (ai.gateway == null)
+            throw ServiceUnavailableException("AI is not configured on this server", code = "AI_NOT_CONFIGURED")
         val entryIds = request.entryIds.map(UUID::fromString).distinct()
         transaction {
             LibraryAccess.requireTeacher(principal)
@@ -74,12 +74,13 @@ class FillTranslationsService(
             if (owned != entryIds.size.toLong()) throw NotFoundException("One or more vocab entries not found", code = "VOCAB_ENTRY_NOT_FOUND")
         }
         val input = JobInput(entryIds = entryIds.map(UUID::toString), fields = request.fields.distinct())
-        val jobId = runner.enqueue(principal.id, null, GenerationJobKind.FILL_TRANSLATIONS, GenerationJobs.json.encodeToJsonElement(input), modelId = gateway.modelId)
-        runner.launch(jobId) { run(gateway, entryIds, input.fields!!) }
+        val model = ai.models.modelFor(AiUseCase.FILL_TRANSLATIONS)
+        val jobId = runner.enqueue(principal.id, null, GenerationJobKind.FILL_TRANSLATIONS, GenerationJobs.json.encodeToJsonElement(input), modelId = model)
+        runner.launch(jobId) { run(AiCall(principal.id, AiUseCase.FILL_TRANSLATIONS, model, jobId), entryIds, input.fields!!) }
         return transaction { GenerationJobs.toResponse(GenerationJobs.requireReadable(jobId, principal)) }
     }
 
-    private suspend fun run(gateway: LlmGateway, entryIds: List<UUID>, fields: List<String>): JobSuccess {
+    private suspend fun run(call: AiCall, entryIds: List<UUID>, fields: List<String>): JobSuccess {
         // Only what describes the word itself is sent: no student data.
         val todo = transaction {
             VocabEntryTable.selectAll().where { VocabEntryTable.id inList entryIds }.orderBy(VocabEntryTable.lemma)
@@ -107,7 +108,7 @@ class FillTranslationsService(
             }
         })
         val completion = GenerationJobs.completeValidated(
-            gateway, Prompts.fillSystem, Prompts.fill(entries.toString(), fields), MAX_TOKENS,
+            ai, call, Prompts.fillSystem, Prompts.fill(entries.toString(), fields), MAX_TOKENS,
         ) { AiOutputParser.parseFill(it, keyed.map { k -> k.first }.toSet()) }
 
         // Proposals only: vocab_entries are shared by every student who has the word, so nothing is

@@ -41,8 +41,8 @@ class KoogAnthropicGatewayTest {
     fun stop() = server.stop(0)
 
     private fun send(modelId: String): JsonObject = runBlocking {
-        val gateway = KoogAnthropicGateway("test-key", modelId, 10.seconds, "http://127.0.0.1:${server.address.port}")
-        val reply = gateway.complete("system", listOf(LlmMessage.user("hi")), 1000)
+        val gateway = KoogAnthropicGateway("test-key", 10.seconds, "http://127.0.0.1:${server.address.port}")
+        val reply = gateway.complete(modelId, "system", listOf(LlmMessage.user("hi")), 1000)
         assertEquals("Hallo", reply.text)
         requests.single()
     }
@@ -75,7 +75,7 @@ class KoogAnthropicGatewayTest {
     @Test
     fun `max_tokens stop reason marks the reply truncated`() = runBlocking {
         stopReason = "max_tokens"
-        val gateway = KoogAnthropicGateway("test-key", "claude-sonnet-5-5", 10.seconds, "http://127.0.0.1:${server.address.port}")
-        assertTrue(gateway.complete("system", listOf(LlmMessage.user("hi")), 1000).truncated)
+        val gateway = KoogAnthropicGateway("test-key", 10.seconds, "http://127.0.0.1:${server.address.port}")
+        assertTrue(gateway.complete("claude-sonnet-5-5", "system", listOf(LlmMessage.user("hi")), 1000).truncated)
     }
 }

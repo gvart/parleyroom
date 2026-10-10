@@ -1,9 +1,9 @@
 package com.gvart.parleyroom.ai.service
 
 import com.gvart.parleyroom.ai.config.AiRuntime
+import com.gvart.parleyroom.ai.data.AiUseCase
 import com.gvart.parleyroom.ai.data.DocumentDraftTable
 import com.gvart.parleyroom.ai.data.GenerationJobKind
-import com.gvart.parleyroom.ai.llm.LlmGateway
 import com.gvart.parleyroom.ai.transfer.DocumentDraftInput
 import com.gvart.parleyroom.ai.transfer.DocumentDraftResponse
 import com.gvart.parleyroom.ai.transfer.GenerationJobResponse
@@ -52,12 +52,13 @@ class DocumentDraftService(
 ) {
 
     fun refine(documentId: UUID, instruction: String, principal: UserPrincipal): GenerationJobResponse {
-        val gateway = GenerationJobs.requireGateway(ai)
+        GenerationJobs.requireGateway(ai)
         transaction { support.requireOwned(documentId, principal) }
         val input = JobInput(instruction = instruction)
+        val model = ai.models.modelFor(AiUseCase.REFINE)
         val jobId = runner.enqueue(principal.id, null, GenerationJobKind.REFINE, GenerationJobs.json.encodeToJsonElement(input),
-            documentId = documentId, modelId = gateway.modelId)
-        runner.launch(jobId) { runRefine(gateway, jobId, documentId, instruction, principal) }
+            documentId = documentId, modelId = model)
+        runner.launch(jobId) { runRefine(AiCall(principal.id, AiUseCase.REFINE, model, jobId), jobId, documentId, instruction, principal) }
         return transaction { GenerationJobs.toResponse(GenerationJobs.requireReadable(jobId, principal)) }
     }
 
@@ -116,7 +117,7 @@ class DocumentDraftService(
         DocumentDraftTable.deleteWhere { DocumentDraftTable.documentId eq documentId }
     }
 
-    private suspend fun runRefine(gateway: LlmGateway, jobId: UUID, documentId: UUID, instruction: String, principal: UserPrincipal): JobSuccess {
+    private suspend fun runRefine(call: AiCall, jobId: UUID, documentId: UUID, instruction: String, principal: UserPrincipal): JobSuccess {
         data class Current(val document: ResultRow, val title: String, val blocks: JsonArray, val keyByEntryId: Map<String, String>, val words: String)
         val current = transaction {
             val document = DocumentTable.selectAll().where { DocumentTable.id eq documentId }.singleOrNull()
@@ -141,7 +142,7 @@ class DocumentDraftService(
             put("blocks", AiBlocks.toAi(current.blocks, current.keyByEntryId, emptyMap()))
         }.toString()
         val request = Prompts.refineDocument(current.document[DocumentTable.level]?.name ?: "unknown", current.words, currentJson, instruction)
-        val completion = GenerationJobs.completeValidated(gateway, Prompts.documentRefineSystem, request, DraftBundleService.MAX_TOKENS) {
+        val completion = GenerationJobs.completeValidated(ai, call, Prompts.documentRefineSystem, request, DraftBundleService.MAX_TOKENS) {
             AiOutputParser.parseDocumentRefine(it, current.keyByEntryId.values.toSet())
         }
         val output = completion.value
