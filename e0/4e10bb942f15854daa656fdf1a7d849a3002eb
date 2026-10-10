@@ -1,0 +1,27 @@
+test/com/gvart/parleyroom/IntegrationTest.kt
+  s_fae0993faff7e4::t_f8345d5ed6a4a7 29-31,130
+test/com/gvart/parleyroom/RecordingEmailSender.kt
+  s_fae0993faff7e4::t_d5f1c6d9bff90d 1-15
+test/com/gvart/parleyroom/email/CloudflareEmailSenderTest.kt
+  s_fae0993faff7e4::t_fd2682bff4dee3 1-109
+test/com/gvart/parleyroom/email/EmailNotificationIntegrationTest.kt
+  s_fae0993faff7e4::t_f4c3edf584c1bc 1-184
+test/com/gvart/parleyroom/email/EmailTemplatesTest.kt
+  s_fae0993faff7e4::t_9868a0b50bd988 1-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "e04e10bb942f15854daa656fdf1a7d849a3002eb",
+  "prompts": {},
+  "sessions": {
+    "s_fae0993faff7e4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8a90cfd-0334-42c0-bfb2-886ed0dbb1a3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
