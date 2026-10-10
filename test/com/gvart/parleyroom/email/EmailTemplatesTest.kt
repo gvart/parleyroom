@@ -66,7 +66,7 @@ class EmailTemplatesTest {
         val footer = ReminderFooter("s", "u")
         fun text(lang: EmailLanguage) =
             templates.lessonReminder(lang, LessonReminderVariant.H24, "L", at, berlin, UserRole.STUDENT, null, "x", footer).text
-        assertTrue("Среда, 14 октября · 18:00 (Europe/Berlin)" in text(EmailLanguage.RU), text(EmailLanguage.RU))
+        assertTrue("Среда, 14 октября · 18:00, Europe/Berlin" in text(EmailLanguage.RU), text(EmailLanguage.RU))
         assertTrue("Середа, 14 жовтня · 18:00" in text(EmailLanguage.UK), text(EmailLanguage.UK))
         assertTrue("Mittwoch, 14. Oktober · 18:00" in text(EmailLanguage.DE), text(EmailLanguage.DE))
         assertTrue("Wednesday, 14 October · 18:00" in text(EmailLanguage.EN), text(EmailLanguage.EN))
