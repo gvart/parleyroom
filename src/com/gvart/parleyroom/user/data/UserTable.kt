@@ -33,6 +33,8 @@ object UserTable : UUIDTable("users") {
     val updatedAt = timestampWithTimeZone("updated_at")
     val failedLoginAttempts = integer("failed_login_attempts").default(0)
     val lockedUntil = timestampWithTimeZone("locked_until").nullable()
+    /** Last successful token issuance (login, refresh, Telegram Mini App). */
+    val lastLoginAt = timestampWithTimeZone("last_login_at").nullable()
     val telegramId = long("telegram_id").nullable()
     val telegramUsername = varchar("telegram_username", 64).nullable()
 }

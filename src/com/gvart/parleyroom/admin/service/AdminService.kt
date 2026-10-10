@@ -253,6 +253,7 @@ class AdminService {
             updatedAt = row[UserTable.updatedAt],
             failedLoginAttempts = row[UserTable.failedLoginAttempts],
             lockedUntil = row[UserTable.lockedUntil],
+            lastLoginAt = row[UserTable.lastLoginAt],
         )
     }
 }
