@@ -21,6 +21,9 @@ data class GrammarEvidence(
     val homeworkScored: ScoredCount,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val lastPracticedAt: OffsetDateTime? = null,
+    /** When the topic was marked covered outside tracked lessons (e.g. onboarding); a COVERED floor. */
+    @Serializable(with = OffsetDateTimeSerializer::class)
+    val coveredAt: OffsetDateTime? = null,
 )
 
 @Serializable

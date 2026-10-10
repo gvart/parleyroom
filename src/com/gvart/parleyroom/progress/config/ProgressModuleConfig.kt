@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.progress.config
 
 import com.gvart.parleyroom.progress.routing.configureProgressRouting
+import com.gvart.parleyroom.progress.service.GrammarCoverageService
 import com.gvart.parleyroom.progress.service.ProgressCalculator
 import com.gvart.parleyroom.progress.service.ProgressConfig
 import com.gvart.parleyroom.progress.service.ProgressService
@@ -20,6 +21,7 @@ fun Application.configureProgressModule() {
     dependencies {
         provide { ProgressCalculator(progressConfig) }
         provide(ProgressService::class)
+        provide(GrammarCoverageService::class)
     }
 
     configureProgressRouting()

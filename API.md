@@ -729,7 +729,7 @@ For each grammar topic G on the checklist (teacher T, student S):
 |---|---|
 | `NEEDS_WORK` | over the latest `window` (10) scored units: `scored.total ≥ minScoredItems` (3) **and** `scored.correct / scored.total < needsWorkBelow` (0.60) |
 | `PRACTICED` | S has **submitted** (`attempt ≥ 1`, any status) homework of T with an item whose source is tagged with G |
-| `COVERED` | a lesson of T tagged with G **took place** for S (the shared rule in Library views → Covered by: CONFIRMED participant, not `CANCELLED` / `REQUEST`, and `COMPLETED` / `IN_PROGRESS` or `scheduledAt ≤ now`) |
+| `COVERED` | a lesson of T tagged with G **took place** for S (the shared rule in Library views → Covered by: CONFIRMED participant, not `CANCELLED` / `REQUEST`, and `COMPLETED` / `IN_PROGRESS` or `scheduledAt ≤ now`), **or** S has a `student_grammar_coverage` row of T for G (marked covered outside tracked lessons, e.g. an onboarding draft; a floor only — evidence above still wins) |
 | `NOT_COVERED` | none of the above |
 
 - **Item source tagged with G**: a `DOCUMENT` item whose source document (`assignment_items.document_id`)
@@ -789,7 +789,8 @@ GrammarProgressItem {
   evidence: {
     lessonCount, lastLessonAt?,                  // attended lessons tagged with it
     homeworkScored: { correct, total },          // scored units in the window (see above)
-    lastPracticedAt?                             // latest submittedAt of a qualifying homework
+    lastPracticedAt?,                            // latest submittedAt of a qualifying homework
+    coveredAt?                                   // when G was marked covered outside lessons (student_grammar_coverage)
   }
 }
 TopicProgressItem {
