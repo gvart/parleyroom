@@ -1,0 +1,44 @@
+resources/db/migration/V30__ai_draft_bundle_onboarding.sql
+  s_3f9967c6eb171b::t_d5a8f9000c4d44 1-3
+src/com/gvart/parleyroom/ai/service/DraftSendService.kt
+  s_3f9967c6eb171b::t_64620c49b998f7 7,16,30,33,61,91-93,168-172
+  s_3f9967c6eb171b::t_6b0c84061af2b8 173-174
+src/com/gvart/parleyroom/ai/service/DraftBundleService.kt
+  s_3f9967c6eb171b::t_e547a6493b82f4 125,128-134,150-152,154-156,176,195,207,470,477,502,604
+src/com/gvart/parleyroom/registration/routing/Routing.kt
+  s_3f9967c6eb171b::t_fd6945f1abae43 4,19,45-52,58-59
+src/com/gvart/parleyroom/ai/config/AiModuleConfig.kt
+  s_3f9967c6eb171b::t_fd6945f1abae43 19,56-60,76
+src/com/gvart/parleyroom/ai/service/OnboardingService.kt
+  s_3f9967c6eb171b::t_0b199e0de9bace 1-126
+src/com/gvart/parleyroom/ai/transfer/DraftDtos.kt
+  s_3f9967c6eb171b::t_f886c63460283a 193-204
+  s_3f9967c6eb171b::t_d5a8f9000c4d44 159-160,184
+src/com/gvart/parleyroom/ai/service/MaterialSources.kt
+  s_3f9967c6eb171b::t_e547a6493b82f4 50,82-83
+  s_3f9967c6eb171b::t_b4190dc8ec59e8 84
+src/com/gvart/parleyroom/ai/service/Prompts.kt
+  s_3f9967c6eb171b::t_3cfd5c2ac32415 31-36
+src/com/gvart/parleyroom/ai/routing/DraftRouting.kt
+  s_3f9967c6eb171b::t_fd6945f1abae43 7,16,47,117-154
+src/com/gvart/parleyroom/ai/data/DraftTables.kt
+  s_3f9967c6eb171b::t_d5a8f9000c4d44 33-34
+API.md
+  s_3f9967c6eb171b::t_099d0ea7640d6e 1569-1598,1711
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "a1dcc588609f475caf0b4cb08bff272ca9ec6dc3",
+  "prompts": {},
+  "sessions": {
+    "s_3f9967c6eb171b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5bd93657-dbe8-481d-8f0c-95fe6f2531a9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
