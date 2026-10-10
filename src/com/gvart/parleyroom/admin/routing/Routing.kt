@@ -2,9 +2,11 @@ package com.gvart.parleyroom.admin.routing
 
 import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.admin.service.AdminService
+import com.gvart.parleyroom.admin.service.AdminStatsService
 import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetPasswordRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetStatusRequest
+import com.gvart.parleyroom.admin.transfer.AdminStatsResponse
 import com.gvart.parleyroom.admin.transfer.AdminUpdateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminUserListResponse
 import com.gvart.parleyroom.admin.transfer.AdminUserResponse
@@ -27,14 +29,43 @@ import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
 import java.util.UUID
 
 fun Application.configureAdminRouting() {
     val adminService: AdminService by dependencies
+    val adminStatsService: AdminStatsService by dependencies
 
     routing {
         authenticate {
             route("/api/v1/admin") {
+                get("/stats") {
+                    val principal = call.requirePrincipal()
+                    requireAdmin(principal)
+                    val params = call.request.queryParameters
+                    val result = adminStatsService.stats(
+                        from = params["from"]?.let { parseDate(it, "from") },
+                        to = params["to"]?.let { parseDate(it, "to") },
+                    )
+                    call.respond(HttpStatusCode.OK, result)
+                }.describe {
+                    summary = "Platform stats (admin)"
+                    description = "Dashboard metrics. Range metrics cover inclusive UTC days [from, to] " +
+                        "(default: the last 30 days, max 366); byStatus and totals are current snapshots; " +
+                        "active7d/active30d/activeLearners7d are relative to now. Daily series include empty days. Admin only."
+                    parameters {
+                        query("from") { description = "Start day, YYYY-MM-DD (default: to - 29 days)"; required = false }
+                        query("to") { description = "End day, YYYY-MM-DD (default: today, UTC)"; required = false }
+                    }
+                    responses {
+                        HttpStatusCode.OK { schema = jsonSchema<AdminStatsResponse>() }
+                        HttpStatusCode.BadRequest { schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.Forbidden { schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.Unauthorized { schema = jsonSchema<ProblemDetail>() }
+                    }
+                }
+
                 get("/users") {
                     val principal = call.requirePrincipal()
                     requireAdmin(principal)
@@ -211,6 +242,13 @@ private fun parseUuid(raw: String?): UUID {
         throw BadRequestException("Invalid user id")
     }
 }
+
+private fun parseDate(value: String, field: String): LocalDate =
+    try {
+        LocalDate.parse(value)
+    } catch (_: DateTimeParseException) {
+        throw BadRequestException("Invalid $field: $value (expected YYYY-MM-DD)")
+    }
 
 private inline fun <reified T : Enum<T>> parseEnum(value: String, field: String): T =
     try {
