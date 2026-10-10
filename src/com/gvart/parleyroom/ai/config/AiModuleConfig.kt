@@ -3,8 +3,11 @@ package com.gvart.parleyroom.ai.config
 import com.gvart.parleyroom.ai.llm.FakeLlmGateway
 import com.gvart.parleyroom.ai.llm.KoogAnthropicGateway
 import com.gvart.parleyroom.ai.llm.LlmGateway
+import com.gvart.parleyroom.ai.routing.configureAdminAiRouting
 import com.gvart.parleyroom.ai.routing.configureAiRouting
 import com.gvart.parleyroom.ai.routing.configureDraftRouting
+import com.gvart.parleyroom.ai.service.AiModelSettingsService
+import com.gvart.parleyroom.ai.service.AiUsageLedger
 import com.gvart.parleyroom.ai.service.DocumentDraftService
 import com.gvart.parleyroom.ai.service.DraftBundleService
 import com.gvart.parleyroom.ai.service.DraftSendService
@@ -27,7 +30,7 @@ fun Application.configureAiModule() {
 
     val aiConfig = AiConfig(
         provider = value("ai.provider", AiConfig.PROVIDER_ANTHROPIC).lowercase(),
-        model = value("ai.model", "claude-sonnet-5-5"),
+        model = value("ai.model", "claude-haiku-5-5"),
         anthropicApiKey = value("ai.anthropic_api_key", ""),
         maxActiveJobsPerTeacher = value("ai.max_active_jobs_per_teacher", "2").toInt(),
         maxConcurrentJobs = value("ai.max_concurrent_jobs", "3").toInt(),
@@ -36,11 +39,14 @@ fun Application.configureAiModule() {
     val gateway: LlmGateway? = when {
         aiConfig.provider == AiConfig.PROVIDER_FAKE -> FakeLlmGateway()
         aiConfig.provider == AiConfig.PROVIDER_ANTHROPIC && aiConfig.enabled ->
-            KoogAnthropicGateway(aiConfig.anthropicApiKey, aiConfig.model, requestTimeout = aiConfig.jobTimeout / 2)
+            KoogAnthropicGateway(aiConfig.anthropicApiKey, requestTimeout = aiConfig.jobTimeout / 2)
         else -> null
     }
     if (gateway == null) environment.log.warn("AI provider '${aiConfig.provider}' is not configured (ANTHROPIC_API_KEY empty?): AI endpoints return 503")
-    else environment.log.info("AI provider: ${aiConfig.provider}, model ${gateway.modelId}")
+    else environment.log.info("AI provider: ${aiConfig.provider}, fallback model ${aiConfig.model}")
+    val pricing = AiPricing.fromConfig(config)
+    val models = AiModelSettingsService(pricing, aiConfig.model)
+    val ledger = AiUsageLedger(pricing)
 
     val sseManager: NotificationSseManager by dependencies
     val runner = GenerationJobRunner(aiConfig, sseManager)
@@ -49,7 +55,9 @@ fun Application.configureAiModule() {
     monitor.subscribe(ApplicationStopping) { runner.shutdown() }
 
     dependencies {
-        provide { AiRuntime(aiConfig, gateway) }
+        provide { AiRuntime(aiConfig, gateway, models, ledger) }
+        provide { models }
+        provide { ledger }
         provide { runner }
         provide(LessonContextService::class)
         provide(MaterialSources::class)
@@ -64,4 +72,5 @@ fun Application.configureAiModule() {
 
     configureAiRouting()
     configureDraftRouting()
+    configureAdminAiRouting()
 }

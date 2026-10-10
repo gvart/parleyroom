@@ -3,6 +3,8 @@ package com.gvart.parleyroom.practice.service
 import com.gvart.parleyroom.activity.data.ActivityKind
 import com.gvart.parleyroom.activity.service.LearningActivityRecorder
 import com.gvart.parleyroom.ai.config.AiRuntime
+import com.gvart.parleyroom.ai.data.AiUseCase
+import com.gvart.parleyroom.ai.service.AiCall
 import com.gvart.parleyroom.ai.service.AiJobFailure
 import com.gvart.parleyroom.ai.service.AiOutputParser
 import com.gvart.parleyroom.ai.service.GenerationJobs
@@ -71,11 +73,12 @@ class SentenceService(
                 )
             buildRequest(row, sentence, principal)
         }
-        val gateway = ai.gateway ?: throw notConfigured()
+        if (ai.gateway == null) throw notConfigured()
+        val model = ai.models.modelFor(AiUseCase.SENTENCE_FEEDBACK)
 
         val completion = try {
             withTimeout(config.sentenceTimeout) {
-                GenerationJobs.completeValidated(gateway, Prompts.sentenceFeedbackSystem, request.prompt, MAX_TOKENS) {
+                GenerationJobs.completeValidated(ai, AiCall(principal.id, AiUseCase.SENTENCE_FEEDBACK, model), Prompts.sentenceFeedbackSystem, request.prompt, MAX_TOKENS) {
                     AiOutputParser.parseSentenceFeedback(it, request.translationLanguage != null)
                 }
             }
@@ -100,7 +103,7 @@ class SentenceService(
                 it[studentId] = principal.id
                 it[StudentVocabSentenceTable.sentence] = sentence
                 it[StudentVocabSentenceTable.feedback] = feedback
-                it[modelId] = gateway.modelId
+                it[modelId] = model
                 it[createdAt] = OffsetDateTime.now()
             }.value
             LearningActivityRecorder.record(principal.id, ActivityKind.VOCAB_SENTENCE, id)

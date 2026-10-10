@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.ai.service
 
 import com.gvart.parleyroom.ai.config.AiRuntime
+import com.gvart.parleyroom.ai.data.AiUseCase
 import com.gvart.parleyroom.ai.data.DraftBundleTable
 import com.gvart.parleyroom.ai.data.DraftItemKind
 import com.gvart.parleyroom.ai.data.DraftItemTable
@@ -11,7 +12,6 @@ import com.gvart.parleyroom.ai.data.GenerationJobKind
 import com.gvart.parleyroom.ai.data.GenerationJobStatus
 import com.gvart.parleyroom.ai.data.GenerationJobTable
 import com.gvart.parleyroom.ai.data.PromptTemplateTable
-import com.gvart.parleyroom.ai.llm.LlmGateway
 import com.gvart.parleyroom.ai.transfer.AttendeeRef
 import com.gvart.parleyroom.ai.transfer.DraftBundleResponse
 import com.gvart.parleyroom.ai.transfer.DraftBundleSummary
@@ -111,7 +111,7 @@ class DraftBundleService(
     // ---- Generate ----
 
     fun generateForLesson(lessonId: UUID, request: GenerateDraftRequest, principal: UserPrincipal): DraftBundleResponse {
-        val gateway = GenerationJobs.requireGateway(ai)
+        GenerationJobs.requireGateway(ai)
         if (request.materialIds != null)
             throw BadRequestException("materialIds is only for student drafts", code = "VALIDATION_FAILED")
         val prepared = transaction {
@@ -122,11 +122,11 @@ class DraftBundleService(
             val notes = request.notes ?: lesson[LessonTable.rawNotes].orEmpty()
             Prepared(ctx, notes, instructions(request, principal))
         }
-        return start(gateway, DraftScope.LESSON, prepared, request, principal, lessonId = lessonId, studentId = null)
+        return start(DraftScope.LESSON, prepared, request, principal, lessonId = lessonId, studentId = null)
     }
 
     fun generateForStudent(studentId: UUID, request: GenerateDraftRequest, principal: UserPrincipal): DraftBundleResponse {
-        val gateway = GenerationJobs.requireGateway(ai)
+        GenerationJobs.requireGateway(ai)
         val materialIds = request.materialIds?.map { parse(it, "materialIds") }
         val (prepared, materialRows) = transaction {
             LibraryAccess.requireTeacher(principal)
@@ -143,7 +143,7 @@ class DraftBundleService(
         val materials = materialRows?.let { rows ->
             MaterialContext(materialSources.extract(rows, requireText = true), transaction { MaterialSources.studentWords(studentId) })
         }
-        return start(gateway, DraftScope.STUDENT, prepared.copy(materials = materials), request, principal, lessonId = null, studentId = studentId)
+        return start(DraftScope.STUDENT, prepared.copy(materials = materials), request, principal, lessonId = null, studentId = studentId)
     }
 
     private data class Prepared(val ctx: LessonContext, val notes: String, val instructions: String, val materials: MaterialContext? = null)
@@ -162,7 +162,7 @@ class DraftBundleService(
     }
 
     private fun start(
-        gateway: LlmGateway, scope: DraftScope, prepared: Prepared, request: GenerateDraftRequest, principal: UserPrincipal,
+        scope: DraftScope, prepared: Prepared, request: GenerateDraftRequest, principal: UserPrincipal,
         lessonId: UUID?, studentId: UUID?,
     ): DraftBundleResponse {
         val (ctx, notes, instructions, materials) = prepared
@@ -201,25 +201,26 @@ class DraftBundleService(
             pastLessonIds = ctx.pastNotes.map { it.ref.id }, topicIds = request.topicIds, grammarTopicIds = request.grammarTopicIds,
             kinds = request.kinds, materialIds = request.materialIds,
         )
+        val model = ai.models.modelFor(AiUseCase.GENERATE)
         val jobId = try {
             runner.enqueue(principal.id, lessonId, GenerationJobKind.GENERATE, GenerationJobs.json.encodeToJsonElement(jobInput),
-                bundleId = bundleId, modelId = gateway.modelId)
+                bundleId = bundleId, modelId = model)
         } catch (e: Exception) {
             if (created) transaction { DraftBundleTable.deleteWhere { DraftBundleTable.id eq bundleId } }
             throw e
         }
-        runner.launch(jobId) { runGenerate(gateway, bundleId, ctx, notes, instructions, kinds, materials) }
+        runner.launch(jobId) { runGenerate(AiCall(principal.id, AiUseCase.GENERATE, model, jobId), bundleId, ctx, notes, instructions, kinds, materials) }
         return get(bundleId, principal)
     }
 
     private suspend fun runGenerate(
-        gateway: LlmGateway, bundleId: UUID, ctx: LessonContext, notes: String, instructions: String, kinds: Set<DraftKind>,
+        call: AiCall, bundleId: UUID, ctx: LessonContext, notes: String, instructions: String, kinds: Set<DraftKind>,
         materials: MaterialContext?,
     ): JobSuccess {
         val target = if (ctx.mode == DraftMode.CLUB) DraftTarget.NOTES_DOCUMENT else DraftTarget.BUNDLE
         val request = Prompts.generate(ctx.mode, ctx.toPromptText(), HtmlText.toPlainText(notes), ctx.pastNotesText(), instructions, kinds,
             materials?.prompt())
-        val completion = GenerationJobs.completeValidated(gateway, Prompts.draftSystem(ctx.mode), request, MAX_TOKENS) {
+        val completion = GenerationJobs.completeValidated(ai, call, Prompts.draftSystem(ctx.mode), request, MAX_TOKENS) {
             // A material may hold nothing new for the student: no words is a valid answer then.
             AiOutputParser.parseDraft(it, target, kinds, ctx.translationLanguages, requireWords = materials == null)
         }
@@ -238,7 +239,7 @@ class DraftBundleService(
     // ---- Refine ----
 
     fun refine(bundleId: UUID, request: RefineDraftRequest, principal: UserPrincipal): DraftBundleResponse {
-        val gateway = GenerationJobs.requireGateway(ai)
+        GenerationJobs.requireGateway(ai)
         val (bundle, itemId) = transaction {
             val bundle = requireOwned(bundleId, principal)
             requireDraft(bundle)
@@ -250,13 +251,14 @@ class DraftBundleService(
         }
         val kinds = request.kinds?.toSet() ?: storedInput(bundle).kinds?.toSet() ?: DraftKind.entries.toSet()
         val input = JobInput(instruction = request.instruction, itemId = itemId?.toString(), kinds = DraftKind.entries.filter { it in kinds })
+        val model = ai.models.modelFor(AiUseCase.REFINE)
         val jobId = runner.enqueue(principal.id, bundle[DraftBundleTable.lessonId]?.value, GenerationJobKind.REFINE,
-            GenerationJobs.json.encodeToJsonElement(input), bundleId = bundleId, modelId = gateway.modelId)
-        runner.launch(jobId) { runRefine(gateway, bundleId, itemId, request.instruction, kinds) }
+            GenerationJobs.json.encodeToJsonElement(input), bundleId = bundleId, modelId = model)
+        runner.launch(jobId) { runRefine(AiCall(principal.id, AiUseCase.REFINE, model, jobId), bundleId, itemId, request.instruction, kinds) }
         return get(bundleId, principal)
     }
 
-    private suspend fun runRefine(gateway: LlmGateway, bundleId: UUID, itemId: UUID?, instruction: String, kinds: Set<DraftKind>): JobSuccess {
+    private suspend fun runRefine(call: AiCall, bundleId: UUID, itemId: UUID?, instruction: String, kinds: Set<DraftKind>): JobSuccess {
         data class Refine(
             val ctx: LessonContext, val target: DraftTarget, val current: String, val notes: String, val prompt: String,
             val materialRows: List<ResultRow>?, val studentWords: StudentWords?,
@@ -285,7 +287,7 @@ class DraftBundleService(
             ?.takeIf { it.sources.isNotEmpty() }
         val request = Prompts.refine(refine.ctx.mode, refine.target, refine.ctx.toPromptText(), HtmlText.toPlainText(refine.notes),
             refine.ctx.pastNotesText(), refine.prompt, refine.current, instruction, kinds, materials?.prompt())
-        val completion = GenerationJobs.completeValidated(gateway, Prompts.draftSystem(refine.ctx.mode), request, MAX_TOKENS) {
+        val completion = GenerationJobs.completeValidated(ai, call, Prompts.draftSystem(refine.ctx.mode), request, MAX_TOKENS) {
             AiOutputParser.parseDraft(it, refine.target, kinds, refine.ctx.translationLanguages, requireWords = materials == null)
         }
         return transaction {

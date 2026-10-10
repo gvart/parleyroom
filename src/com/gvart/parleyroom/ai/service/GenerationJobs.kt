@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.ai.service
 
 import com.gvart.parleyroom.ai.config.AiRuntime
+import com.gvart.parleyroom.ai.config.TokenCounts
 import com.gvart.parleyroom.ai.data.GenerationJobStatus
 import com.gvart.parleyroom.ai.data.GenerationJobTable
 import com.gvart.parleyroom.ai.llm.LlmException
@@ -90,22 +91,27 @@ object GenerationJobs {
     /**
      * Calls the model and parses the answer; on invalid output retries once with the problems fed
      * back. Throws [AiJobFailure] (AI_OUTPUT_INVALID or the provider's code) otherwise.
+     * Every provider call, failed ones included, gets an `ai_usage` row for [call].
      */
     suspend fun <T> completeValidated(
-        gateway: LlmGateway,
+        ai: AiRuntime,
+        call: AiCall,
         system: String,
         request: String,
         maxTokens: Int,
         parse: (String) -> T,
     ): Completion<T> {
+        val gateway = requireGateway(ai)
         val messages = mutableListOf(LlmMessage.user(request))
         var usage = Usage()
         for (attempt in 1..2) {
             val reply = try {
-                gateway.complete(system, messages, maxTokens)
+                gateway.complete(call.model, system, messages, maxTokens)
             } catch (e: LlmException) {
+                ai.ledger.record(call, TokenCounts(), errorCode = e.code)
                 throw AiJobFailure(e.code, e.message ?: "The AI provider request failed", attempt, usage)
             }
+            ai.ledger.record(call, TokenCounts(reply.inputTokens ?: 0, reply.outputTokens ?: 0, reply.cacheReadTokens, reply.cacheWriteTokens))
             usage += Usage(reply.inputTokens, reply.outputTokens)
             // A retry would hit the same limit, so a cut-off answer fails right away.
             if (reply.truncated) {
