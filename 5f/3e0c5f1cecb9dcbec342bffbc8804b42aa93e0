@@ -1,0 +1,39 @@
+resources/db/migration/V28__invite_onboarding.sql
+  s_3f9967c6eb171b::t_93105748b431d8 1-18
+src/com/gvart/parleyroom/registration/data/RegistrationMaterialTable.kt
+  s_3f9967c6eb171b::t_b094d9147a8208 1-14
+src/com/gvart/parleyroom/registration/data/RegistrationTable.kt
+  s_3f9967c6eb171b::t_6e7a8891ba74e3 3,19-21
+src/com/gvart/parleyroom/registration/routing/Routing.kt
+  s_3f9967c6eb171b::t_c29b508e9ddfa5 47-49,77-80,101-108
+src/com/gvart/parleyroom/registration/service/RegistrationService.kt
+  s_697bdc25a7c420::t_31da4855418f97 3-7,19-21,24-25,43-45,60-63,83,89-92,95-96,101,126,128-129,134,151-213
+src/com/gvart/parleyroom/registration/transfer/InviteUserRequest.kt
+  s_3f9967c6eb171b::t_be3b672e801121 3,7-9,17-20,26-29,42
+test/com/gvart/parleyroom/registration/InviteMaterialsIntegrationTest.kt
+  s_3f9967c6eb171b::t_d393117f929649 1-311
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "5f3e0c5f1cecb9dcbec342bffbc8804b42aa93e0",
+  "prompts": {},
+  "sessions": {
+    "s_3f9967c6eb171b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5bd93657-dbe8-481d-8f0c-95fe6f2531a9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    },
+    "s_697bdc25a7c420": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59d45f55-a48d-45cb-8938-4bc3e5cdb190",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
