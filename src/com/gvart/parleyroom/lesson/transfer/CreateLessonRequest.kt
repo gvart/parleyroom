@@ -20,6 +20,8 @@ data class CreateLessonRequest(
     val level: LanguageLevel? = null,
     val maxParticipants: Int? = null,
     val groupId: String? = null,
+    /** In-person lesson: no video room. */
+    val offline: Boolean = false,
 ) {
     fun validate(): ValidationResult {
         val errors = buildList {

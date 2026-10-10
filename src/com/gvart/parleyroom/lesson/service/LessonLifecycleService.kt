@@ -100,6 +100,8 @@ class LessonLifecycleService(
                     throw ForbiddenException("Students can only request one-on-one lessons")
                 if (principal.id !in studentIds)
                     throw ForbiddenException("Students can only request lessons for themselves")
+                if (request.offline)
+                    throw ForbiddenException("Students can only request online lessons")
                 // The booking still goes through availability + overlap checks below;
                 // this only skips the teacher's accept step.
                 if (teacherAutoConfirmsBookings(teacherId)) LessonStatus.CONFIRMED else LessonStatus.REQUEST
@@ -138,6 +140,7 @@ class LessonLifecycleService(
             it[LessonTable.level] = request.level
             it[LessonTable.maxParticipants] = request.maxParticipants
             it[LessonTable.groupId] = groupId
+            it[LessonTable.offline] = request.offline
             it[LessonTable.createdBy] = principal.id
         }
 
@@ -401,7 +404,7 @@ class LessonLifecycleService(
             )
         }
 
-        StartLessonResponse(videoRoom = mintVideoAccess(lessonId, principal))
+        StartLessonResponse(videoRoom = if (lesson[LessonTable.offline]) null else mintVideoAccess(lessonId, principal))
     }
 
     fun completeLesson(lessonId: UUID, principal: UserPrincipal): LessonResponse {
@@ -501,6 +504,9 @@ class LessonLifecycleService(
     fun getVideoAccess(lessonId: UUID, principal: UserPrincipal): VideoAccess = transaction {
         val lesson = support.findLesson(lessonId)
         support.requireLessonParticipant(lessonId, lesson, principal)
+
+        if (lesson[LessonTable.offline])
+            throw ConflictException("Offline lessons have no video room", code = "LESSON_OFFLINE")
 
         val status = lesson[LessonTable.status]
         val allowed = when {

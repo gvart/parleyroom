@@ -2,11 +2,13 @@ package com.gvart.parleyroom.lesson.service
 
 import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.service.findByIdOrThrow
+import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.group.data.GroupTable
 import com.gvart.parleyroom.lesson.data.LessonCorrectionTable
 import com.gvart.parleyroom.lesson.data.LessonGrammarTopicTable
+import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.lesson.data.LessonTopicTable
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
@@ -44,12 +46,16 @@ class LessonContentService(
         val topicIds = request.topicIds?.let { LibraryAccess.requireTopics(teacherId, it) }
         val grammarIds = request.grammarTopicIds?.let { LibraryAccess.requireGrammarTopics(teacherId, it) }
         val vocabIds = request.vocabEntryIds?.let { requireEntries(teacherId, it) }
+        if (request.offline != null && request.offline != lesson[LessonTable.offline] &&
+            lesson[LessonTable.status] !in setOf(LessonStatus.REQUEST, LessonStatus.CONFIRMED)
+        ) throw BadRequestException("Online/offline can only be changed before the lesson starts", code = "LESSON_INVALID_STATE")
 
         LessonTable.update({ LessonTable.id eq lessonId }) {
             if (request.rawNotes != null) it[rawNotes] = request.rawNotes
             if (request.promptUsed != null) it[promptUsed] = request.promptUsed
             if (groupId != null) it[LessonTable.groupId] = groupId
             if (request.clearGroup) it[LessonTable.groupId] = null
+            if (request.offline != null) it[offline] = request.offline
             it[updatedBy] = principal.id
         }
 
