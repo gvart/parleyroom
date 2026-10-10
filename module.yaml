@@ -62,6 +62,7 @@ dependencies:
   - $ktor.server.auth.jwt
   - $ktor.server.openapi
   - $ktor.server.swagger
+  - $ktor.client.cio
   - $libs.ktor.openapi.routing
   - $libs.koog.agents.core
   - $libs.koog.anthropic
@@ -72,6 +73,7 @@ dependencies:
 test-dependencies:
   - $ktor.server.testHost
   - $ktor.client.contentNegotiation
+  - $ktor.client.mock
   - $libs.testcontainers
   - $libs.testcontainers.postgresql
   - $libs.testcontainers.junit.jupiter

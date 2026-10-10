@@ -28,8 +28,9 @@ CREATE TABLE email_log
     success           BOOLEAN      NOT NULL
 );
 
--- One reminder per (kind, lesson/assignment, recipient, variant); NULLs compare equal.
+-- One reminder per (kind, lesson/homework, recipient, variant); NULLs compare equal.
+-- Invites keep their registration as ref_id but may be sent again, so they are not deduplicated.
 CREATE UNIQUE INDEX uq_email_log_dedupe ON email_log (kind, ref_id, recipient_user_id, variant) NULLS NOT DISTINCT
-    WHERE ref_id IS NOT NULL;
+    WHERE ref_id IS NOT NULL AND kind <> 'INVITE';
 
 CREATE INDEX idx_email_log_sent_at ON email_log (sent_at);

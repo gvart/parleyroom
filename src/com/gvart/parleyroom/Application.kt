@@ -6,6 +6,8 @@ import com.gvart.parleyroom.admin.config.configureAdminModule
 import com.gvart.parleyroom.availability.config.configureAvailabilityModule
 import com.gvart.parleyroom.config.configureDatabase
 import com.gvart.parleyroom.document.config.configureDocumentModule
+import com.gvart.parleyroom.email.config.configureEmailModule
+import com.gvart.parleyroom.email.service.EmailSender
 import com.gvart.parleyroom.config.configureHealthRouting
 import com.gvart.parleyroom.config.generalConfig
 import com.gvart.parleyroom.goal.config.configureGoalModule
@@ -29,9 +31,10 @@ fun main(args: Array<String>) {
     EngineMain.main(args)
 }
 
-fun Application.module(dataSource: javax.sql.DataSource? = null) {
+fun Application.module(dataSource: javax.sql.DataSource? = null, emailSender: EmailSender? = null) {
     generalConfig()
     configureDatabase(dataSource)
+    configureEmailModule(emailSender)
     configureRegistrationModule()
     configureUserModule()
     configureAdminModule()
