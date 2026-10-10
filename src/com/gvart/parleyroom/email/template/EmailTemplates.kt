@@ -329,11 +329,11 @@ class EmailTemplates(private val brand: Brand) {
     private fun time(at: OffsetDateTime, zone: ZoneId): String =
         at.atZoneSameInstant(zone).format(DateTimeFormatter.ofPattern("HH:mm"))
 
-    /** e.g. "Wednesday, 15 October · 18:00 (Europe/Berlin)", in the recipient's language and zone. */
+    /** e.g. "Wednesday, 15 October · 18:00" + a second line with the zone, in the recipient's language and zone. */
     private fun dateTime(lang: EmailLanguage, at: OffsetDateTime, zone: ZoneId): String {
         val pattern = if (lang == DE) "EEEE, d. MMMM · HH:mm" else "EEEE, d MMMM · HH:mm"
         val formatted = at.atZoneSameInstant(zone).format(DateTimeFormatter.ofPattern(pattern, lang.locale))
-        return "${formatted.replaceFirstChar { it.titlecase(lang.locale) }} (${zone.id.replace('_', ' ')})"
+        return "${formatted.replaceFirstChar { it.titlecase(lang.locale) }}\n${zone.id.replace('_', ' ')}"
     }
 
     private fun date(lang: EmailLanguage, at: OffsetDateTime, zone: ZoneId): String {

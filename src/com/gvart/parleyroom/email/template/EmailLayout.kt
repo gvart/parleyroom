@@ -32,6 +32,7 @@ internal data class EmailContent(
     val robbi: RobbiPose,
     val heading: String,
     val paragraphs: List<String>,
+    /** Label to value; lines after the first in a value render as a muted second line. */
     val details: List<Pair<String, String>>,
     val ctaLabel: String,
     val ctaUrl: String,
@@ -86,6 +87,7 @@ internal object EmailLayout {
     .pr-ink3 { color:#9FB5A6 !important; }
     .pr-soft { background:#1B3324 !important; }
     .pr-accent { color:#8BE04A !important; }
+    .pr-hair { background:#24402E !important; }
   }
 </style>
 </head>
@@ -121,7 +123,8 @@ internal object EmailLayout {
                 val bottom = if (i == c.details.lastIndex) 18 else 6
                 append("""<tr><td style="padding:${top}px 22px ${bottom}px;font-family:$FONT;">
 <div class="pr-ink3" style="font-size:11px;line-height:1.3;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:$INK_3;">${esc(label)}</div>
-<div class="pr-ink" style="font-size:16px;line-height:1.4;font-weight:700;color:$INK;padding-top:2px;">${esc(value)}</div>
+<div class="pr-ink" style="font-size:16px;line-height:1.4;font-weight:700;color:$INK;padding-top:2px;">${esc(value.substringBefore('\n'))}</div>
+${value.lines().drop(1).joinToString("") { """<div class="pr-ink3" style="font-size:13px;line-height:1.4;color:$INK_3;">${esc(it)}</div>""" }}
 </td></tr>
 """)
             }
@@ -139,8 +142,8 @@ internal object EmailLayout {
             append("""<tr><td align="center" class="pr-ink3" style="font-family:$FONT;font-size:13px;line-height:1.5;color:$INK_3;padding:18px 0 0;">${esc(it)}</td></tr>
 """)
         }
-        append("""<tr><td class="pr-ink2" style="font-family:$FONT;font-size:15px;line-height:1.5;color:$INK_2;padding:24px 0 0;border-top:1px solid $HAIR;" align="center">
-<div style="height:20px;line-height:20px;font-size:1px;">&nbsp;</div>${c.signoff.joinToString("<br>") { esc(it) }}</td></tr>
+        append("""<tr><td style="padding:28px 0 0;"><div class="pr-hair" style="height:1px;line-height:1px;font-size:1px;background:$HAIR;">&nbsp;</div></td></tr>
+<tr><td class="pr-ink2" style="font-family:$FONT;font-size:15px;line-height:1.5;color:$INK_2;padding:20px 0 0;" align="center">${c.signoff.joinToString("<br>") { esc(it) }}</td></tr>
 </table>
 </td></tr>
 """)
@@ -160,7 +163,7 @@ internal object EmailLayout {
         appendLine(c.heading)
         appendLine()
         c.paragraphs.forEach { appendLine(it); appendLine() }
-        c.details.forEach { (label, value) -> appendLine("$label: $value") }
+        c.details.forEach { (label, value) -> appendLine("$label: ${value.replace("\n", ", ")}") }
         if (c.details.isNotEmpty()) appendLine()
         appendLine("${c.ctaLabel}: ${c.ctaUrl}")
         c.note?.let { appendLine(); appendLine(it) }

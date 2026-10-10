@@ -1915,3 +1915,22 @@ returned on `GET /api/v1/users/me` and set with `PATCH /api/v1/users/me`; anyone
 ("level can't be changed here; it is set by the teacher") and nothing is updated. Teachers set a
 student's level with `PUT /api/v1/students/{studentId}/level`, admins with `PATCH /api/v1/admin/users/{id}`. The supported list lives in
 `user/data/SupportedLocale.kt`; adding a language is a one-line change there.
+
+## Email notifications
+
+`UserResponse` (`GET /api/v1/users/me`) carries `emailLessonReminders` and `emailHomeworkReminders` (both default
+`true`); any user sets them with `PATCH /api/v1/users/me { "emailLessonReminders": false }`.
+
+Reminder emails link to the portal page `/unsubscribe?token=…`, which posts the token to the public
+`POST /api/v1/email/unsubscribe { "token": "…" }` → 200 `{ "category": "LESSON_REMINDERS" | "HOMEWORK_REMINDERS" }`.
+Mail clients use the same endpoint for RFC 8058 one-click unsubscribe (`?token=…` with a
+`List-Unsubscribe=One-Click` form body). It switches that category off and is idempotent; a bad token returns 400
+`UNSUBSCRIBE_TOKEN_INVALID`. Tokens are stateless HMACs keyed from `JWT_SECRET` and never expire.
+
+Admins read and set platform settings with `GET` / `PUT /api/v1/admin/settings { "inviteExpiryDays": 7 }`
+(1..90, else 400 `VALIDATION_FAILED`; non-admins 403).
+
+Sending is configured with `MAIL_PROVIDER` (`log` default: nothing leaves the server; `cloudflare`: Cloudflare Email
+Service REST API with `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_EMAIL_API_TOKEN`), `MAIL_FROM`, `BRAND_NAME`
+(`Parley|room` style, like the portal's `VITE_BRAND_NAME`), `APP_BASE_URL` (portal links) and `API_PUBLIC_URL`
+(one-click unsubscribe; must be https or the List-Unsubscribe headers are left out).
