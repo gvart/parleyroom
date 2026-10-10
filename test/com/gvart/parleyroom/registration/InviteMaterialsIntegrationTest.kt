@@ -2,10 +2,12 @@ package com.gvart.parleyroom.registration
 
 import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.common.data.LanguageLevel
+import com.gvart.parleyroom.material.data.FolderShareTable
 import com.gvart.parleyroom.material.data.MaterialFolderTable
 import com.gvart.parleyroom.material.data.MaterialShareTable
 import com.gvart.parleyroom.material.data.MaterialTable
 import com.gvart.parleyroom.material.data.MaterialType
+import com.gvart.parleyroom.material.transfer.FolderTreeNode
 import com.gvart.parleyroom.material.transfer.MaterialPageResponse
 import com.gvart.parleyroom.registration.data.RegistrationMaterialTable
 import com.gvart.parleyroom.registration.data.RegistrationTable
@@ -103,6 +105,13 @@ class InviteMaterialsIntegrationTest : IntegrationTest() {
         MaterialShareTable.selectAll()
             .where { MaterialShareTable.studentId eq studentId }
             .map { it[MaterialShareTable.materialId].value }
+            .toSet()
+    }
+
+    private fun sharedFoldersWith(studentId: UUID): Set<UUID> = transaction {
+        FolderShareTable.selectAll()
+            .where { FolderShareTable.studentId eq studentId }
+            .map { it[FolderShareTable.folderId].value }
             .toSet()
     }
 
@@ -258,6 +267,61 @@ class InviteMaterialsIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    fun `signup shares the onboarding folder so the student sees it in the folder tree`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val email = "${Uuid.random()}@test.com"
+        val a = seedMaterial(name = "A")
+        val b = seedMaterial(name = "B")
+        val registrationToken = client.invite(token, email, listOf(a, b)).body<InviteUserResponse>().token
+
+        assertEquals(HttpStatusCode.Created, client.register(registrationToken, email).status)
+
+        val folderId = transaction {
+            MaterialFolderTable.selectAll().where { MaterialFolderTable.name eq "Onboarding – $email" }.single()[MaterialFolderTable.id].value
+        }
+        val studentToken = getToken(client, email)
+        val tree = client.get("/api/v1/material-folders?tree=true") { bearerAuth(studentToken) }.body<List<FolderTreeNode>>()
+        assertEquals(listOf(folderId.toString()), tree.map { it.folder.id })
+        val inFolder = client.get("/api/v1/materials?folderId=$folderId") { bearerAuth(studentToken) }
+            .body<MaterialPageResponse>().materials.map { UUID.fromString(it.id) }.toSet()
+        assertEquals(setOf(a, b), inFolder)
+        transaction {
+            val share = FolderShareTable.selectAll().where { FolderShareTable.folderId eq folderId }.single()
+            assertEquals(teacher, share[FolderShareTable.sharedBy].value)
+        }
+    }
+
+    @Test
+    fun `material moved out of the onboarding folder before signup does not share its new folder`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val email = "${Uuid.random()}@test.com"
+        val a = seedMaterial(name = "A")
+        val b = seedMaterial(name = "B")
+        val registrationToken = client.invite(token, email, listOf(a, b)).body<InviteUserResponse>().token
+        val (onboarding, other) = transaction {
+            val onboarding = MaterialFolderTable.selectAll()
+                .where { MaterialFolderTable.name eq "Onboarding – $email" }
+                .single()[MaterialFolderTable.id].value
+            val other = MaterialFolderTable.insertAndGetId {
+                it[teacherId] = teacher
+                it[name] = "Private"
+                it[createdAt] = OffsetDateTime.now()
+                it[updatedAt] = OffsetDateTime.now()
+            }.value
+            MaterialTable.update({ MaterialTable.id eq b }) { it[folderId] = other }
+            onboarding to other
+        }
+
+        assertEquals(HttpStatusCode.Created, client.register(registrationToken, email).status)
+
+        val shared = sharedFoldersWith(userByEmail(email)[UserTable.id].value)
+        assertEquals(setOf(onboarding), shared)
+        assertTrue(other !in shared)
+    }
+
+    @Test
     fun `material deleted before signup is skipped and the rest are shared`() = testApp {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
@@ -305,6 +369,7 @@ class InviteMaterialsIntegrationTest : IntegrationTest() {
         val user = userByEmail(email)
         assertNull(user[UserTable.level])
         assertEquals(emptySet(), sharedWith(user[UserTable.id].value))
+        assertEquals(emptySet(), sharedFoldersWith(user[UserTable.id].value))
         assertEquals(emptySet(), joinedMaterials(email))
         assertTrue(transaction { MaterialFolderTable.selectAll().empty() })
     }

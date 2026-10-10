@@ -1,5 +1,6 @@
 package com.gvart.parleyroom.registration.service
 
+import com.gvart.parleyroom.material.data.FolderShareTable
 import com.gvart.parleyroom.material.data.MaterialFolderTable
 import com.gvart.parleyroom.material.data.MaterialShareTable
 import com.gvart.parleyroom.material.data.MaterialTable
@@ -18,6 +19,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greaterEq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.core.lowerCase
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
@@ -39,6 +41,7 @@ import com.gvart.parleyroom.registration.transfer.InviteUserResponse
 import com.gvart.parleyroom.user.security.UserPrincipal
 
 private const val INVITATION_EXPIRY_DAYS = 7L
+private const val ONBOARDING_FOLDER_PREFIX = "Onboarding – "
 
 /** The user created by [RegistrationService.registerUser]; [teacherId] is set when a teacher link was created. */
 data class RegisteredUser(val userId: UUID, val teacherId: UUID?)
@@ -174,7 +177,7 @@ class RegistrationService {
             }
         }
 
-        val folderId = onboardingFolder(teacherId, "Onboarding – $email".take(255))
+        val folderId = onboardingFolder(teacherId, "$ONBOARDING_FOLDER_PREFIX$email".take(255))
         MaterialTable.update({ MaterialTable.id inList materialIds }) {
             it[MaterialTable.folderId] = folderId
         }
@@ -198,21 +201,41 @@ class RegistrationService {
                 }.value
             }
 
-    /** Shares the invite's still-existing materials of the inviter with the new student, without notifications. */
+    /**
+     * Shares the invite's still-existing materials of the inviter with the new student, without notifications,
+     * plus the inviter's onboarding folder(s) they still live in, so the student sees them in the folder tree.
+     */
     private fun shareInviteMaterials(registrationId: UUID, teacherId: UUID, studentId: UUID) {
-        val materialIds = (RegistrationMaterialTable innerJoin MaterialTable)
-            .select(RegistrationMaterialTable.materialId)
+        val rows = (RegistrationMaterialTable innerJoin MaterialTable)
+            .select(RegistrationMaterialTable.materialId, MaterialTable.folderId)
             .where { (RegistrationMaterialTable.registrationId eq registrationId) and (MaterialTable.teacherId eq teacherId) }
-            .map { it[RegistrationMaterialTable.materialId].value }
+            .toList()
         val now = OffsetDateTime.now()
-        materialIds.forEach { id ->
+        rows.forEach { row ->
             MaterialShareTable.insertIgnore {
-                it[materialId] = id
+                it[materialId] = row[RegistrationMaterialTable.materialId].value
                 it[MaterialShareTable.studentId] = studentId
                 it[sharedBy] = teacherId
                 it[sharedAt] = now
             }
         }
+
+        val folderIds = rows.mapNotNull { it[MaterialTable.folderId]?.value }.distinct()
+        if (folderIds.isEmpty()) return
+        MaterialFolderTable.select(MaterialFolderTable.id)
+            .where {
+                (MaterialFolderTable.id inList folderIds) and
+                    (MaterialFolderTable.teacherId eq teacherId) and
+                    (MaterialFolderTable.name like "$ONBOARDING_FOLDER_PREFIX%")
+            }
+            .forEach { row ->
+                FolderShareTable.insertIgnore {
+                    it[folderId] = row[MaterialFolderTable.id]
+                    it[FolderShareTable.studentId] = studentId
+                    it[sharedBy] = teacherId
+                    it[sharedAt] = now
+                }
+            }
     }
 
     companion object {
