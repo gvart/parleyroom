@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.5.0](https://github.com/gvart/parleyroom/compare/v1.4.0...v1.5.0) (2026-10-10)
+
+
+### Features
+
+* **ai:** onboarding words draft from invite materials on signup ([#74](https://github.com/gvart/parleyroom/issues/74)) ([a1a03bd](https://github.com/gvart/parleyroom/commit/a1a03bd1e5b24d619844f720cf95ccab4a144c2c))
+* **progress:** add grammar coverage evidence as a COVERED floor ([#71](https://github.com/gvart/parleyroom/issues/71)) ([22551ef](https://github.com/gvart/parleyroom/commit/22551ef8edbf59a04d4e496e25c87df01851f1e1))
+* **registration:** attach materials and level to student invites ([#72](https://github.com/gvart/parleyroom/issues/72)) ([cdddedf](https://github.com/gvart/parleyroom/commit/cdddedf1b76290dcf09326d142799c96aac83b6c))
+
+
+### Bug Fixes
+
+* **registration:** share onboarding folder with invited student ([#75](https://github.com/gvart/parleyroom/issues/75)) ([3857961](https://github.com/gvart/parleyroom/commit/38579618c801975b73aea36df774290e4c37f341))
+
 ## [1.4.0](https://github.com/gvart/parleyroom/compare/v1.3.0...v1.4.0) (2026-10-10)
 
 
