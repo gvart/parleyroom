@@ -14,6 +14,7 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.upsert
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 /** Per-use-case model routing (ai_model_settings), read on every call; [fallbackModel] (AI_MODEL) when a row is missing. */
 class AiModelSettingsService(private val pricing: AiPricing, private val fallbackModel: String) {
@@ -45,7 +46,7 @@ class AiModelSettingsService(private val pricing: AiPricing, private val fallbac
             ?: throw BadRequestException("Unknown AI use case '$rawUseCase'", code = "unknown_use_case")
         if (model !in pricing.models)
             throw BadRequestException("Model '$model' has no configured price", code = "unknown_model", pointer = "/model")
-        val now = OffsetDateTime.now()
+        val now = OffsetDateTime.now(ZoneOffset.UTC)
         transaction {
             AiModelSettingsTable.upsert {
                 it[AiModelSettingsTable.useCase] = useCase
