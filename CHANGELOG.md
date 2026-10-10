@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/gvart/parleyroom/compare/v1.2.1...v1.3.0) (2026-10-10)
+
+
+### Features
+
+* **lesson:** offline (in-person) lessons without a video room ([#65](https://github.com/gvart/parleyroom/issues/65)) ([f216488](https://github.com/gvart/parleyroom/commit/f2164887e18f6581af7e6a020356e5710d3d54c1))
+
 ## [1.2.1](https://github.com/gvart/parleyroom/compare/v1.2.0...v1.2.1) (2026-09-30)
 
 
