@@ -3,6 +3,7 @@ package com.gvart.parleyroom.admin.routing
 import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.admin.service.AdminService
 import com.gvart.parleyroom.admin.service.AdminStatsService
+import com.gvart.parleyroom.admin.service.AppSettingsService
 import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetPasswordRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetStatusRequest
@@ -10,6 +11,7 @@ import com.gvart.parleyroom.admin.transfer.AdminStatsResponse
 import com.gvart.parleyroom.admin.transfer.AdminUpdateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminUserListResponse
 import com.gvart.parleyroom.admin.transfer.AdminUserResponse
+import com.gvart.parleyroom.admin.transfer.AppSettingsDto
 import com.gvart.parleyroom.common.service.AuthorizationHelper.requireAdmin
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
@@ -27,6 +29,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.openapi.describe
 import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import java.time.LocalDate
@@ -36,6 +39,7 @@ import java.util.UUID
 fun Application.configureAdminRouting() {
     val adminService: AdminService by dependencies
     val adminStatsService: AdminStatsService by dependencies
+    val appSettingsService: AppSettingsService by dependencies
 
     routing {
         authenticate {
@@ -60,6 +64,35 @@ fun Application.configureAdminRouting() {
                     }
                     responses {
                         HttpStatusCode.OK { schema = jsonSchema<AdminStatsResponse>() }
+                        HttpStatusCode.BadRequest { schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.Forbidden { schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.Unauthorized { schema = jsonSchema<ProblemDetail>() }
+                    }
+                }
+
+                get("/settings") {
+                    requireAdmin(call.requirePrincipal())
+                    call.respond(HttpStatusCode.OK, appSettingsService.settings())
+                }.describe {
+                    summary = "Platform settings (admin)"
+                    description = "Admin-editable settings, e.g. how many days an invite link stays valid. Admin only."
+                    responses {
+                        HttpStatusCode.OK { schema = jsonSchema<AppSettingsDto>() }
+                        HttpStatusCode.Forbidden { schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.Unauthorized { schema = jsonSchema<ProblemDetail>() }
+                    }
+                }
+
+                put<AppSettingsDto>("/settings") { request ->
+                    val principal = call.requirePrincipal()
+                    requireAdmin(principal)
+                    call.respond(HttpStatusCode.OK, appSettingsService.update(request, principal))
+                }.describe {
+                    summary = "Update platform settings (admin)"
+                    description = "Replaces the settings. inviteExpiryDays: 1..90 (400 VALIDATION_FAILED); applies to invites created afterwards. Admin only."
+                    requestBody { schema = jsonSchema<AppSettingsDto>() }
+                    responses {
+                        HttpStatusCode.OK { schema = jsonSchema<AppSettingsDto>() }
                         HttpStatusCode.BadRequest { schema = jsonSchema<ProblemDetail>() }
                         HttpStatusCode.Forbidden { schema = jsonSchema<ProblemDetail>() }
                         HttpStatusCode.Unauthorized { schema = jsonSchema<ProblemDetail>() }

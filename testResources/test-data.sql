@@ -27,3 +27,5 @@ VALUES ('GENERATE', 'claude-haiku-5-5'),
        ('FILL_TRANSLATIONS', 'claude-haiku-5-5'),
        ('SUGGEST_TAGS', 'claude-haiku-5-5'),
        ('SENTENCE_FEEDBACK', 'claude-haiku-5-5');
+-- Platform settings as seeded by V31 (TRUNCATE users CASCADE empties it).
+INSERT INTO app_settings (id) VALUES (1);
