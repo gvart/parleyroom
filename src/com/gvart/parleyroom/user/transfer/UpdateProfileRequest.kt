@@ -23,12 +23,15 @@ data class UpdateProfileRequest(
     val autoConfirmBookings: Boolean? = null,
     /** Teachers only; anyone else gets 400 APPROVAL_SETTINGS_TEACHERS_ONLY. */
     val autoAcceptClubJoins: Boolean? = null,
+    val emailLessonReminders: Boolean? = null,
+    val emailHomeworkReminders: Boolean? = null,
 ) {
     fun validate(): ValidationResult {
         val errors = buildList {
             val noField = firstName == null && lastName == null && locale == null && level == null
                     && nativeLanguage == null && confirmLocale != true && timezone == null && bookingBufferMinutes == null && bookingMinNoticeHours == null
                     && autoConfirmBookings == null && autoAcceptClubJoins == null
+                    && emailLessonReminders == null && emailHomeworkReminders == null
             if (noField) add("At least one field must be provided")
             if (level != null) add("level can't be changed here; it is set by the teacher")
             if (firstName != null && firstName.trim().isEmpty()) add("First name can't be blank")

@@ -35,4 +35,8 @@ data class UserResponse(
     val createdAt: OffsetDateTime,
     val telegramId: Long? = null,
     val telegramUsername: String? = null,
+    /** Lesson reminder emails (24h and 1h before). */
+    val emailLessonReminders: Boolean = true,
+    /** Homework due-tomorrow and overdue emails. */
+    val emailHomeworkReminders: Boolean = true,
 )
