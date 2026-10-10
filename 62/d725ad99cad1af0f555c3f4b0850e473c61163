@@ -1,0 +1,35 @@
+test/com/gvart/parleyroom/progress/GrammarCoverageIntegrationTest.kt
+  s_3f9967c6eb171b::t_188bbbbbddabf5 1-145
+API.md
+  s_3f9967c6eb171b::t_8815b835e35621 732,792-793
+resources/db/migration/V29__student_grammar_coverage.sql
+  s_3f9967c6eb171b::t_1e909a513afbfd 1-13
+src/com/gvart/parleyroom/progress/config/ProgressModuleConfig.kt
+  s_3f9967c6eb171b::t_437d81371b010d 4,24
+src/com/gvart/parleyroom/progress/data/StudentGrammarCoverageTable.kt
+  s_3f9967c6eb171b::t_2dc41058e504bf 1-19
+src/com/gvart/parleyroom/progress/service/GrammarCoverageService.kt
+  s_3f9967c6eb171b::t_1deb44a02452c2 1-29
+src/com/gvart/parleyroom/progress/service/ProgressCalculator.kt
+  s_3f9967c6eb171b::t_e6e9eeba779d89 140-145,166,169,176,183-184,188
+src/com/gvart/parleyroom/progress/transfer/ProgressDtos.kt
+  s_3f9967c6eb171b::t_084c1ae281cc30 24-26
+src/com/gvart/parleyroom/topic/service/GrammarTopicService.kt
+  s_3f9967c6eb171b::t_351c4561675172 152-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "62d725ad99cad1af0f555c3f4b0850e473c61163",
+  "prompts": {},
+  "sessions": {
+    "s_3f9967c6eb171b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5bd93657-dbe8-481d-8f0c-95fe6f2531a9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
