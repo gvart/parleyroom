@@ -1,0 +1,19 @@
+test/com/gvart/parleyroom/ai/OnboardingIntegrationTest.kt
+  s_3f9967c6eb171b::t_e0f970a2c82a2c 1-324
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "5c0484e975449f3f554dc1c9fb51826f3c99eddf",
+  "prompts": {},
+  "sessions": {
+    "s_3f9967c6eb171b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5bd93657-dbe8-481d-8f0c-95fe6f2531a9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
