@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0](https://github.com/gvart/parleyroom/compare/v1.3.0...v1.4.0) (2026-10-10)
+
+
+### Features
+
+* **admin:** platform stats endpoint and users.last_login_at ([#67](https://github.com/gvart/parleyroom/issues/67)) ([0aa5d84](https://github.com/gvart/parleyroom/commit/0aa5d843605dfa4169089a7952e664d1f43156d6))
+* **ai:** per-use-case model routing, usage ledger and prompt caching ([#70](https://github.com/gvart/parleyroom/issues/70)) ([e6822d3](https://github.com/gvart/parleyroom/commit/e6822d3af81269f4e20037dd71fe21d43077eac6))
+
 ## [1.3.0](https://github.com/gvart/parleyroom/compare/v1.2.1...v1.3.0) (2026-10-10)
 
 
