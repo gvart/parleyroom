@@ -20,6 +20,8 @@ import com.gvart.parleyroom.practice.config.configurePracticeModule
 import com.gvart.parleyroom.progress.config.configureProgressModule
 import com.gvart.parleyroom.registration.routing.configureRegistrationModule
 import com.gvart.parleyroom.reminder.config.configureReminderModule
+import com.gvart.parleyroom.telegram.config.configureTelegramModule
+import com.gvart.parleyroom.telegram.service.TelegramSender
 import com.gvart.parleyroom.library.config.configureLibraryModule
 import com.gvart.parleyroom.topic.config.configureTopicModule
 import com.gvart.parleyroom.user.config.configureUserModule
@@ -32,10 +34,15 @@ fun main(args: Array<String>) {
     EngineMain.main(args)
 }
 
-fun Application.module(dataSource: javax.sql.DataSource? = null, emailSender: EmailSender? = null) {
+fun Application.module(
+    dataSource: javax.sql.DataSource? = null,
+    emailSender: EmailSender? = null,
+    telegramSender: TelegramSender? = null,
+) {
     generalConfig()
     configureDatabase(dataSource)
     configureEmailModule(emailSender)
+    configureTelegramModule(telegramSender)
     configureRegistrationModule()
     configureUserModule()
     configureAdminModule()

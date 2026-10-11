@@ -39,4 +39,10 @@ data class UserResponse(
     val emailLessonReminders: Boolean = true,
     /** Homework due-tomorrow and overdue emails. */
     val emailHomeworkReminders: Boolean = true,
+    /** Lesson reminders on Telegram (24h and 1h before); only sent while Telegram is linked. */
+    val telegramLessonReminders: Boolean = true,
+    /** Homework due-tomorrow and overdue messages on Telegram. */
+    val telegramHomeworkReminders: Boolean = true,
+    /** Telegram is linked and has not refused a message (403) since the last link or successful test message. */
+    val telegramReachable: Boolean,
 )

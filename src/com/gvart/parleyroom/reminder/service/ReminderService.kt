@@ -12,8 +12,10 @@ import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
+import com.gvart.parleyroom.telegram.service.TelegramNotifier
 import com.gvart.parleyroom.user.data.UserStatus
 import com.gvart.parleyroom.user.data.UserTable
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.toJavaLocalDate
 import kotlinx.datetime.toKotlinLocalDate
 import org.jetbrains.exposed.v1.core.JoinType
@@ -34,15 +36,16 @@ import java.time.ZoneId
 import java.util.UUID
 
 /**
- * Finds the lesson and homework reminders due at a moment and hands them to [NotificationMailer], which
- * checks preferences and sends each one at most once. Every call can therefore safely re-find the same ones.
+ * Finds the lesson and homework reminders due at a moment and hands them to [NotificationMailer] and
+ * [TelegramNotifier], which check preferences and send each one at most once per channel. Every call can therefore
+ * safely re-find the same ones.
  *
  * Lessons (CONFIRMED, teacher + confirmed students): H24 while now ∈ [start − 24h, start − [H24_LATEST]), H1
  * while now ∈ [start − 1h, start). A lesson booked or moved to less than [H24_LATEST] ahead only gets the H1 one,
  * so the "tomorrow at …" email never lands on the lesson's own day. Homework (OPEN, with a due date, students only), in the student's timezone from
  * 09:00: "due tomorrow" on the day before the due date, "overdue" on the day after.
  */
-class ReminderService(private val mailer: NotificationMailer) {
+class ReminderService(private val mailer: NotificationMailer, private val telegram: TelegramNotifier) {
 
     private val log = LoggerFactory.getLogger(ReminderService::class.java)
 
@@ -64,16 +67,31 @@ class ReminderService(private val mailer: NotificationMailer) {
         val zone: ZoneId,
     )
 
-    suspend fun runOnce(now: OffsetDateTime = OffsetDateTime.now()): Map<SendResult, Int> {
-        val results = mutableMapOf<SendResult, Int>()
-        fun count(result: SendResult) = results.merge(result, 1, Int::plus)
+    suspend fun runOnce(now: OffsetDateTime = OffsetDateTime.now()) {
+        val emailResults = mutableMapOf<SendResult, Int>()
+        val telegramResults = mutableMapOf<SendResult, Int>()
+        /** An error on one channel counts as FAILED and never keeps the other channel (or the next reminder) from sending. */
+        suspend fun send(results: MutableMap<SendResult, Int>, block: suspend () -> SendResult) {
+            val result = try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.warn("Reminder send failed", e)
+                SendResult.FAILED
+            }
+            results.merge(result, 1, Int::plus)
+        }
 
         for (lesson in upcomingLessons(now)) {
             val variant = lesson.variant ?: continue
             for (recipient in lesson.recipients) {
-                count(mailer.sendLessonReminder(
-                    recipient.userId, lesson.id, variant, lesson.title, lesson.startsAt, recipient.counterpartName,
-                ))
+                send(emailResults) {
+                    mailer.sendLessonReminder(recipient.userId, lesson.id, variant, lesson.title, lesson.startsAt, recipient.counterpartName)
+                }
+                send(telegramResults) {
+                    telegram.sendLessonReminder(recipient.userId, lesson.id, variant, lesson.title, lesson.startsAt, recipient.counterpartName)
+                }
             }
         }
 
@@ -82,18 +100,21 @@ class ReminderService(private val mailer: NotificationMailer) {
             if (local.toLocalTime() < SEND_FROM) continue
             val dueAt = homework.dueDate.atTime(LocalTime.of(23, 59)).atZone(homework.zone).toOffsetDateTime()
             when (local.toLocalDate()) {
-                homework.dueDate.minusDays(1) ->
-                    count(mailer.sendHomeworkDueTomorrow(homework.studentId, homework.id, homework.title, dueAt))
-                homework.dueDate.plusDays(1) ->
-                    count(mailer.sendHomeworkOverdue(homework.studentId, homework.id, homework.title, dueAt))
+                homework.dueDate.minusDays(1) -> {
+                    send(emailResults) { mailer.sendHomeworkDueTomorrow(homework.studentId, homework.id, homework.title, dueAt) }
+                    send(telegramResults) { telegram.sendHomeworkDueTomorrow(homework.studentId, homework.id, homework.title) }
+                }
+                homework.dueDate.plusDays(1) -> {
+                    send(emailResults) { mailer.sendHomeworkOverdue(homework.studentId, homework.id, homework.title, dueAt) }
+                    send(telegramResults) { telegram.sendHomeworkOverdue(homework.studentId, homework.id, homework.title) }
+                }
                 else -> Unit
             }
         }
 
-        val sent = results[SendResult.SENT] ?: 0
-        val failed = results[SendResult.FAILED] ?: 0
-        if (sent > 0 || failed > 0) log.info("Reminders: $sent sent, $failed failed")
-        return results
+        fun summary(results: Map<SendResult, Int>) = "${results[SendResult.SENT] ?: 0} sent, ${results[SendResult.FAILED] ?: 0} failed"
+        val anything = listOf(emailResults, telegramResults).any { (it[SendResult.SENT] ?: 0) + (it[SendResult.FAILED] ?: 0) > 0 }
+        if (anything) log.info("Reminders: email ${summary(emailResults)}; telegram ${summary(telegramResults)}")
     }
 
     private fun upcomingLessons(now: OffsetDateTime): List<DueLesson> = transaction {
@@ -164,7 +185,7 @@ class ReminderService(private val mailer: NotificationMailer) {
         /** The H24 reminder goes out between 24h and this long before the lesson. */
         val H24_LATEST: Duration = Duration.ofHours(20)
 
-        /** No homework emails before this local time. */
+        /** No homework reminders before this local time. */
         val SEND_FROM: LocalTime = LocalTime.of(9, 0)
     }
 }

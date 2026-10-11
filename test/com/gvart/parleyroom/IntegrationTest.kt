@@ -29,6 +29,9 @@ abstract class IntegrationTest {
     /** Emails the app sent during this test (instead of MAIL_PROVIDER). */
     protected val sentEmails = RecordingEmailSender()
 
+    /** Telegram messages the app sent during this test (instead of TELEGRAM_PROVIDER). */
+    protected val sentTelegrams = RecordingTelegramSender()
+
     companion object {
         @JvmField
         val postgres: PostgreSQLContainer = PostgreSQLContainer("postgres:16-alpine")
@@ -128,7 +131,7 @@ abstract class IntegrationTest {
             ).apply { extraConfig.forEach { (key, value) -> put(key, value) } }
         }
         application {
-            module(sharedDataSource, sentEmails)
+            module(sharedDataSource, sentEmails, sentTelegrams)
             loadTestData()
         }
         block()
