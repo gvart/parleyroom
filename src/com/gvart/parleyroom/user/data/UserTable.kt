@@ -37,4 +37,7 @@ object UserTable : UUIDTable("users") {
     val lastLoginAt = timestampWithTimeZone("last_login_at").nullable()
     val telegramId = long("telegram_id").nullable()
     val telegramUsername = varchar("telegram_username", 64).nullable()
+    /** Opt-outs for reminder emails (settings page or the unsubscribe link). */
+    val emailLessonReminders = bool("email_lesson_reminders").default(true)
+    val emailHomeworkReminders = bool("email_homework_reminders").default(true)
 }

@@ -5,6 +5,7 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetPasswordRequest
 import com.gvart.parleyroom.admin.transfer.AdminUpdateUserRequest
+import com.gvart.parleyroom.admin.transfer.AppSettingsDto
 import com.gvart.parleyroom.ai.transfer.FillMissingRequest
 import com.gvart.parleyroom.ai.transfer.ApplyFillProposalsRequest
 import com.gvart.parleyroom.ai.transfer.DocumentDraftInput
@@ -201,6 +202,7 @@ fun Application.generalConfig() {
         validate<AdminCreateUserRequest> { it.validate() }
         validate<AdminUpdateUserRequest> { it.validate() }
         validate<AdminSetPasswordRequest> { it.validate() }
+        validate<AppSettingsDto> { it.validate() }
         validate<ReplaceWeeklyAvailabilityRequest> { it.validate() }
         validate<CreateAvailabilityExceptionRequest> { it.validate() }
         validate<CreateTopicRequest> { it.validate() }

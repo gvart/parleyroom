@@ -111,6 +111,8 @@ class UserService(
             if (request.bookingMinNoticeHours != null) it[bookingMinNoticeHours] = request.bookingMinNoticeHours
             if (request.autoConfirmBookings != null) it[autoConfirmBookings] = request.autoConfirmBookings
             if (request.autoAcceptClubJoins != null) it[autoAcceptClubJoins] = request.autoAcceptClubJoins
+            if (request.emailLessonReminders != null) it[emailLessonReminders] = request.emailLessonReminders
+            if (request.emailHomeworkReminders != null) it[emailHomeworkReminders] = request.emailHomeworkReminders
             it[updatedAt] = OffsetDateTime.now()
         }
 
@@ -230,6 +232,8 @@ class UserService(
             createdAt = row[UserTable.createdAt],
             telegramId = row[UserTable.telegramId],
             telegramUsername = row[UserTable.telegramUsername],
+            emailLessonReminders = row[UserTable.emailLessonReminders],
+            emailHomeworkReminders = row[UserTable.emailHomeworkReminders],
         )
     }
 }
