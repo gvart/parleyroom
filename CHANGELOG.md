@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/gvart/parleyroom/compare/v1.5.0...v1.6.0) (2026-10-11)
+
+
+### Features
+
+* **email:** emailed invites, lesson/homework reminders and unsubscribe ([#76](https://github.com/gvart/parleyroom/issues/76)) ([0b5ac56](https://github.com/gvart/parleyroom/commit/0b5ac56bd965d191c8335e34ec2de08010ba36b6))
+
 ## [1.5.0](https://github.com/gvart/parleyroom/compare/v1.4.0...v1.5.0) (2026-10-10)
 
 
