@@ -26,6 +26,9 @@ import org.testcontainers.containers.wait.strategy.Wait
 
 abstract class IntegrationTest {
 
+    /** Emails the app sent during this test (instead of MAIL_PROVIDER). */
+    protected val sentEmails = RecordingEmailSender()
+
     companion object {
         @JvmField
         val postgres: PostgreSQLContainer = PostgreSQLContainer("postgres:16-alpine")
@@ -108,6 +111,7 @@ abstract class IntegrationTest {
                 "vocabulary.review_reminder.enabled" to "false",
                 "vocabulary.review_reminder.interval" to "1h",
                 "lesson.auto_complete.enabled" to "false",
+                "reminders.enabled" to "false",
                 "storage.endpoint" to minioEndpoint,
                 "storage.region" to "us-east-1",
                 "storage.access_key" to "minioadmin",
@@ -124,7 +128,7 @@ abstract class IntegrationTest {
             ).apply { extraConfig.forEach { (key, value) -> put(key, value) } }
         }
         application {
-            module(sharedDataSource)
+            module(sharedDataSource, sentEmails)
             loadTestData()
         }
         block()

@@ -1915,3 +1915,58 @@ returned on `GET /api/v1/users/me` and set with `PATCH /api/v1/users/me`; anyone
 ("level can't be changed here; it is set by the teacher") and nothing is updated. Teachers set a
 student's level with `PUT /api/v1/students/{studentId}/level`, admins with `PATCH /api/v1/admin/users/{id}`. The supported list lives in
 `user/data/SupportedLocale.kt`; adding a language is a one-line change there.
+
+## Email notifications
+
+`UserResponse` (`GET /api/v1/users/me`) carries `emailLessonReminders` and `emailHomeworkReminders` (both default
+`true`); any user sets them with `PATCH /api/v1/users/me { "emailLessonReminders": false }`.
+
+Reminder emails link to the portal page `/unsubscribe?token=…`, which posts the token to the public
+`POST /api/v1/email/unsubscribe { "token": "…" }` → 200 `{ "category": "LESSON_REMINDERS" | "HOMEWORK_REMINDERS" }`.
+Mail clients use the same endpoint for RFC 8058 one-click unsubscribe (`?token=…` with a
+`List-Unsubscribe=One-Click` form body). It switches that category off and is idempotent; a bad token returns 400
+`UNSUBSCRIBE_TOKEN_INVALID`. Tokens are stateless HMACs keyed from `JWT_SECRET` and never expire.
+
+Admins read and set platform settings with `GET` / `PUT /api/v1/admin/settings { "inviteExpiryDays": 7 }`
+(1..90, else 400 `VALIDATION_FAILED`; non-admins 403).
+
+### Invitations
+
+`POST /api/v1/registration/invite` saves the invite, then (after the transaction commits) emails the invitee a link
+to `${APP_BASE_URL}/register?token=…&email=…`. The link expires after `inviteExpiryDays`. Response 201:
+
+```
+{ token, expiresAt: ISO, emailSent: boolean }
+```
+
+`token` is kept for the copy-link fallback. A failed send never fails the request: the invite exists and
+`emailSent` is `false`. Student invites are written in the invite's `nativeLanguage` (ru | uk | en); teacher and admin
+invites in the inviter's UI locale (ru | de | en). The email is signed with the inviter's "First Last".
+
+`GET /api/v1/registration/invites?status=PENDING|EXPIRED|USED` (status optional; anything else 400) → 200
+`{ invites: InviteSummary[] }`, newest first. Admins see all invites, teachers the ones they sent, students get 403.
+
+```
+InviteSummary = { id, email, role, status: PENDING | EXPIRED | USED, createdAt, expiresAt,
+                  lastSentAt: ISO | null, invitedBy: { id, name } | null }
+```
+
+`status` is derived: used → `USED`; else `expiresAt` in the past → `EXPIRED`; else `PENDING`. `lastSentAt` is when
+the email last went out **successfully** (null if it never did); `invitedBy` is null when the inviter's account is gone.
+
+`POST /api/v1/registration/invites/{id}/resend` → 200 `{ token, expiresAt, emailSent }`. It rotates the token on the
+same row (the old link now gives 404 `REGISTRATION_LINK_INVALID`), resets `expiresAt` to now + `inviteExpiryDays` and
+emails the new link, still signed by the original inviter. Expired invites can be resent. Errors: 404
+`INVITATION_NOT_FOUND`; 403 for students and for a teacher resending someone else's invite; 400
+`INVITATION_ALREADY_USED`; 409 `EMAIL_ALREADY_EXISTS` if a user with that email exists by now.
+
+Sending is configured with `MAIL_PROVIDER` (`log` default: nothing leaves the server; `cloudflare`: Cloudflare Email
+Service REST API with `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_EMAIL_API_TOKEN`), `MAIL_FROM`, `BRAND_NAME`
+(`Parley|room` style, like the portal's `VITE_BRAND_NAME`), `APP_BASE_URL` (portal links) and `API_PUBLIC_URL`
+(one-click unsubscribe; must be https or the List-Unsubscribe headers are left out).
+
+Reminder emails come from a background job every `REMINDERS_INTERVAL` (default `5m`; `REMINDERS_ENABLED=false`
+turns it off, default `true`). Lessons in `CONFIRMED` status remind the teacher and every confirmed student 24h
+before (only while 24h–20h remain, so late bookings skip it) and 1h before; a moved lesson is reminded again for its
+new time. Students get a homework reminder on the day before an `OPEN` homework's due date and an overdue one on the
+day after, each from 09:00 in their timezone. Each reminder goes out once; a failed send is retried on a later run.
