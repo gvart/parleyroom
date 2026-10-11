@@ -1,0 +1,19 @@
+API.md
+  s_fae0993faff7e4::t_63b2d7921cd3ce 1933-1962
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "cd2782310e6b9d1d95c74034b79ba8316a4941a6",
+  "prompts": {},
+  "sessions": {
+    "s_fae0993faff7e4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8a90cfd-0334-42c0-bfb2-886ed0dbb1a3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
