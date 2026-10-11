@@ -1,0 +1,36 @@
+test/com/gvart/parleyroom/admin/FeatureFlagIntegrationTest.kt
+  s_6b341267e99e70::t_21f9b160511963 1-99
+  s_6b341267e99e70::t_981ccb399555eb 100
+resources/db/migration/V35__feature_flags.sql
+  s_6b341267e99e70::t_5ee0b4ccdeb61e 1-9
+src/com/gvart/parleyroom/admin/config/AdminModuleConfig.kt
+  s_6b341267e99e70::t_b649aa28f2723a 7,16
+src/com/gvart/parleyroom/admin/data/FeatureFlag.kt
+  s_6b341267e99e70::t_35a09c1f615047 1-8
+src/com/gvart/parleyroom/admin/data/FeatureFlagTable.kt
+  s_6b341267e99e70::t_5e40a99e9b0750 1-16
+src/com/gvart/parleyroom/admin/routing/Routing.kt
+  s_6b341267e99e70::t_0da3a052c7526f 7,44,104-133
+src/com/gvart/parleyroom/admin/service/FeatureFlagService.kt
+  s_6b341267e99e70::t_493329a280ddc8 1-40
+src/com/gvart/parleyroom/user/routing/Routing.kt
+  s_6b341267e99e70::t_ab83b768f3ba3f 11,51,192,195-196,211
+src/com/gvart/parleyroom/user/transfer/UserResponse.kt
+  s_6b341267e99e70::t_d0ac50e378287b 7-8,12,51-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ca2de52d08bf3ca32b2ea67051968231b1caeac5",
+  "prompts": {},
+  "sessions": {
+    "s_6b341267e99e70": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3c10af3d-8cd0-4bc3-89fd-cb390bc038be",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
