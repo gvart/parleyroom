@@ -1934,3 +1934,9 @@ Sending is configured with `MAIL_PROVIDER` (`log` default: nothing leaves the se
 Service REST API with `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_EMAIL_API_TOKEN`), `MAIL_FROM`, `BRAND_NAME`
 (`Parley|room` style, like the portal's `VITE_BRAND_NAME`), `APP_BASE_URL` (portal links) and `API_PUBLIC_URL`
 (one-click unsubscribe; must be https or the List-Unsubscribe headers are left out).
+
+Reminder emails come from a background job every `REMINDERS_INTERVAL` (default `5m`; `REMINDERS_ENABLED=false`
+turns it off, default `true`). Lessons in `CONFIRMED` status remind the teacher and every confirmed student 24h
+before (only while 24h–20h remain, so late bookings skip it) and 1h before; a moved lesson is reminded again for its
+new time. Students get a homework reminder on the day before an `OPEN` homework's due date and an overdue one on the
+day after, each from 09:00 in their timezone. Each reminder goes out once; a failed send is retried on a later run.
