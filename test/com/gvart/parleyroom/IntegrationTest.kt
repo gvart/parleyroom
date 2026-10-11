@@ -40,8 +40,11 @@ abstract class IntegrationTest {
             .withPassword("test")
             .waitingFor(HostPortWaitStrategy())
 
+        // minio/minio is no longer pullable from Docker Hub; Chainguard publishes the same server.
         @JvmField
-        val minio: GenericContainer<*> = GenericContainer("minio/minio:RELEASE.2024-12-18T13-15-44Z")
+        val minio: GenericContainer<*> = GenericContainer(
+            "cgr.dev/chainguard/minio@sha256:dc455cdd4db6e390b1b26514f15ff37681a777bf8dab41aac445a0259f751e56"
+        )
             .withExposedPorts(9000)
             .withCommand("server", "/data")
             .withEnv("MINIO_ROOT_USER", "minioadmin")
