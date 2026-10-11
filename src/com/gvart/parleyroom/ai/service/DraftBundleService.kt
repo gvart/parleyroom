@@ -34,6 +34,7 @@ import com.gvart.parleyroom.homework.service.HomeworkUnits
 import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
+import com.gvart.parleyroom.lesson.service.lessonTeacherId
 import com.gvart.parleyroom.material.data.MaterialTable
 import com.gvart.parleyroom.topic.service.LibraryAccess
 import com.gvart.parleyroom.user.data.UserRole
@@ -90,7 +91,7 @@ class DraftBundleService(
             notes = lesson[LessonTable.rawNotes],
             context = ctx.summary(),
             pastLessons = context.pastLessonChoices(ctx, lesson),
-            openBundle = openBundle(DraftScope.LESSON, lesson[LessonTable.teacherId].value, lessonId, null)?.let(::summary),
+            openBundle = openBundle(DraftScope.LESSON, lessonTeacherId(lesson), lessonId, null)?.let(::summary),
         )
     }
 

@@ -41,7 +41,7 @@ data class VocabEntryInput(
 @Serializable
 data class VocabEntryResponse(
     val id: String,
-    val teacherId: String,
+    val teacherId: String?,
     val lemma: String,
     val article: NounArticle? = null,
     val plural: String? = null,

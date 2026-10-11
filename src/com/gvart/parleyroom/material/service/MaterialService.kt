@@ -6,6 +6,7 @@ import com.gvart.parleyroom.common.service.AuthorizationHelper
 import com.gvart.parleyroom.common.storage.StorageService
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
+import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.ForbiddenException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
 import com.gvart.parleyroom.common.data.LanguageLevel
@@ -163,10 +164,10 @@ class MaterialService(
                 val folder = MaterialFolderTable.selectAll()
                     .where { MaterialFolderTable.id eq folderUuid }
                     .singleOrNotFound("Folder")
-                val folderOwner = folder[MaterialFolderTable.teacherId].value
+                val folderOwner = folder[MaterialFolderTable.teacherId]?.value
                 if (principal.role == UserRole.TEACHER && folderOwner != principal.id)
                     throw ForbiddenException("Cannot place material in another teacher's folder")
-                folderOwner
+                folderOwner ?: throw ConflictException("This folder no longer has a teacher", code = "FOLDER_WITHOUT_TEACHER")
             }
         } else {
             if (principal.role == UserRole.ADMIN)
@@ -254,16 +255,16 @@ class MaterialService(
                     request.topicIds != null || request.grammarTopicIds != null
             if (!hasAny) return@transaction toResponse(row)
 
-            val ownerId = row[MaterialTable.teacherId].value
-            val topicIds = request.topicIds?.let { LibraryAccess.requireTopics(ownerId, it) }
-            val grammarIds = request.grammarTopicIds?.let { LibraryAccess.requireGrammarTopics(ownerId, it) }
+            val ownerId = row[MaterialTable.teacherId]?.value
+            val topicIds = request.topicIds?.let { LibraryAccess.requireTopics(ownerId ?: throw withoutTeacher(), it) }
+            val grammarIds = request.grammarTopicIds?.let { LibraryAccess.requireGrammarTopics(ownerId ?: throw withoutTeacher(), it) }
 
             if (request.folderId != null) {
                 val newFolder = UUID.fromString(request.folderId)
                 val folderRow = MaterialFolderTable.selectAll()
                     .where { MaterialFolderTable.id eq newFolder }
                     .singleOrNotFound("Folder")
-                if (folderRow[MaterialFolderTable.teacherId].value != row[MaterialTable.teacherId].value)
+                if (folderRow[MaterialFolderTable.teacherId]?.value != row[MaterialTable.teacherId]?.value)
                     throw ForbiddenException("Cannot move material to another teacher's folder")
             }
 
@@ -346,7 +347,7 @@ class MaterialService(
                             .where { MaterialFolderTable.id eq target }
                             .singleOrNotFound("Target folder")
                         if (principal.role == UserRole.TEACHER &&
-                            folderRow[MaterialFolderTable.teacherId].value != principal.id
+                            folderRow[MaterialFolderTable.teacherId]?.value != principal.id
                         ) throw ForbiddenException("Target folder is not yours")
                     }
                     val rows = MaterialTable.selectAll()
@@ -424,7 +425,7 @@ class MaterialService(
 
     private fun requireViewAccess(row: ResultRow, principal: UserPrincipal) {
         if (principal.role == UserRole.ADMIN) return
-        val teacherId = row[MaterialTable.teacherId].value
+        val teacherId = row[MaterialTable.teacherId]?.value
         val materialId = row[MaterialTable.id].value
         when (principal.role) {
             UserRole.TEACHER -> if (teacherId == principal.id) return
@@ -434,9 +435,12 @@ class MaterialService(
         throw ForbiddenException("No access to this material")
     }
 
+    private fun withoutTeacher() =
+        ConflictException("This material no longer has a teacher", code = "MATERIAL_WITHOUT_TEACHER")
+
     private fun requireOwnerOrAdmin(row: ResultRow, principal: UserPrincipal) =
         AuthorizationHelper.requireOwnerOrAdmin(
-            row[MaterialTable.teacherId].value, principal,
+            row[MaterialTable.teacherId]?.value, principal,
             "Only the owning teacher can perform this action",
         )
 
@@ -468,7 +472,7 @@ class MaterialService(
         }
         return MaterialResponse(
             id = materialId.toString(),
-            teacherId = row[MaterialTable.teacherId].value.toString(),
+            teacherId = row[MaterialTable.teacherId]?.value?.toString(),
             folderId = row[MaterialTable.folderId]?.value?.toString(),
             name = row[MaterialTable.name],
             type = type,

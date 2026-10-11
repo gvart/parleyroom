@@ -478,7 +478,7 @@ class HomeworkIntegrationTest : IntegrationTest() {
 
         val mine = send(client, "GET", "/api/v1/homework?status=OPEN", student).body<HomeworkPageResponse>()
         assertEquals(listOf(overdue.id, soon.id), mine.homework.map { it.assignmentId }, "due date ascending")
-        assertEquals("Teacher", mine.homework.first().teacher.lastName)
+        assertEquals("Teacher", mine.homework.first().teacher?.lastName)
 
         val dueFilter = send(client, "GET", "/api/v1/homework?dueAfter=$today", student).body<HomeworkPageResponse>()
         assertEquals(listOf(soon.id), dueFilter.homework.map { it.assignmentId })

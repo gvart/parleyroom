@@ -12,7 +12,7 @@ data class AttachMaterialsRequest(
 @Serializable
 data class LessonMaterialResponse(
     val material: MaterialResponse,
-    val attachedBy: String,
+    val attachedBy: String?,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val attachedAt: OffsetDateTime,
 )

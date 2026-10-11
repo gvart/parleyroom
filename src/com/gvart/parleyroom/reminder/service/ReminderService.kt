@@ -107,7 +107,7 @@ class ReminderService(private val mailer: NotificationMailer) {
             .map { row ->
                 val id = row[LessonTable.id].value
                 val startsAt = row[LessonTable.scheduledAt]
-                val teacher = activeUsers(listOf(row[LessonTable.teacherId].value)).singleOrNull()
+                val teacher = activeUsers(listOfNotNull(row[LessonTable.teacherId]?.value)).singleOrNull()
                 val students = activeUsers(
                     LessonStudentTable.selectAll()
                         .where { (LessonStudentTable.lessonId eq id) and (LessonStudentTable.status eq LessonStudentStatus.CONFIRMED) }

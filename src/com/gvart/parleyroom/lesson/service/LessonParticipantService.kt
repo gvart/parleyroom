@@ -44,7 +44,7 @@ class LessonParticipantService(
         if (lesson[LessonTable.status] != LessonStatus.CONFIRMED || !lesson[LessonTable.scheduledAt].isAfter(OffsetDateTime.now()))
             throw BadRequestException("Can only join upcoming confirmed lessons", code = "LESSON_INVALID_STATE")
 
-        val teacherId = lesson[LessonTable.teacherId].value
+        val teacherId = lessonTeacherId(lesson)
         if (teacherId == principal.id)
             throw BadRequestException("Teacher is already a participant", code = "ALREADY_PARTICIPANT")
 
@@ -137,7 +137,7 @@ class LessonParticipantService(
     fun acceptJoinRequest(lessonId: UUID, studentId: UUID, principal: UserPrincipal) = transaction {
         val lesson = support.findLessonForUpdate(lessonId)
 
-        if (lesson[LessonTable.teacherId].value != principal.id)
+        if (lesson[LessonTable.teacherId]?.value != principal.id)
             throw ForbiddenException("Only the teacher can accept join requests")
 
         val entry = support.findStudentEntry(lessonId, studentId)
@@ -168,7 +168,7 @@ class LessonParticipantService(
     fun rejectJoinRequest(lessonId: UUID, studentId: UUID, principal: UserPrincipal) = transaction {
         val lesson = support.findLesson(lessonId)
 
-        if (lesson[LessonTable.teacherId].value != principal.id)
+        if (lesson[LessonTable.teacherId]?.value != principal.id)
             throw ForbiddenException("Only the teacher can reject join requests")
 
         val entry = support.findStudentEntry(lessonId, studentId)

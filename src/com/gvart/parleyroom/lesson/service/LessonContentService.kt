@@ -37,7 +37,7 @@ class LessonContentService(
 
     fun updateContent(lessonId: UUID, request: UpdateLessonContentRequest, principal: UserPrincipal): LessonResponse = transaction {
         val lesson = requireLessonTeacher(lessonId, principal)
-        val teacherId = lesson[LessonTable.teacherId].value
+        val teacherId = lessonTeacherId(lesson)
 
         val groupId = request.groupId?.let(UUID::fromString)?.also { id ->
             if (GroupTable.findByIdOrThrow(id, "Group")[GroupTable.teacherId].value != teacherId)
@@ -105,7 +105,7 @@ class LessonContentService(
     private fun requireLessonTeacher(lessonId: UUID, principal: UserPrincipal): ResultRow {
         val lesson = support.findLesson(lessonId)
         AuthorizationHelper.requireOwnerOrAdmin(
-            lesson[LessonTable.teacherId].value, principal, "Only the lesson's teacher can edit its content",
+            lesson[LessonTable.teacherId]?.value, principal, "Only the lesson's teacher can edit its content",
         )
         return lesson
     }

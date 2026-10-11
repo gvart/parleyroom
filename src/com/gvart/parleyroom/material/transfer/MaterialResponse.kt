@@ -13,7 +13,7 @@ import java.time.OffsetDateTime
 @Serializable
 data class MaterialResponse(
     val id: String,
-    val teacherId: String,
+    val teacherId: String?,
     val folderId: String? = null,
     val name: String,
     val type: MaterialType,

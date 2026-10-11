@@ -44,7 +44,7 @@ class LessonRescheduleService(
         // existing lenient flow (buffer still enforced when accepted).
         if (principal.role == UserRole.STUDENT) {
             availabilityValidator.validate(
-                lesson[LessonTable.teacherId].value,
+                lessonTeacherId(lesson),
                 request.newScheduledAt,
                 lesson[LessonTable.durationMinutes],
                 OffsetDateTime.now(),
@@ -85,7 +85,7 @@ class LessonRescheduleService(
         val lesson = support.findLesson(lessonId)
         val pendingEvent = support.findPendingReschedule(lessonId)
 
-        if (pendingEvent[LessonEventTable.actorId].value == principal.id)
+        if (pendingEvent[LessonEventTable.actorId]?.value == principal.id)
             throw ForbiddenException("Cannot accept your own reschedule request")
 
         support.requireLessonParticipant(lessonId, lesson, principal)
@@ -93,10 +93,10 @@ class LessonRescheduleService(
         val newScheduledAt = pendingEvent[LessonEventTable.newScheduledAt]!!
 
         val bufferMinutes = if (principal.role == UserRole.ADMIN) 0
-        else availabilityValidator.loadSettings(lesson[LessonTable.teacherId].value).bufferMinutes
+        else availabilityValidator.loadSettings(lessonTeacherId(lesson)).bufferMinutes
 
         support.checkTeacherOverlap(
-            lesson[LessonTable.teacherId].value,
+            lessonTeacherId(lesson),
             newScheduledAt,
             lesson[LessonTable.durationMinutes],
             excludeLessonId = lessonId,
@@ -121,13 +121,14 @@ class LessonRescheduleService(
             it[LessonEventTable.newScheduledAt] = newScheduledAt
         }
 
-        val requesterId = pendingEvent[LessonEventTable.actorId].value
-        notificationService.createNotification(
-            userId = requesterId,
-            actorId = principal.id,
-            type = NotificationType.RESCHEDULE_ACCEPTED,
-            referenceId = lessonId,
-        )
+        pendingEvent[LessonEventTable.actorId]?.value?.let { requesterId ->
+            notificationService.createNotification(
+                userId = requesterId,
+                actorId = principal.id,
+                type = NotificationType.RESCHEDULE_ACCEPTED,
+                referenceId = lessonId,
+            )
+        }
 
         LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }
@@ -139,7 +140,7 @@ class LessonRescheduleService(
         val lesson = support.findLesson(lessonId)
         val pendingEvent = support.findPendingReschedule(lessonId)
 
-        if (pendingEvent[LessonEventTable.actorId].value == principal.id)
+        if (pendingEvent[LessonEventTable.actorId]?.value == principal.id)
             throw ForbiddenException("Cannot reject your own reschedule request")
 
         support.requireLessonParticipant(lessonId, lesson, principal)
@@ -156,20 +157,21 @@ class LessonRescheduleService(
             it[newScheduledAt] = pendingEvent[LessonEventTable.newScheduledAt]
         }
 
-        val requesterId = pendingEvent[LessonEventTable.actorId].value
-        notificationService.createNotification(
-            userId = requesterId,
-            actorId = principal.id,
-            type = NotificationType.RESCHEDULE_REJECTED,
-            referenceId = lessonId,
-        )
+        pendingEvent[LessonEventTable.actorId]?.value?.let { requesterId ->
+            notificationService.createNotification(
+                userId = requesterId,
+                actorId = principal.id,
+                type = NotificationType.RESCHEDULE_REJECTED,
+                referenceId = lessonId,
+            )
+        }
     }
 
     fun withdrawReschedule(lessonId: UUID, principal: UserPrincipal): LessonResponse = transaction {
         val lesson = support.findLesson(lessonId)
         val pendingEvent = support.findPendingReschedule(lessonId)
 
-        if (pendingEvent[LessonEventTable.actorId].value != principal.id)
+        if (pendingEvent[LessonEventTable.actorId]?.value != principal.id)
             throw ForbiddenException("Only the proposer can withdraw a reschedule request")
 
         LessonEventTable.update({ LessonEventTable.id eq pendingEvent[LessonEventTable.id] }) {
@@ -194,7 +196,7 @@ class LessonRescheduleService(
      */
     fun moveLesson(lessonId: UUID, request: MoveLessonRequest, principal: UserPrincipal): MoveLessonResponse = transaction {
         val lesson = support.findLessonForUpdate(lessonId)
-        val teacherId = lesson[LessonTable.teacherId].value
+        val teacherId = lessonTeacherId(lesson)
 
         if (principal.role == UserRole.STUDENT)
             throw ForbiddenException("Only teachers or admins can move a lesson")

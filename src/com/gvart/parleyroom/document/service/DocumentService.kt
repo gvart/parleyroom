@@ -232,7 +232,7 @@ class DocumentService(
         val visible = when (principal.role) {
             UserRole.ADMIN -> linked
             UserRole.TEACHER -> {
-                if (lesson[LessonTable.teacherId].value != principal.id) throw ForbiddenException("Not your lesson")
+                if (lesson[LessonTable.teacherId]?.value != principal.id) throw ForbiddenException("Not your lesson")
                 linked
             }
             UserRole.STUDENT -> {

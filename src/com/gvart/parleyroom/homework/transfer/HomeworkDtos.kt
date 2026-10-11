@@ -165,7 +165,7 @@ data class AssignmentItemResponse(
 @Serializable
 data class AssignmentResponse(
     val id: String,
-    val teacherId: String,
+    val teacherId: String?,
     val title: String,
     val instructions: String?,
     val dueDate: String?,
@@ -182,7 +182,7 @@ data class AssignmentResponse(
 @Serializable
 data class AssignmentSummary(
     val id: String,
-    val teacherId: String,
+    val teacherId: String?,
     val title: String,
     val instructions: String?,
     val dueDate: String?,
@@ -217,7 +217,7 @@ data class HomeworkSummary(
     val attempt: Int,
     val itemCount: Int,
     val student: PersonRef,
-    val teacher: PersonRef,
+    val teacher: PersonRef?,
     val answeredUnits: Int,
     val totalUnits: Int,
     @Serializable(with = OffsetDateTimeSerializer::class)
@@ -290,7 +290,7 @@ data class HomeworkResponse(
     val attempt: Int,
     val itemCount: Int,
     val student: PersonRef,
-    val teacher: PersonRef,
+    val teacher: PersonRef?,
     val answeredUnits: Int,
     val totalUnits: Int,
     @Serializable(with = OffsetDateTimeSerializer::class)

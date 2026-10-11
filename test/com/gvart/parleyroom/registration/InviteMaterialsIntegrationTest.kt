@@ -135,7 +135,7 @@ class InviteMaterialsIntegrationTest : IntegrationTest() {
             val folder = MaterialFolderTable.selectAll()
                 .where { MaterialFolderTable.name eq "Onboarding – $email" }
                 .single()
-            assertEquals(teacher, folder[MaterialFolderTable.teacherId].value)
+            assertEquals(teacher, folder[MaterialFolderTable.teacherId]?.value)
             assertNull(folder[MaterialFolderTable.parentFolderId])
             val folderIds = MaterialTable.selectAll()
                 .where { MaterialTable.folderId eq folder[MaterialFolderTable.id] }
@@ -259,7 +259,7 @@ class InviteMaterialsIntegrationTest : IntegrationTest() {
         assertEquals(setOf(a, b), visible)
         transaction {
             MaterialShareTable.selectAll().where { MaterialShareTable.studentId eq userId }.forEach {
-                assertEquals(teacher, it[MaterialShareTable.sharedBy].value)
+                assertEquals(teacher, it[MaterialShareTable.sharedBy]?.value)
             }
         }
         val notifications = client.get("/api/v1/notifications") { bearerAuth(studentToken) }.body<String>()
@@ -288,7 +288,7 @@ class InviteMaterialsIntegrationTest : IntegrationTest() {
         assertEquals(setOf(a, b), inFolder)
         transaction {
             val share = FolderShareTable.selectAll().where { FolderShareTable.folderId eq folderId }.single()
-            assertEquals(teacher, share[FolderShareTable.sharedBy].value)
+            assertEquals(teacher, share[FolderShareTable.sharedBy]?.value)
         }
     }
 

@@ -167,7 +167,7 @@ class AssignmentService(
                 val statusCounts = HomeworkStatus.entries.associateWith { 0 } + counts[id].orEmpty().toMap()
                 AssignmentSummary(
                     id = id.toString(),
-                    teacherId = row[AssignmentTable.teacherId].value.toString(),
+                    teacherId = row[AssignmentTable.teacherId]?.value?.toString(),
                     title = row[AssignmentTable.title],
                     instructions = row[AssignmentTable.instructions],
                     dueDate = row[AssignmentTable.dueDate]?.toString(),
@@ -378,7 +378,7 @@ class AssignmentService(
             .toList()
         return AssignmentResponse(
             id = id.toString(),
-            teacherId = row[AssignmentTable.teacherId].value.toString(),
+            teacherId = row[AssignmentTable.teacherId]?.value?.toString(),
             title = row[AssignmentTable.title],
             instructions = row[AssignmentTable.instructions],
             dueDate = row[AssignmentTable.dueDate]?.toString(),
@@ -389,7 +389,7 @@ class AssignmentService(
             items = views.itemResponses(
                 views.itemRows(listOf(id))[id].orEmpty(), principal,
                 stripSolutions = false,
-                teacherId = row[AssignmentTable.teacherId].value,
+                teacherId = row[AssignmentTable.teacherId]?.value,
                 lessonId = row[AssignmentTable.lessonId]?.value,
             ),
             homework = views.summaries(homework, principal),

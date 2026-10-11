@@ -34,6 +34,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -48,7 +49,7 @@ class DocumentSupport {
     /** Owner-only writes: each teacher edits their own library documents. */
     fun requireOwned(documentId: UUID, principal: UserPrincipal): ResultRow {
         val row = findDocument(documentId)
-        if (principal.role != UserRole.TEACHER || row[DocumentTable.ownerId].value != principal.id)
+        if (principal.role != UserRole.TEACHER || row[DocumentTable.ownerId]?.value != principal.id)
             throw ForbiddenException("Only the owning teacher can change this document")
         return row
     }
@@ -65,7 +66,7 @@ class DocumentSupport {
         val row = findDocument(documentId)
         when (principal.role) {
             UserRole.ADMIN -> Unit
-            UserRole.TEACHER -> if (row[DocumentTable.ownerId].value != principal.id)
+            UserRole.TEACHER -> if (row[DocumentTable.ownerId]?.value != principal.id)
                 throw ForbiddenException("Not your document")
             UserRole.STUDENT -> if (documentId !in readableByStudent(principal.id))
                 throw NotFoundException("Document not found", code = "DOCUMENT_NOT_FOUND")
@@ -89,7 +90,7 @@ class DocumentSupport {
         val blocks = row[DocumentTable.blocks]
         return DocumentResponse(
             id = id.toString(),
-            ownerId = row[DocumentTable.ownerId].value.toString(),
+            ownerId = row[DocumentTable.ownerId]?.value?.toString(),
             title = row[DocumentTable.title],
             level = row[DocumentTable.level],
             topicIds = links.topics(id),
@@ -114,7 +115,7 @@ class DocumentSupport {
             val id = row[DocumentTable.id].value
             DocumentSummary(
                 id = id.toString(),
-                ownerId = row[DocumentTable.ownerId].value.toString(),
+                ownerId = row[DocumentTable.ownerId]?.value?.toString(),
                 title = row[DocumentTable.title],
                 level = row[DocumentTable.level],
                 topicIds = links.topics(id),
@@ -143,14 +144,14 @@ class DocumentSupport {
     }
 
     private fun renderVocab(blocks: JsonArray, row: ResultRow, principal: UserPrincipal): List<DocumentVocabEntry> =
-        renderVocab(blocks, row[DocumentTable.ownerId].value, row[DocumentTable.createdFromLessonId]?.value, principal)
+        renderVocab(blocks, row[DocumentTable.ownerId]?.value, row[DocumentTable.createdFromLessonId]?.value, principal)
 
     /**
      * Vocab entries referenced by vocab_table rows of [blocks] (owned by [ownerId]), filtered by the
      * viewer's display setting; [sourceLessonId] supplies the per-lesson override. Also used for
      * homework document snapshots.
      */
-    fun renderVocab(blocks: JsonArray, ownerId: UUID, sourceLessonId: UUID?, principal: UserPrincipal): List<DocumentVocabEntry> {
+    fun renderVocab(blocks: JsonArray, ownerId: UUID?, sourceLessonId: UUID?, principal: UserPrincipal): List<DocumentVocabEntry> {
         val entryIds = blocks.asSequence()
             .map { it.jsonObject }
             .filter { (it["type"] as? JsonPrimitive)?.content == "vocab_table" }
@@ -165,7 +166,11 @@ class DocumentSupport {
         else null
 
         return VocabEntryTable.selectAll()
-            .where { (VocabEntryTable.id inList entryIds) and (VocabEntryTable.teacherId eq ownerId) }
+            .where {
+                // A deleted teacher's entries kept for students have no owner, like the document itself.
+                val owned = if (ownerId != null) VocabEntryTable.teacherId eq ownerId else VocabEntryTable.teacherId.isNull()
+                (VocabEntryTable.id inList entryIds) and owned
+            }
             .map { entry ->
                 val all = entry[VocabEntryTable.translations]
                 DocumentVocabEntry(
@@ -190,13 +195,13 @@ class DocumentSupport {
     }
 
     /** Lesson override (document's source lesson) > teacher–student setting > level default. */
-    private fun studentDisplay(teacherId: UUID, studentId: UUID, lessonId: UUID?): VocabDisplaySetting {
+    private fun studentDisplay(teacherId: UUID?, studentId: UUID, lessonId: UUID?): VocabDisplaySetting {
         lessonId?.let { id ->
             LessonTable.selectAll().where { LessonTable.id eq id }.singleOrNull()
                 ?.let { VocabDisplay.of(it[LessonTable.vocabDisplayFields], it[LessonTable.allowTranslationToggle]) }
                 ?.let { return it }
         }
-        TeacherStudentTable.selectAll()
+        if (teacherId != null) TeacherStudentTable.selectAll()
             .where { (TeacherStudentTable.teacherId eq teacherId) and (TeacherStudentTable.studentId eq studentId) }
             .singleOrNull()
             ?.let { VocabDisplay.of(it[TeacherStudentTable.vocabDisplayFields], it[TeacherStudentTable.allowTranslationToggle]) }

@@ -13,7 +13,7 @@ enum class GoalStatus { ACTIVE, ACHIEVED, ARCHIVED }
 /** Auto-tracked goals (brief §5.9): progress is computed from the student's progress, never stored. */
 object GoalTable : UUIDTable("goals") {
     val studentId = reference("student_id", UserTable)
-    val teacherId = reference("teacher_id", UserTable)
+    val teacherId = reference("teacher_id", UserTable).nullable()
     val type = pgEnum<GoalType>("type", "GOAL_TYPE")
     val examName = varchar("exam_name", 100).nullable()
     val targetLevel = pgEnum<LanguageLevel>("target_level", "LANGUAGE_LEVEL")

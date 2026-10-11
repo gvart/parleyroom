@@ -14,7 +14,7 @@ data class ShareGrantResponse(
     val studentId: String,
     val firstName: String,
     val lastName: String,
-    val sharedBy: String,
+    val sharedBy: String?,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val sharedAt: OffsetDateTime,
 )

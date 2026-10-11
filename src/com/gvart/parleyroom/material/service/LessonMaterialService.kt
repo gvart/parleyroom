@@ -43,7 +43,7 @@ class LessonMaterialService(
             val lessonRow = LessonTable.selectAll()
                 .where { LessonTable.id eq lessonId }
                 .singleOrNotFound("Lesson")
-            val teacherId = lessonRow[LessonTable.teacherId].value
+            val teacherId = lessonRow[LessonTable.teacherId]?.value
             lessonTeacherId = teacherId
             requireLessonEditor(teacherId, principal)
 
@@ -52,7 +52,7 @@ class LessonMaterialService(
             val ownershipOk = MaterialTable
                 .select(MaterialTable.id, MaterialTable.teacherId)
                 .where { MaterialTable.id inList materialIds }
-                .associate { it[MaterialTable.id].value to it[MaterialTable.teacherId].value }
+                .associate { it[MaterialTable.id].value to it[MaterialTable.teacherId]?.value }
 
             if (ownershipOk.size != materialIds.size) {
                 throw NotFoundException("One or more materials not found", code = "MATERIAL_NOT_FOUND")
@@ -109,7 +109,7 @@ class LessonMaterialService(
             val lessonRow = LessonTable.selectAll()
                 .where { LessonTable.id eq lessonId }
                 .singleOrNotFound("Lesson")
-            requireLessonEditor(lessonRow[LessonTable.teacherId].value, principal)
+            requireLessonEditor(lessonRow[LessonTable.teacherId]?.value, principal)
 
             LessonMaterialTable.deleteWhere {
                 (LessonMaterialTable.lessonId eq lessonId) and
@@ -123,7 +123,7 @@ class LessonMaterialService(
             .where { LessonTable.id eq lessonId }
             .singleOrNotFound("Lesson")
 
-        requireLessonReader(lessonRow[LessonTable.teacherId].value, lessonId, principal)
+        requireLessonReader(lessonRow[LessonTable.teacherId]?.value, lessonId, principal)
 
         val items = LessonMaterialTable
             .selectAll()
@@ -133,20 +133,20 @@ class LessonMaterialService(
                 val material = materialService.getMaterialInternal(materialId)
                 LessonMaterialResponse(
                     material = material,
-                    attachedBy = row[LessonMaterialTable.attachedBy].value.toString(),
+                    attachedBy = row[LessonMaterialTable.attachedBy]?.value?.toString(),
                     attachedAt = row[LessonMaterialTable.attachedAt],
                 )
             }
         LessonMaterialListResponse(items)
     }
 
-    private fun requireLessonEditor(teacherId: UUID, principal: UserPrincipal) =
+    private fun requireLessonEditor(teacherId: UUID?, principal: UserPrincipal) =
         AuthorizationHelper.requireOwnerOrAdmin(
             teacherId, principal,
             "Only the owning teacher can modify lesson attachments",
         )
 
-    private fun requireLessonReader(teacherId: UUID, lessonId: UUID, principal: UserPrincipal) {
+    private fun requireLessonReader(teacherId: UUID?, lessonId: UUID, principal: UserPrincipal) {
         when (principal.role) {
             UserRole.ADMIN -> return
             UserRole.TEACHER -> if (teacherId != principal.id)

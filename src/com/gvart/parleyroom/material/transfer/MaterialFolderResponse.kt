@@ -7,7 +7,7 @@ import java.time.OffsetDateTime
 @Serializable
 data class MaterialFolderResponse(
     val id: String,
-    val teacherId: String,
+    val teacherId: String?,
     val parentFolderId: String? = null,
     val name: String,
     val materialCount: Int = 0,

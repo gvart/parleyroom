@@ -56,7 +56,7 @@ data class GoalProgress(
 data class GoalResponse(
     val id: String,
     val studentId: String,
-    val teacherId: String,
+    val teacherId: String?,
     val type: GoalType,
     val examName: String? = null,
     val targetLevel: LanguageLevel,

@@ -9,7 +9,7 @@ import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 enum class MaterialType { PDF, AUDIO, VIDEO, LINK }
 
 object MaterialTable : UUIDTable("materials") {
-    val teacherId = reference("teacher_id", UserTable)
+    val teacherId = reference("teacher_id", UserTable).nullable()
     val folderId = reference("folder_id", MaterialFolderTable).nullable()
     val name = varchar("name", 255)
     val type = pgEnum<MaterialType>("type", "MATERIAL_TYPE")

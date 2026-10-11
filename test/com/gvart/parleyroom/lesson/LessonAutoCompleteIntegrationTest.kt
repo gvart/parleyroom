@@ -111,7 +111,7 @@ class LessonAutoCompleteIntegrationTest : IntegrationTest() {
             val event = LessonEventTable.selectAll()
                 .where { (LessonEventTable.lessonId eq lessonId) and (LessonEventTable.eventType eq LessonEventType.LESSON_COMPLETED) }
                 .single()
-            assertEquals(teacher, event[LessonEventTable.actorId].value)
+            assertEquals(teacher, event[LessonEventTable.actorId]?.value)
         }
     }
 

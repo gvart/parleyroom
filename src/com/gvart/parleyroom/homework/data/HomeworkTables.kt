@@ -23,7 +23,7 @@ enum class HomeworkResponseType { TEXT, AUDIO, VIDEO, FILE }
 enum class AutoResult { CORRECT, INCORRECT, PENDING_REVIEW, UNANSWERED }
 
 object AssignmentTable : UUIDTable("assignments") {
-    val teacherId = reference("teacher_id", UserTable)
+    val teacherId = reference("teacher_id", UserTable).nullable()
     val lessonId = reference("lesson_id", LessonTable).nullable()
     val title = varchar("title", 255)
     val instructions = text("instructions").nullable()

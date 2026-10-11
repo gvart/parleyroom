@@ -147,7 +147,7 @@ class VocabularyService {
         fun resolve(row: ResultRow): VocabDisplaySetting {
             val studentId = row[StudentVocabTable.studentId].value
             row[StudentVocabTable.lessonId]?.value?.let { lessonOverrides[it] }?.let { return it }
-            pairSettings[row[VocabEntryTable.teacherId].value to studentId]?.let { return it }
+            row[VocabEntryTable.teacherId]?.value?.let { pairSettings[it to studentId] }?.let { return it }
             val (level, nativeLanguage) = levels[studentId] ?: (null to null)
             return VocabDisplay.defaultFor(level, nativeLanguage)
         }
@@ -156,7 +156,7 @@ class VocabularyService {
             fun load(rows: List<ResultRow>): DisplaySettingResolver {
                 val lessonIds = rows.mapNotNull { it[StudentVocabTable.lessonId]?.value }.distinct()
                 val studentIds = rows.map { it[StudentVocabTable.studentId].value }.distinct()
-                val teacherIds = rows.map { it[VocabEntryTable.teacherId].value }.distinct()
+                val teacherIds = rows.mapNotNull { it[VocabEntryTable.teacherId]?.value }.distinct()
 
                 val lessonOverrides = if (lessonIds.isEmpty()) emptyMap() else LessonTable.selectAll()
                     .where { LessonTable.id inList lessonIds }

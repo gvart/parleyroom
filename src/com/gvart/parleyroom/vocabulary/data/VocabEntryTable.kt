@@ -17,7 +17,7 @@ enum class WordType { NOUN, VERB, ADJECTIVE, ADVERB, PREPOSITION, CONJUNCTION, P
 enum class NounArticle { DER, DIE, DAS }
 
 object VocabEntryTable : UUIDTable("vocab_entries") {
-    val teacherId = reference("teacher_id", UserTable)
+    val teacherId = reference("teacher_id", UserTable).nullable()
     val lemma = varchar("lemma", 255)
     val article = pgEnum<NounArticle>("article", "NOUN_ARTICLE").nullable()
     val plural = varchar("plural", 255).nullable()

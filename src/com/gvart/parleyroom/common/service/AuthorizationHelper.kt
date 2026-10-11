@@ -22,7 +22,7 @@ object AuthorizationHelper {
      * id in this schema, and callers that need to reject STUDENT outright do so
      * at a higher level (e.g. "only teachers and admins can create homework").
      */
-    fun requireOwnerOrAdmin(ownerId: UUID, principal: UserPrincipal, message: String) {
+    fun requireOwnerOrAdmin(ownerId: UUID?, principal: UserPrincipal, message: String) {
         if (principal.role == UserRole.ADMIN) return
         if (principal.id != ownerId) throw ForbiddenException(message)
     }

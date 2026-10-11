@@ -209,7 +209,7 @@ class HomeworkService(
             it[submittedAt] = OffsetDateTime.now()
         }
         LearningActivityRecorder.record(principal.id, ActivityKind.HOMEWORK_SUBMITTED, homeworkId)
-        notificationService.createNotification(row[AssignmentTable.teacherId].value, principal.id, NotificationType.HOMEWORK_SUBMITTED, homeworkId)
+        row[AssignmentTable.teacherId]?.value?.let { notificationService.createNotification(it, principal.id, NotificationType.HOMEWORK_SUBMITTED, homeworkId) }
 
         views.detail(views.requireReadable(homeworkId, principal), principal)
     }

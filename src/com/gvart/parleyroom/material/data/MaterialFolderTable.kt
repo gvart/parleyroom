@@ -6,7 +6,7 @@ import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
 object MaterialFolderTable : UUIDTable("material_folders") {
     val parentFolderId = reference("parent_folder_id", MaterialFolderTable).nullable()
-    val teacherId = reference("teacher_id", UserTable)
+    val teacherId = reference("teacher_id", UserTable).nullable()
     val name = varchar("name", 255)
     val createdAt = timestampWithTimeZone("created_at")
     val updatedAt = timestampWithTimeZone("updated_at")
