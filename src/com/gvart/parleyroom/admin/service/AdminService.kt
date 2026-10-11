@@ -1,6 +1,8 @@
 package com.gvart.parleyroom.admin.service
 
+import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.service.singleOrNotFound
+import com.gvart.parleyroom.common.storage.StorageService
 import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminUpdateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminUserListResponse
@@ -9,6 +11,21 @@ import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.common.transfer.exception.NotFoundException
+import com.gvart.parleyroom.document.data.DocumentLessonTable
+import com.gvart.parleyroom.document.data.DocumentStudentTable
+import com.gvart.parleyroom.document.data.DocumentTable
+import com.gvart.parleyroom.homework.data.AssignmentItemTable
+import com.gvart.parleyroom.homework.data.AssignmentTable
+import com.gvart.parleyroom.homework.data.HomeworkTable
+import com.gvart.parleyroom.homework.data.HomeworkUploadTable
+import com.gvart.parleyroom.lesson.data.LessonStudentTable
+import com.gvart.parleyroom.lesson.data.LessonTable
+import com.gvart.parleyroom.material.data.FolderShareTable
+import com.gvart.parleyroom.material.data.LessonMaterialTable
+import com.gvart.parleyroom.material.data.MaterialFolderTable
+import com.gvart.parleyroom.material.data.MaterialShareTable
+import com.gvart.parleyroom.material.data.MaterialTable
+import com.gvart.parleyroom.material.data.MaterialType
 import com.gvart.parleyroom.user.data.RefreshTokenTable
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
@@ -17,26 +34,34 @@ import com.gvart.parleyroom.user.data.DEFAULT_NATIVE_LANGUAGE
 import com.gvart.parleyroom.user.data.requireSupportedLocale
 import com.gvart.parleyroom.user.data.requireSupportedNativeLanguage
 import com.gvart.parleyroom.user.security.UserPrincipal
+import com.gvart.parleyroom.vocabulary.data.LessonVocabTable
+import com.gvart.parleyroom.vocabulary.data.StudentVocabTable
+import com.gvart.parleyroom.vocabulary.data.VocabEntryTable
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.core.lowerCase
 import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.notInSubQuery
 import org.jetbrains.exposed.v1.core.or
-import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.json.contains
 import org.mindrot.jbcrypt.BCrypt
+import org.slf4j.LoggerFactory
 import java.time.OffsetDateTime
 import java.util.UUID
 
-class AdminService {
+class AdminService(private val storage: StorageService) {
+    private val log = LoggerFactory.getLogger(AdminService::class.java)
 
     fun listUsers(
         page: PageRequest,
@@ -175,18 +200,143 @@ class AdminService {
         }
     }
 
-    fun hardDeleteUser(id: UUID, principal: UserPrincipal): Unit = transaction {
+    /**
+     * Permanently deletes the user. A student takes their own data with them (homework, goals, vocab,
+     * progress, 1:1 lessons nobody else attends); a teacher takes only what no student uses, so a
+     * student moved to another teacher keeps their history. Rows that survive lose the reference
+     * (foreign keys are ON DELETE SET NULL). Stored files are purged after the commit.
+     */
+    fun hardDeleteUser(id: UUID, principal: UserPrincipal) {
         if (id == principal.id) throw BadRequestException("Admins cannot delete themselves", code = "ADMIN_SELF_ACTION")
-        loadById(id)
-        try {
+        val keysToPurge = transaction {
+            val user = loadById(id)
+            val keys = listOfNotNull(user[UserTable.avatarUrl]) +
+                deleteStudentData(id) +
+                deleteUnassignedTeacherData(id)
             UserTable.deleteWhere { UserTable.id eq id }
-        } catch (e: ExposedSQLException) {
-            throw ConflictException(
-                "User has associated data (lessons, homework, vocabulary, goals, or materials). " +
-                    "Soft-delete instead, or remove the related records first."
-            )
+            keys
+        }
+        keysToPurge.forEach { key ->
+            runCatching { storage.delete(key) }.onFailure { log.warn("Failed to delete stored object {} of deleted user {}", key, id, it) }
         }
     }
+
+    /** Deletes the 1:1 lessons only this student attends; returns the homework upload keys (homework and goals cascade). */
+    private fun deleteStudentData(studentId: UUID): List<String> {
+        val uploadKeys = (HomeworkUploadTable innerJoin HomeworkTable)
+            .select(HomeworkUploadTable.storageKey)
+            .where { HomeworkTable.studentId eq studentId }
+            .map { it[HomeworkUploadTable.storageKey] }
+
+        val attended = LessonStudentTable.select(LessonStudentTable.lessonId)
+            .where { LessonStudentTable.studentId eq studentId }
+            .map { it[LessonStudentTable.lessonId].value }
+        if (attended.isNotEmpty()) {
+            val withOthers = LessonStudentTable.select(LessonStudentTable.lessonId)
+                .where { (LessonStudentTable.lessonId inList attended) and (LessonStudentTable.studentId neq studentId) }
+                .map { it[LessonStudentTable.lessonId].value }
+                .toSet()
+            val solo = attended - withOthers
+            if (solo.isNotEmpty()) {
+                LessonTable.deleteWhere { (LessonTable.id inList solo) and (LessonTable.type eq LessonType.ONE_ON_ONE) }
+            }
+        }
+        return uploadKeys
+    }
+
+    /**
+     * Deletes the teacher's rows no student uses: lessons without students, assignments without
+     * homework, documents not shared with a student or linked to a surviving lesson, vocab entries
+     * no student or surviving lesson / document / homework holds, and materials / folders not shared
+     * with, attached for, or assigned to a student. Returns the storage keys of the deleted materials.
+     */
+    private fun deleteUnassignedTeacherData(teacherId: UUID): List<String> {
+        LessonTable.deleteWhere {
+            (LessonTable.teacherId eq teacherId) and
+                (LessonTable.id notInSubQuery LessonStudentTable.select(LessonStudentTable.lessonId))
+        }
+        AssignmentTable.deleteWhere {
+            (AssignmentTable.teacherId eq teacherId) and
+                (AssignmentTable.id notInSubQuery HomeworkTable.select(HomeworkTable.assignmentId))
+        }
+        DocumentTable.deleteWhere {
+            (DocumentTable.ownerId eq teacherId) and
+                (DocumentTable.id notInSubQuery DocumentStudentTable.select(DocumentStudentTable.documentId)) and
+                (DocumentTable.id notInSubQuery DocumentLessonTable.select(DocumentLessonTable.documentId))
+        }
+
+        val entryIds = VocabEntryTable.select(VocabEntryTable.id)
+            .where { VocabEntryTable.teacherId eq teacherId }
+            .map { it[VocabEntryTable.id].value }
+        val heldEntries = buildSet {
+            StudentVocabTable.select(StudentVocabTable.vocabEntryId)
+                .where { StudentVocabTable.vocabEntryId inList entryIds }
+                .forEach { add(it[StudentVocabTable.vocabEntryId].value) }
+            LessonVocabTable.select(LessonVocabTable.vocabEntryId)
+                .where { LessonVocabTable.vocabEntryId inList entryIds }
+                .forEach { add(it[LessonVocabTable.vocabEntryId].value) }
+        }
+        val deletedEntries = entryIds.filter { entryId ->
+            entryId !in heldEntries && !inSurvivingBlocks("""[{"type":"vocab_table","rows":[{"vocabEntryId":"$entryId"}]}]""")
+        }
+        if (deletedEntries.isNotEmpty()) {
+            VocabEntryTable.deleteWhere { VocabEntryTable.id inList deletedEntries }
+        }
+
+        // Folders shared with a student keep their whole subtree.
+        val parentOf = MaterialFolderTable.select(MaterialFolderTable.id, MaterialFolderTable.parentFolderId)
+            .where { MaterialFolderTable.teacherId eq teacherId }
+            .associate { it[MaterialFolderTable.id].value to it[MaterialFolderTable.parentFolderId]?.value }
+        val keptFolders = FolderShareTable.select(FolderShareTable.folderId)
+            .where { FolderShareTable.folderId inList parentOf.keys }
+            .map { it[FolderShareTable.folderId].value }
+            .toMutableSet()
+        do {
+            val added = parentOf.filter { (folder, parent) -> parent in keptFolders && keptFolders.add(folder) }
+        } while (added.isNotEmpty())
+
+        val materials = MaterialTable.select(MaterialTable.id, MaterialTable.type, MaterialTable.url, MaterialTable.folderId)
+            .where { MaterialTable.teacherId eq teacherId }
+            .toList()
+        val materialIds = materials.map { it[MaterialTable.id].value }
+        val inUse = buildSet {
+            MaterialShareTable.select(MaterialShareTable.materialId)
+                .where { MaterialShareTable.materialId inList materialIds }
+                .forEach { add(it[MaterialShareTable.materialId].value) }
+            // Only links to lessons that survived (studentless ones were deleted above).
+            LessonMaterialTable.select(LessonMaterialTable.materialId)
+                .where { LessonMaterialTable.materialId inList materialIds }
+                .forEach { add(it[LessonMaterialTable.materialId].value) }
+        }
+        val deletedMaterials = materials.filter { row ->
+            val materialId = row[MaterialTable.id].value
+            materialId !in inUse &&
+                row[MaterialTable.folderId]?.value !in keptFolders &&
+                AssignmentItemTable.select(AssignmentItemTable.id).where { AssignmentItemTable.materialId eq materialId }.empty() &&
+                !inSurvivingBlocks("""[{"type":"media","materialId":"$materialId"}]""")
+        }
+        if (deletedMaterials.isNotEmpty()) {
+            MaterialTable.deleteWhere { MaterialTable.id inList deletedMaterials.map { it[MaterialTable.id].value } }
+        }
+
+        // parent_folder_id is ON DELETE RESTRICT: detach before deleting so order doesn't matter.
+        val deletedFolders = parentOf.keys - keptFolders
+        if (deletedFolders.isNotEmpty()) {
+            MaterialFolderTable.update({ MaterialFolderTable.parentFolderId inList deletedFolders }) {
+                it[parentFolderId] = null
+            }
+            MaterialFolderTable.deleteWhere { MaterialFolderTable.id inList deletedFolders }
+        }
+
+        return deletedMaterials
+            .filter { it[MaterialTable.type] != MaterialType.LINK }
+            .map { it[MaterialTable.url] }
+    }
+
+    /** True when a remaining document or homework snapshot has a block containing [pattern]. */
+    private fun inSurvivingBlocks(pattern: String): Boolean =
+        !DocumentTable.select(DocumentTable.id).where { DocumentTable.blocks.contains(pattern) }.empty() ||
+            !AssignmentItemTable.select(AssignmentItemTable.id).where { AssignmentItemTable.blocks.contains(pattern) }.empty()
 
     fun unlockUser(id: UUID): AdminUserResponse = transaction {
         loadById(id)

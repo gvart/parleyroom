@@ -114,7 +114,7 @@ class GoalService(private val calculator: ProgressCalculator) {
 
     fun patch(goalId: UUID, patch: GoalPatch, principal: UserPrincipal): GoalResponse = transaction {
         val row = findVisible(goalId, principal)
-        if (row[GoalTable.teacherId].value != principal.id) throw ForbiddenException("Only the goal's teacher can change it")
+        if (row[GoalTable.teacherId]?.value != principal.id) throw ForbiddenException("Only the goal's teacher can change it")
         val type = row[GoalTable.type]
 
         val examName = patch.examName?.trim()
@@ -150,14 +150,14 @@ class GoalService(private val calculator: ProgressCalculator) {
 
     fun delete(goalId: UUID, principal: UserPrincipal) = transaction {
         val row = findVisible(goalId, principal)
-        AuthorizationHelper.requireOwnerOrAdmin(row[GoalTable.teacherId].value, principal, "Only the goal's teacher can delete it")
+        AuthorizationHelper.requireOwnerOrAdmin(row[GoalTable.teacherId]?.value, principal, "Only the goal's teacher can delete it")
         GoalTable.deleteWhere { GoalTable.id eq goalId }
     }
 
     /** Batched: one progress computation per distinct teacher. */
     private fun toResponses(rows: List<ResultRow>): List<GoalResponse> {
         if (rows.isEmpty()) return emptyList()
-        val computed = rows.groupBy { it[GoalTable.teacherId].value }.flatMap { (teacher, goals) ->
+        val computed = rows.groupBy { it[GoalTable.teacherId]?.value }.flatMap { (teacher, goals) ->
             val pairs = goals.map { it[GoalTable.studentId].value to it[GoalTable.targetLevel] }.distinct()
             compute(teacher, pairs).map { (key, value) -> (teacher to key) to value }
         }.toMap()
@@ -166,13 +166,15 @@ class GoalService(private val calculator: ProgressCalculator) {
             .associate { it[UserTable.id].value to zone(it[UserTable.timezone]) }
         return rows.map { row ->
             val student = row[GoalTable.studentId].value
-            val progress = computed.getValue(row[GoalTable.teacherId].value to (student to row[GoalTable.targetLevel]))
+            val progress = computed.getValue(row[GoalTable.teacherId]?.value to (student to row[GoalTable.targetLevel]))
             toResponse(row, progress, zones[student] ?: ZoneOffset.UTC)
         }
     }
 
     /** Goal progress per (student, target level) in [teacher]'s library (API.md formula). */
-    private fun compute(teacher: UUID, pairs: List<Pair<UUID, LanguageLevel>>): Map<Pair<UUID, LanguageLevel>, Computed> {
+    private fun compute(teacher: UUID?, pairs: List<Pair<UUID, LanguageLevel>>): Map<Pair<UUID, LanguageLevel>, Computed> {
+        // The teacher was deleted along with their library: nothing left to measure against.
+        if (teacher == null) return pairs.associateWith { computed(emptyList(), emptyList()) }
         val students = pairs.map { it.first }.distinct()
         val levels = pairs.map { it.second }.toSet()
         val grammar = calculator.grammar(teacher, students, calculator.grammarTopics(teacher, levels))
@@ -220,7 +222,7 @@ class GoalService(private val calculator: ProgressCalculator) {
         return GoalResponse(
             id = row[GoalTable.id].value.toString(),
             studentId = row[GoalTable.studentId].value.toString(),
-            teacherId = row[GoalTable.teacherId].value.toString(),
+            teacherId = row[GoalTable.teacherId]?.value?.toString(),
             type = row[GoalTable.type],
             examName = row[GoalTable.examName],
             targetLevel = row[GoalTable.targetLevel],
@@ -256,7 +258,7 @@ class GoalService(private val calculator: ProgressCalculator) {
         val row = find(goalId)
         val visible = when (principal.role) {
             UserRole.ADMIN -> true
-            UserRole.TEACHER -> row[GoalTable.teacherId].value == principal.id
+            UserRole.TEACHER -> row[GoalTable.teacherId]?.value == principal.id
             UserRole.STUDENT -> row[GoalTable.studentId].value == principal.id
         }
         if (!visible) throw NotFoundException("Goal not found", code = "GOAL_NOT_FOUND")

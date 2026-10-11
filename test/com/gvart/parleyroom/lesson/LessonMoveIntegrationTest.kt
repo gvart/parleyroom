@@ -248,7 +248,7 @@ class LessonMoveIntegrationTest : IntegrationTest() {
         move(client, teacherToken, lesson.id, MoveLessonRequest(newTime))
 
         val event = movedEvents(lesson.id).single()
-        assertEquals(TEACHER_ID, event[LessonEventTable.actorId].value.toString())
+        assertEquals(TEACHER_ID, event[LessonEventTable.actorId]?.value.toString())
         assertTrue(event[LessonEventTable.oldScheduledAt]!!.isEqual(originalTime))
         assertTrue(event[LessonEventTable.newScheduledAt]!!.isEqual(newTime))
     }

@@ -199,7 +199,7 @@ class LessonLifecycleService(
     fun acceptLesson(lessonId: UUID, principal: UserPrincipal): LessonResponse = transaction {
         val lesson = support.findLesson(lessonId)
 
-        if (lesson[LessonTable.teacherId].value != principal.id)
+        if (lesson[LessonTable.teacherId]?.value != principal.id)
             throw ForbiddenException("Only the assigned teacher can accept lesson requests")
 
         if (lesson[LessonTable.status] != LessonStatus.REQUEST)
@@ -328,7 +328,7 @@ class LessonLifecycleService(
 
         // The slot may have been booked while the lesson was cancelled.
         support.checkTeacherOverlap(
-            lesson[LessonTable.teacherId].value,
+            lessonTeacherId(lesson),
             lesson[LessonTable.scheduledAt],
             lesson[LessonTable.durationMinutes],
             excludeLessonId = lessonId,
@@ -362,7 +362,7 @@ class LessonLifecycleService(
         if (principal.role == UserRole.STUDENT)
             throw ForbiddenException("Only teachers or admins can start a lesson")
 
-        if (lesson[LessonTable.teacherId].value != principal.id && principal.role != UserRole.ADMIN)
+        if (lesson[LessonTable.teacherId]?.value != principal.id && principal.role != UserRole.ADMIN)
             throw ForbiddenException("Only the assigned teacher can start this lesson")
 
         if (lesson[LessonTable.status] != LessonStatus.CONFIRMED)
@@ -423,7 +423,7 @@ class LessonLifecycleService(
         if (principal.role == UserRole.STUDENT)
             throw ForbiddenException("Only teachers or admins can complete a lesson")
 
-        if (lesson[LessonTable.teacherId].value != principal.id && principal.role != UserRole.ADMIN)
+        if (lesson[LessonTable.teacherId]?.value != principal.id && principal.role != UserRole.ADMIN)
             throw ForbiddenException("Only the assigned teacher can complete this lesson")
 
         if (!markCompleted(lessonId, principal.id))
@@ -446,7 +446,7 @@ class LessonLifecycleService(
                     val end = it[LessonTable.scheduledAt].plusMinutes(it[LessonTable.durationMinutes].toLong())
                     end.plus(grace).isBefore(now)
                 }
-                .map { it[LessonTable.id].value to it[LessonTable.teacherId].value }
+                .mapNotNull { row -> row[LessonTable.teacherId]?.value?.let { row[LessonTable.id].value to it } }
         }
 
         var completed = 0

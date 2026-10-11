@@ -77,7 +77,7 @@ data class LinkLessonDocumentRequest(
 @Serializable
 data class DocumentResponse(
     val id: String,
-    val ownerId: String,
+    val ownerId: String?,
     val title: String,
     val level: LanguageLevel? = null,
     val topicIds: List<String> = emptyList(),
@@ -99,7 +99,7 @@ data class DocumentResponse(
 @Serializable
 data class DocumentSummary(
     val id: String,
-    val ownerId: String,
+    val ownerId: String?,
     val title: String,
     val level: LanguageLevel? = null,
     val topicIds: List<String> = emptyList(),

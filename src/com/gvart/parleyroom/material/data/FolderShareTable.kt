@@ -7,7 +7,7 @@ import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 object FolderShareTable : Table("folder_shares") {
     val folderId = reference("folder_id", MaterialFolderTable)
     val studentId = reference("student_id", UserTable)
-    val sharedBy = reference("shared_by", UserTable)
+    val sharedBy = reference("shared_by", UserTable).nullable()
     val sharedAt = timestampWithTimeZone("shared_at")
 
     override val primaryKey = PrimaryKey(folderId, studentId)

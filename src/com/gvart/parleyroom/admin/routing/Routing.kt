@@ -195,7 +195,10 @@ fun Application.configureAdminRouting() {
                     call.respond(HttpStatusCode.NoContent)
                 }.describe {
                     summary = "Delete user (admin)"
-                    description = "Soft-delete by default (status=INACTIVE). Pass ?hard=true for permanent delete."
+                    description = "Soft-delete by default (status=INACTIVE). Pass ?hard=true for permanent delete: " +
+                        "a student's homework, goals, vocab, progress and solo 1:1 lessons are removed; a teacher's " +
+                        "unassigned lessons, assignments, materials and folders are removed, while rows students use " +
+                        "are kept with teacherId = null."
                     parameters {
                         path("id") { description = "User UUID" }
                         query("hard") { description = "true for permanent delete"; required = false }
@@ -204,7 +207,6 @@ fun Application.configureAdminRouting() {
                         HttpStatusCode.NoContent { description = "User deleted" }
                         HttpStatusCode.BadRequest { schema = jsonSchema<ProblemDetail>() }
                         HttpStatusCode.NotFound { schema = jsonSchema<ProblemDetail>() }
-                        HttpStatusCode.Conflict { schema = jsonSchema<ProblemDetail>() }
                         HttpStatusCode.Forbidden { schema = jsonSchema<ProblemDetail>() }
                     }
                 }

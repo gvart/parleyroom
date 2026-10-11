@@ -16,6 +16,8 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import java.util.UUID
@@ -51,17 +53,20 @@ class MaterialAccessResolver {
         if (directlyShared.isEmpty()) return emptySet()
 
         // Build the descendant closure. We pull every folder owned by the relevant
-        // teachers (folder owners of the shared roots) and walk in memory.
+        // teachers (folder owners of the shared roots; null once the teacher was deleted) and walk in memory.
         val ownerIds = MaterialFolderTable
             .select(MaterialFolderTable.teacherId)
             .where { MaterialFolderTable.id inList directlyShared }
-            .map { it[MaterialFolderTable.teacherId].value }
+            .map { it[MaterialFolderTable.teacherId]?.value }
             .toSet()
 
         val adjacency = mutableMapOf<UUID, MutableList<UUID>>()
         MaterialFolderTable
             .selectAll()
-            .where { MaterialFolderTable.teacherId inList ownerIds }
+            .where {
+                val owned = MaterialFolderTable.teacherId inList ownerIds.filterNotNull()
+                if (null in ownerIds) owned or MaterialFolderTable.teacherId.isNull() else owned
+            }
             .forEach { row ->
                 val id = row[MaterialFolderTable.id].value
                 val parent = row[MaterialFolderTable.parentFolderId]?.value
@@ -166,7 +171,7 @@ class MaterialAccessResolver {
     /** Caller must already be inside an Exposed transaction. */
     fun requireFolderOwnership(folderRow: ResultRow, principal: UserPrincipal) =
         com.gvart.parleyroom.common.service.AuthorizationHelper.requireOwnerOrAdmin(
-            folderRow[MaterialFolderTable.teacherId].value, principal,
+            folderRow[MaterialFolderTable.teacherId]?.value, principal,
             "Only the owning teacher can modify this folder",
         )
 }

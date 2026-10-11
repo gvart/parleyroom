@@ -19,7 +19,7 @@ enum class DocumentAudience { STUDENT, GROUP, LIBRARY }
 enum class DocumentVersionReason { AUTOSAVE, SHARE, RESTORE, DUPLICATE, AI_REFINE }
 
 object DocumentTable : UUIDTable("documents") {
-    val ownerId = reference("owner_id", UserTable)
+    val ownerId = reference("owner_id", UserTable).nullable()
     val title = varchar("title", 255)
     val level = pgEnum<LanguageLevel>("level", "LANGUAGE_LEVEL").nullable()
     val audience = pgEnum<DocumentAudience>("audience", "DOCUMENT_AUDIENCE")

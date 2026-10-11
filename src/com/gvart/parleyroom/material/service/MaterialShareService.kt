@@ -41,7 +41,7 @@ class MaterialShareService(
             val material = MaterialTable.selectAll()
                 .where { MaterialTable.id eq materialId }
                 .singleOrNotFound("Material")
-            requireOwnerOrAdmin(material[MaterialTable.teacherId].value, principal)
+            requireOwnerOrAdmin(material[MaterialTable.teacherId]?.value, principal)
 
             val now = OffsetDateTime.now()
             request.studentIds.map(UUID::fromString).forEach { studentId ->
@@ -73,7 +73,7 @@ class MaterialShareService(
             val material = MaterialTable.selectAll()
                 .where { MaterialTable.id eq materialId }
                 .singleOrNotFound("Material")
-            requireOwnerOrAdmin(material[MaterialTable.teacherId].value, principal)
+            requireOwnerOrAdmin(material[MaterialTable.teacherId]?.value, principal)
 
             MaterialShareTable.deleteWhere {
                 (MaterialShareTable.materialId eq materialId) and
@@ -86,7 +86,7 @@ class MaterialShareService(
         val material = MaterialTable.selectAll()
             .where { MaterialTable.id eq materialId }
             .singleOrNotFound("Material")
-        requireOwnerOrAdmin(material[MaterialTable.teacherId].value, principal)
+        requireOwnerOrAdmin(material[MaterialTable.teacherId]?.value, principal)
 
         val grants = MaterialShareTable
             .join(UserTable, JoinType.INNER, MaterialShareTable.studentId, UserTable.id)
@@ -97,7 +97,7 @@ class MaterialShareService(
                     studentId = it[MaterialShareTable.studentId].value.toString(),
                     firstName = it[UserTable.firstName],
                     lastName = it[UserTable.lastName],
-                    sharedBy = it[MaterialShareTable.sharedBy].value.toString(),
+                    sharedBy = it[MaterialShareTable.sharedBy]?.value?.toString(),
                     sharedAt = it[MaterialShareTable.sharedAt],
                 )
             }
@@ -114,7 +114,7 @@ class MaterialShareService(
             val folder = MaterialFolderTable.selectAll()
                 .where { MaterialFolderTable.id eq folderId }
                 .singleOrNotFound("Folder")
-            requireOwnerOrAdmin(folder[MaterialFolderTable.teacherId].value, principal)
+            requireOwnerOrAdmin(folder[MaterialFolderTable.teacherId]?.value, principal)
 
             val now = OffsetDateTime.now()
             request.studentIds.map(UUID::fromString).forEach { studentId ->
@@ -146,7 +146,7 @@ class MaterialShareService(
             val folder = MaterialFolderTable.selectAll()
                 .where { MaterialFolderTable.id eq folderId }
                 .singleOrNotFound("Folder")
-            requireOwnerOrAdmin(folder[MaterialFolderTable.teacherId].value, principal)
+            requireOwnerOrAdmin(folder[MaterialFolderTable.teacherId]?.value, principal)
 
             FolderShareTable.deleteWhere {
                 (FolderShareTable.folderId eq folderId) and
@@ -159,7 +159,7 @@ class MaterialShareService(
         val folder = MaterialFolderTable.selectAll()
             .where { MaterialFolderTable.id eq folderId }
             .singleOrNotFound("Folder")
-        requireOwnerOrAdmin(folder[MaterialFolderTable.teacherId].value, principal)
+        requireOwnerOrAdmin(folder[MaterialFolderTable.teacherId]?.value, principal)
 
         val grants = FolderShareTable
             .join(UserTable, JoinType.INNER, FolderShareTable.studentId, UserTable.id)
@@ -170,14 +170,14 @@ class MaterialShareService(
                     studentId = it[FolderShareTable.studentId].value.toString(),
                     firstName = it[UserTable.firstName],
                     lastName = it[UserTable.lastName],
-                    sharedBy = it[FolderShareTable.sharedBy].value.toString(),
+                    sharedBy = it[FolderShareTable.sharedBy]?.value?.toString(),
                     sharedAt = it[FolderShareTable.sharedAt],
                 )
             }
         ShareListResponse(grants)
     }
 
-    private fun requireOwnerOrAdmin(ownerId: UUID, principal: UserPrincipal) =
+    private fun requireOwnerOrAdmin(ownerId: UUID?, principal: UserPrincipal) =
         AuthorizationHelper.requireOwnerOrAdmin(
             ownerId, principal,
             "Only the owning teacher or an admin can manage shares",

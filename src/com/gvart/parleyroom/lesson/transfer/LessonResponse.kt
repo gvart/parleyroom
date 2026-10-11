@@ -19,8 +19,8 @@ data class LessonResponse(
     @Serializable(with = OffsetDateTimeSerializer::class)
     val scheduledAt: OffsetDateTime,
     val durationMinutes: Int,
-    val teacherId: String,
-    val teacher: LessonTeacherResponse,
+    val teacherId: String?,
+    val teacher: LessonTeacherResponse?,
     val status: LessonStatus,
     val topic: String,
     val level: LanguageLevel? = null,
@@ -48,7 +48,7 @@ data class LessonResponse(
     val vocab: List<LessonVocabRef> = emptyList(),
     val correctedSentences: List<CorrectedSentenceResponse> = emptyList(),
     val vocabDisplayOverride: VocabDisplaySetting? = null,
-    val createdBy: String,
+    val createdBy: String?,
     val updatedBy: String? = null,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val createdAt: OffsetDateTime,
@@ -61,7 +61,7 @@ data class PendingRescheduleResponse(
     @Serializable(with = OffsetDateTimeSerializer::class)
     val newScheduledAt: OffsetDateTime,
     val note: String? = null,
-    val requestedBy: String,
+    val requestedBy: String?,
 )
 
 @Serializable

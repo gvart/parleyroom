@@ -46,13 +46,13 @@ class MaterialFolderService(
         val parentUuid = request.parentFolderId?.let(UUID::fromString)
         if (parentUuid != null) {
             val parent = findFolderRow(parentUuid)
-            if (principal.role == UserRole.TEACHER && parent[MaterialFolderTable.teacherId].value != principal.id)
+            if (principal.role == UserRole.TEACHER && parent[MaterialFolderTable.teacherId]?.value != principal.id)
                 throw ForbiddenException("Cannot nest folders under another teacher's folder")
         }
 
         val teacherId = when (principal.role) {
             UserRole.TEACHER -> principal.id
-            UserRole.ADMIN -> parentUuid?.let { findFolderRow(it)[MaterialFolderTable.teacherId].value } ?: principal.id
+            UserRole.ADMIN -> parentUuid?.let { findFolderRow(it)[MaterialFolderTable.teacherId]?.value } ?: principal.id
             else -> throw ForbiddenException("Only teachers and admins can create folders")
         }
 
@@ -77,7 +77,8 @@ class MaterialFolderService(
             accessResolver.requireFolderOwnership(row, principal)
 
             val currentParent = row[MaterialFolderTable.parentFolderId]?.value
-            val teacherId = row[MaterialFolderTable.teacherId].value
+            val teacherId = row[MaterialFolderTable.teacherId]?.value
+                ?: throw ConflictException("This folder no longer has a teacher", code = "FOLDER_WITHOUT_TEACHER")
 
             val newParent: UUID? = when {
                 request.moveToRoot -> null
@@ -87,7 +88,7 @@ class MaterialFolderService(
 
             if (newParent != null) {
                 val parentRow = findFolderRow(newParent)
-                if (parentRow[MaterialFolderTable.teacherId].value != teacherId)
+                if (parentRow[MaterialFolderTable.teacherId]?.value != teacherId)
                     throw ForbiddenException("Cannot move folder under another teacher's folder")
                 // Cycle check: newParent must not be a descendant of the folder being moved.
                 if (newParent == folderId || isDescendant(newParent, folderId))
@@ -262,7 +263,7 @@ class MaterialFolderService(
             .toInt()
         return MaterialFolderResponse(
             id = folderId.toString(),
-            teacherId = row[MaterialFolderTable.teacherId].value.toString(),
+            teacherId = row[MaterialFolderTable.teacherId]?.value?.toString(),
             parentFolderId = row[MaterialFolderTable.parentFolderId]?.value?.toString(),
             name = row[MaterialFolderTable.name],
             materialCount = materialCount,

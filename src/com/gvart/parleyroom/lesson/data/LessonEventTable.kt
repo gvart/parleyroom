@@ -20,7 +20,7 @@ enum class LessonEventType {
 object LessonEventTable : UUIDTable("lesson_events") {
     val lessonId = reference("lesson_id", LessonTable)
     val eventType = pgEnum<LessonEventType>("event_type", "LESSON_EVENT_TYPE")
-    val actorId = reference("actor_id", UserTable)
+    val actorId = reference("actor_id", UserTable).nullable()
     val oldStatus = pgEnum<LessonStatus>("old_status", "LESSON_STATUS").nullable()
     val newStatus = pgEnum<LessonStatus>("new_status", "LESSON_STATUS").nullable()
     val oldScheduledAt = timestampWithTimeZone("old_scheduled_at").nullable()

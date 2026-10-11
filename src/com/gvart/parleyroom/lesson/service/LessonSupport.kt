@@ -46,6 +46,10 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import java.time.OffsetDateTime
 import java.util.UUID
 
+/** The lesson's teacher. Null only after the teacher was hard-deleted; such a lesson can't be planned any more. */
+fun lessonTeacherId(lesson: ResultRow): UUID = lesson[LessonTable.teacherId]?.value
+    ?: throw ConflictException("This lesson no longer has a teacher", code = "LESSON_WITHOUT_TEACHER")
+
 class LessonSupport {
 
     fun findLesson(lessonId: UUID): ResultRow =
@@ -79,7 +83,7 @@ class LessonSupport {
     fun requireLessonParticipant(lessonId: UUID, lesson: ResultRow, principal: UserPrincipal) {
         if (principal.role == UserRole.ADMIN) return
 
-        val isTeacher = lesson[LessonTable.teacherId].value == principal.id
+        val isTeacher = lesson[LessonTable.teacherId]?.value == principal.id
         val isStudent = LessonStudentTable.selectAll()
             .where {
                 (LessonStudentTable.lessonId eq lessonId) and
@@ -161,9 +165,9 @@ class LessonSupport {
             .map { it[LessonStudentTable.studentId].value }
 
     fun getOtherParticipants(lessonId: UUID, lesson: ResultRow, excludeUserId: UUID): List<UUID> {
-        val teacherId = lesson[LessonTable.teacherId].value
+        val teacherId = lesson[LessonTable.teacherId]?.value
         val studentIds = getStudentIds(lessonId)
-        return (studentIds + teacherId).filter { it != excludeUserId }
+        return (studentIds + listOfNotNull(teacherId)).filter { it != excludeUserId }
     }
 
     fun toResponse(row: ResultRow, viewer: UserPrincipal): LessonResponse = toResponses(listOf(row), viewer).single()
@@ -190,7 +194,7 @@ class LessonSupport {
             }
 
         val teachersById: Map<UUID, LessonTeacherResponse> = UserTable.selectAll()
-            .where { UserTable.id inList rows.map { it[LessonTable.teacherId].value }.distinct() }
+            .where { UserTable.id inList rows.mapNotNull { it[LessonTable.teacherId]?.value }.distinct() }
             .associate { teacherRow ->
                 teacherRow[UserTable.id].value to LessonTeacherResponse(
                     id = teacherRow[UserTable.id].value.toString(),
@@ -209,7 +213,7 @@ class LessonSupport {
                 ev[LessonEventTable.lessonId].value to PendingRescheduleResponse(
                     newScheduledAt = ev[LessonEventTable.newScheduledAt]!!,
                     note = ev[LessonEventTable.note],
-                    requestedBy = ev[LessonEventTable.actorId].value.toString(),
+                    requestedBy = ev[LessonEventTable.actorId]?.value?.toString(),
                 )
             }
 
@@ -275,8 +279,8 @@ class LessonSupport {
                 type = row[LessonTable.type],
                 scheduledAt = row[LessonTable.scheduledAt],
                 durationMinutes = row[LessonTable.durationMinutes],
-                teacherId = row[LessonTable.teacherId].value.toString(),
-                teacher = teachersById.getValue(row[LessonTable.teacherId].value),
+                teacherId = row[LessonTable.teacherId]?.value?.toString(),
+                teacher = row[LessonTable.teacherId]?.value?.let(teachersById::getValue),
                 status = row[LessonTable.status],
                 topic = row[LessonTable.topic],
                 level = row[LessonTable.level],
@@ -297,7 +301,7 @@ class LessonSupport {
                 vocab = vocabByLesson[lessonId].orEmpty(),
                 correctedSentences = correctionsByLesson[lessonId].orEmpty(),
                 vocabDisplayOverride = VocabDisplay.of(row[LessonTable.vocabDisplayFields], row[LessonTable.allowTranslationToggle]),
-                createdBy = row[LessonTable.createdBy].value.toString(),
+                createdBy = row[LessonTable.createdBy]?.value?.toString(),
                 updatedBy = row[LessonTable.updatedBy]?.value?.toString(),
                 createdAt = row[LessonTable.createdAt],
                 updatedAt = row[LessonTable.updatedAt],

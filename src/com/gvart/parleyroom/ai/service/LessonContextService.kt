@@ -21,6 +21,7 @@ import com.gvart.parleyroom.lesson.data.LessonGrammarTopicTable
 import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
+import com.gvart.parleyroom.lesson.service.lessonTeacherId
 import com.gvart.parleyroom.progress.data.GrammarProgressStatus
 import com.gvart.parleyroom.progress.service.ProgressCalculator
 import com.gvart.parleyroom.topic.data.GrammarTopicTable
@@ -197,7 +198,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
 
     fun requireLessonTeacher(lessonId: UUID, principal: UserPrincipal): ResultRow {
         val lesson = LessonTable.findByIdOrThrow(lessonId, "Lesson")
-        AuthorizationHelper.requireOwnerOrAdmin(lesson[LessonTable.teacherId].value, principal, "Only the lesson's teacher can do this")
+        AuthorizationHelper.requireOwnerOrAdmin(lesson[LessonTable.teacherId]?.value, principal, "Only the lesson's teacher can do this")
         return lesson
     }
 
@@ -207,7 +208,7 @@ class LessonContextService(private val progress: ProgressCalculator) {
 
     fun load(lesson: ResultRow, sources: ContextSources = ContextSources()): LessonContext {
         val lessonId = lesson[LessonTable.id].value
-        val teacherId = lesson[LessonTable.teacherId].value
+        val teacherId = lessonTeacherId(lesson)
         val groupId = lesson[LessonTable.groupId]?.value
         val mode = modeOf(lesson)
 

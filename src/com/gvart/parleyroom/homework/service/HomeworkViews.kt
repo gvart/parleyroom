@@ -50,7 +50,7 @@ class HomeworkViews(
         val row = (if (forUpdate) query.forUpdate() else query).singleOrNull() ?: throw homeworkNotFound()
         val allowed = when (principal.role) {
             UserRole.ADMIN -> true
-            UserRole.TEACHER -> row[AssignmentTable.teacherId].value == principal.id
+            UserRole.TEACHER -> row[AssignmentTable.teacherId]?.value == principal.id
             UserRole.STUDENT -> row[HomeworkTable.studentId].value == principal.id
         }
         if (!allowed) throw homeworkNotFound()
@@ -76,7 +76,7 @@ class HomeworkViews(
             ?: throw assignmentNotFound()
         when (principal.role) {
             UserRole.ADMIN -> Unit
-            UserRole.TEACHER -> if (row[AssignmentTable.teacherId].value != principal.id) throw assignmentNotFound()
+            UserRole.TEACHER -> if (row[AssignmentTable.teacherId]?.value != principal.id) throw assignmentNotFound()
             UserRole.STUDENT -> throw ForbiddenException("Only teachers manage assignments")
         }
         return row
@@ -117,7 +117,7 @@ class HomeworkViews(
         rows: List<ResultRow>,
         principal: UserPrincipal,
         stripSolutions: Boolean,
-        teacherId: UUID,
+        teacherId: UUID?,
         lessonId: UUID?,
     ): List<AssignmentItemResponse> {
         val materialIds = rows.mapNotNull { it[AssignmentItemTable.materialId]?.value }
@@ -174,7 +174,7 @@ class HomeworkViews(
     fun summaries(rows: List<ResultRow>, principal: UserPrincipal): List<HomeworkSummary> {
         if (rows.isEmpty()) return emptyList()
         val homeworkIds = rows.map { it[HomeworkTable.id].value }
-        val people = people(rows.flatMap { listOf(it[HomeworkTable.studentId].value, it[AssignmentTable.teacherId].value) })
+        val people = people(rows.flatMap { listOfNotNull(it[HomeworkTable.studentId].value, it[AssignmentTable.teacherId]?.value) })
         val answered = answeredCounts(homeworkIds)
         return rows.map { row -> summary(row, principal, people, answered[row[HomeworkTable.id].value] ?: 0) }
     }
@@ -238,7 +238,7 @@ class HomeworkViews(
 
         val summary = summary(
             row, principal,
-            people(listOf(row[HomeworkTable.studentId].value, row[AssignmentTable.teacherId].value)),
+            people(listOfNotNull(row[HomeworkTable.studentId].value, row[AssignmentTable.teacherId]?.value)),
             answers.values.count { it[HomeworkAnswerTable.answeredAt] != null },
         )
         return HomeworkResponse(
@@ -268,7 +268,7 @@ class HomeworkViews(
             items = itemResponses(
                 itemRows, principal,
                 stripSolutions = isStudent && !revealResults,
-                teacherId = row[AssignmentTable.teacherId].value,
+                teacherId = row[AssignmentTable.teacherId]?.value,
                 lessonId = row[AssignmentTable.lessonId]?.value,
             ),
             units = units,
@@ -300,7 +300,7 @@ class HomeworkViews(
             attempt = row[HomeworkTable.attempt],
             itemCount = row[AssignmentTable.itemCount],
             student = people.getValue(row[HomeworkTable.studentId].value),
-            teacher = people.getValue(row[AssignmentTable.teacherId].value),
+            teacher = row[AssignmentTable.teacherId]?.value?.let(people::getValue),
             answeredUnits = answeredUnits,
             totalUnits = row[AssignmentTable.totalUnits],
             lastSavedAt = row[HomeworkTable.lastSavedAt],

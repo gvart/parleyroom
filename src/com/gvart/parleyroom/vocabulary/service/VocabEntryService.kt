@@ -94,7 +94,8 @@ class VocabEntryService(
 
     fun updateEntry(entryId: UUID, input: VocabEntryInput, principal: UserPrincipal): VocabEntryResponse = transaction {
         val row = requireOwnedEntry(entryId, principal)
-        val teacherId = row[VocabEntryTable.teacherId].value
+        val teacherId = row[VocabEntryTable.teacherId]?.value
+            ?: throw ConflictException("This vocab entry no longer has a teacher", code = "VOCAB_ENTRY_WITHOUT_TEACHER")
         if (findDuplicate(teacherId, input, excludeId = entryId) != null)
             throw ConflictException("'${input.lemma.trim()}' is already in your library", code = "VOCAB_ENTRY_DUPLICATE")
         val topicIds = validateInput(teacherId, input)
@@ -113,7 +114,8 @@ class VocabEntryService(
 
     fun assign(entryId: UUID, request: AssignVocabRequest, principal: UserPrincipal): AssignVocabResponse = transaction {
         val row = requireOwnedEntry(entryId, principal)
-        val teacherId = row[VocabEntryTable.teacherId].value
+        val teacherId = row[VocabEntryTable.teacherId]?.value
+            ?: throw ConflictException("This vocab entry no longer has a teacher", code = "VOCAB_ENTRY_WITHOUT_TEACHER")
         val lessonId = request.lessonId?.let { requireOwnLesson(teacherId, UUID.fromString(it)) }
         val targets = resolveTargets(teacherId, request.studentIds, request.groupId, lessonId, principal)
         if (lessonId != null) linkToLesson(lessonId, entryId)
@@ -150,7 +152,7 @@ class VocabEntryService(
             val id = row[VocabEntryTable.id].value
             VocabEntryResponse(
                 id = id.toString(),
-                teacherId = row[VocabEntryTable.teacherId].value.toString(),
+                teacherId = row[VocabEntryTable.teacherId]?.value?.toString(),
                 lemma = row[VocabEntryTable.lemma],
                 article = row[VocabEntryTable.article],
                 plural = row[VocabEntryTable.plural],
@@ -173,7 +175,7 @@ class VocabEntryService(
 
     private fun requireOwnedEntry(entryId: UUID, principal: UserPrincipal): ResultRow {
         val row = VocabEntryTable.findByIdOrThrow(entryId, "Vocab entry")
-        AuthorizationHelper.requireOwnerOrAdmin(row[VocabEntryTable.teacherId].value, principal, "Not your vocab entry")
+        AuthorizationHelper.requireOwnerOrAdmin(row[VocabEntryTable.teacherId]?.value, principal, "Not your vocab entry")
         return row
     }
 
@@ -246,7 +248,7 @@ class VocabEntryService(
 
     private fun requireOwnLesson(teacherId: UUID, lessonId: UUID): UUID {
         val lesson = LessonTable.findByIdOrThrow(lessonId, "Lesson")
-        if (lesson[LessonTable.teacherId].value != teacherId)
+        if (lesson[LessonTable.teacherId]?.value != teacherId)
             throw ForbiddenException("Lesson belongs to another teacher")
         return lessonId
     }

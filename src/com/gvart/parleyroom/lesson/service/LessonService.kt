@@ -213,7 +213,7 @@ class LessonService(
                 durationMinutes = row[LessonTable.durationMinutes],
                 topic = row[LessonTable.topic],
                 level = row[LessonTable.level],
-                teacher = teachersById.getValue(row[LessonTable.teacherId].value),
+                teacher = teachersById.getValue(lessonTeacherId(row)),
                 maxParticipants = row[LessonTable.maxParticipants],
                 takenSpots = takenByLesson[lessonId] ?: 0,
                 myStatus = myStatusByLesson[lessonId],
