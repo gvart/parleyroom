@@ -1,0 +1,69 @@
+API.md
+  s_6834934eeb0fe2::t_2431402efa6e22 1872,1973-1992
+resources/application.conf
+  s_6834934eeb0fe2::t_8cf090bb76e63f 46-51,140
+resources/db/migration/V34__telegram_notifications.sql
+  s_6834934eeb0fe2::t_6e37e8cc7e7bbc 1-26
+src/com/gvart/parleyroom/Application.kt
+  s_6834934eeb0fe2::t_fd35e78688c117 23-24,37-41,45
+src/com/gvart/parleyroom/reminder/config/ReminderModuleConfig.kt
+  s_6834934eeb0fe2::t_5e2f90a0eb8cdd 17
+src/com/gvart/parleyroom/reminder/service/ReminderService.kt
+  s_6834934eeb0fe2::t_a88b087bb32be7 15,18,39-41,48,70-84,89-94,103-110,115-117,188
+src/com/gvart/parleyroom/telegram/config/TelegramModuleConfig.kt
+  s_6834934eeb0fe2::t_20000f0252cef7 1-59
+src/com/gvart/parleyroom/telegram/config/TelegramNotificationConfig.kt
+  s_6834934eeb0fe2::t_d9de99abfdcf00 1-15
+src/com/gvart/parleyroom/telegram/data/TelegramLogTable.kt
+  s_6834934eeb0fe2::t_8c8c5fc8856d0a 1-20
+src/com/gvart/parleyroom/telegram/routing/Routing.kt
+  s_6834934eeb0fe2::t_dcff7f25afbee3 1-59
+src/com/gvart/parleyroom/telegram/service/BotApiTelegramSender.kt
+  s_6834934eeb0fe2::t_87d14b13d1e5b7 1-85
+src/com/gvart/parleyroom/telegram/service/LogTelegramSender.kt
+  s_6834934eeb0fe2::t_fbebbbbc796cef 1-14
+src/com/gvart/parleyroom/telegram/service/TelegramNotifier.kt
+  s_6834934eeb0fe2::t_2eb2cce3f31485 1-172
+src/com/gvart/parleyroom/telegram/service/TelegramSender.kt
+  s_6834934eeb0fe2::t_35dbda65b0bfe8 1-19
+src/com/gvart/parleyroom/telegram/template/TelegramTemplates.kt
+  s_6834934eeb0fe2::t_b036561275ba8c 1-102
+src/com/gvart/parleyroom/user/data/UserTable.kt
+  s_6834934eeb0fe2::t_f3aad875bebc7e 43-47
+src/com/gvart/parleyroom/user/service/TelegramAuthService.kt
+  s_6834934eeb0fe2::t_f208b89b31558e 57
+src/com/gvart/parleyroom/user/service/UserService.kt
+  s_6834934eeb0fe2::t_3119a3fb221fb0 116-117,172,240-242
+src/com/gvart/parleyroom/user/transfer/UpdateProfileRequest.kt
+  s_6834934eeb0fe2::t_b451f48b844a2f 28-29,37
+src/com/gvart/parleyroom/user/transfer/UserResponse.kt
+  s_6834934eeb0fe2::t_aa77649b82f977 42-47
+test/com/gvart/parleyroom/IntegrationTest.kt
+  s_6834934eeb0fe2::t_efabd0c7e37c0b 32-34,134
+test/com/gvart/parleyroom/RecordingTelegramSender.kt
+  s_6834934eeb0fe2::t_fb93bf44a116ab 1-16
+test/com/gvart/parleyroom/reminder/ReminderIntegrationTest.kt
+  s_6834934eeb0fe2::t_034152cd4c5d51 16,290-321
+test/com/gvart/parleyroom/telegram/BotApiTelegramSenderTest.kt
+  s_6834934eeb0fe2::t_80ea72e300bb1d 1-90
+test/com/gvart/parleyroom/telegram/TelegramNotificationIntegrationTest.kt
+  s_6834934eeb0fe2::t_07c5fc1923e2b9 1-258
+test/com/gvart/parleyroom/telegram/TelegramTemplatesTest.kt
+  s_6834934eeb0fe2::t_82535285af6470 1-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "8d547b6c945e56003f8bf08ad6a4e6eead690eec",
+  "prompts": {},
+  "sessions": {
+    "s_6834934eeb0fe2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1ddab8b4-13bd-479f-b7ad-fca0c2e0b1a8",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
