@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/gvart/parleyroom/compare/v1.6.1...v1.7.0) (2026-10-11)
+
+
+### Features
+
+* **notifications:** telegram reminders with per-category toggles ([#80](https://github.com/gvart/parleyroom/issues/80)) ([264bf0d](https://github.com/gvart/parleyroom/commit/264bf0dd37939d878ce5172fef24d31cfc37130b))
+
 ## [1.6.1](https://github.com/gvart/parleyroom/compare/v1.6.0...v1.6.1) (2026-10-11)
 
 
