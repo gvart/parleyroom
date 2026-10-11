@@ -8,6 +8,7 @@ import com.gvart.parleyroom.common.storage.readBoundedBytes
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
+import com.gvart.parleyroom.admin.service.FeatureFlagService
 import com.gvart.parleyroom.user.service.AuthenticationService
 import com.gvart.parleyroom.user.service.TelegramAuthService
 import com.gvart.parleyroom.user.service.UserService
@@ -47,6 +48,7 @@ fun Application.configureRouting() {
     val userService: UserService by dependencies
     val telegramAuthService: TelegramAuthService by dependencies
     val storage: StorageService by dependencies
+    val featureFlagService: FeatureFlagService by dependencies
 
     routing {
         route("/api/v1/token") {
@@ -187,10 +189,11 @@ fun Application.configureRouting() {
 
                 get("/me") {
                     val result = userService.getProfile(call.requirePrincipal())
-                    call.respond(HttpStatusCode.OK, result)
+                    call.respond(HttpStatusCode.OK, result.copy(features = featureFlagService.flags()))
                 }.describe {
                     summary = "Get current user profile"
-                    description = "Returns the profile of the currently authenticated user."
+                    description = "Returns the profile of the currently authenticated user, with `features`: every feature flag by name " +
+                        "(roadmap, lessonPrep, teacherReminders), false until an admin enables it."
                     responses {
                         HttpStatusCode.OK {
                             description = "Current user profile"
@@ -205,7 +208,7 @@ fun Application.configureRouting() {
 
                 patch<UpdateProfileRequest>("/me") {
                     val result = userService.updateProfile(call.requirePrincipal(), it)
-                    call.respond(HttpStatusCode.OK, result)
+                    call.respond(HttpStatusCode.OK, result.copy(features = featureFlagService.flags()))
                 }.describe {
                     summary = "Update current user profile"
                     description = "Updates the authenticated user's profile. All fields are optional; at least one must be provided. " +
