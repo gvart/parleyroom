@@ -14,7 +14,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
 
-/** After the email module (NotificationMailer). */
+/** After the email and Telegram modules (NotificationMailer, TelegramNotifier). */
 fun Application.configureReminderModule() {
     dependencies {
         provide(ReminderService::class)

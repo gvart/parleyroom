@@ -113,6 +113,8 @@ class UserService(
             if (request.autoAcceptClubJoins != null) it[autoAcceptClubJoins] = request.autoAcceptClubJoins
             if (request.emailLessonReminders != null) it[emailLessonReminders] = request.emailLessonReminders
             if (request.emailHomeworkReminders != null) it[emailHomeworkReminders] = request.emailHomeworkReminders
+            if (request.telegramLessonReminders != null) it[telegramLessonReminders] = request.telegramLessonReminders
+            if (request.telegramHomeworkReminders != null) it[telegramHomeworkReminders] = request.telegramHomeworkReminders
             it[updatedAt] = OffsetDateTime.now()
         }
 
@@ -167,6 +169,7 @@ class UserService(
         val updated = UserTable.update({ UserTable.id eq principal.id }) {
             it[telegramId] = null
             it[telegramUsername] = null
+            it[telegramUnreachableAt] = null
             it[updatedAt] = OffsetDateTime.now()
         }
         if (updated == 0) throw NotFoundException("User not found", code = "USER_NOT_FOUND")
@@ -234,6 +237,9 @@ class UserService(
             telegramUsername = row[UserTable.telegramUsername],
             emailLessonReminders = row[UserTable.emailLessonReminders],
             emailHomeworkReminders = row[UserTable.emailHomeworkReminders],
+            telegramLessonReminders = row[UserTable.telegramLessonReminders],
+            telegramHomeworkReminders = row[UserTable.telegramHomeworkReminders],
+            telegramReachable = row[UserTable.telegramId] != null && row[UserTable.telegramUnreachableAt] == null,
         )
     }
 }

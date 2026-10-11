@@ -54,6 +54,7 @@ class TelegramAuthService(
             val updated = UserTable.update({ UserTable.id eq userId }) {
                 it[UserTable.telegramId] = telegramId
                 it[UserTable.telegramUsername] = telegramUsername
+                it[UserTable.telegramUnreachableAt] = null
                 it[updatedAt] = OffsetDateTime.now()
             }
             if (updated == 0) throw NotFoundException("User not found", code = "USER_NOT_FOUND")

@@ -25,6 +25,8 @@ data class UpdateProfileRequest(
     val autoAcceptClubJoins: Boolean? = null,
     val emailLessonReminders: Boolean? = null,
     val emailHomeworkReminders: Boolean? = null,
+    val telegramLessonReminders: Boolean? = null,
+    val telegramHomeworkReminders: Boolean? = null,
 ) {
     fun validate(): ValidationResult {
         val errors = buildList {
@@ -32,6 +34,7 @@ data class UpdateProfileRequest(
                     && nativeLanguage == null && confirmLocale != true && timezone == null && bookingBufferMinutes == null && bookingMinNoticeHours == null
                     && autoConfirmBookings == null && autoAcceptClubJoins == null
                     && emailLessonReminders == null && emailHomeworkReminders == null
+                    && telegramLessonReminders == null && telegramHomeworkReminders == null
             if (noField) add("At least one field must be provided")
             if (level != null) add("level can't be changed here; it is set by the teacher")
             if (firstName != null && firstName.trim().isEmpty()) add("First name can't be blank")

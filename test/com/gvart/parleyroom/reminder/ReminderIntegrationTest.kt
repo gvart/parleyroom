@@ -13,6 +13,7 @@ import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.reminder.service.ReminderService
+import com.gvart.parleyroom.telegram.service.TelegramSendResult
 import com.gvart.parleyroom.user.data.UserStatus
 import com.gvart.parleyroom.user.data.UserTable
 import io.ktor.server.plugins.di.dependencies
@@ -285,5 +286,37 @@ class ReminderIntegrationTest : IntegrationTest() {
 
         service.runOnce(OffsetDateTime.parse("2030-03-11T10:00:00Z"))
         assertEquals("Домашнє завдання на завтра: Modalverben", sentEmails.sent.single().subject)
+    }
+
+    // -------- Telegram --------
+
+    @Test
+    fun `linked users also get Telegram reminders, unlinked ones only email`() = testApp {
+        val service = reminders()
+        updateUser(student) { it[telegramId] = 300_003L }
+        val homework = seedHomework(LocalDate.parse("2030-03-12"))
+        seedLesson(now.plusHours(22))
+
+        service.runOnce(now)
+        assertEquals(listOf("student@test.com", "student@test.com", "teacher@test.com"), recipients())
+        assertEquals(listOf(300_003L, 300_003L), sentTelegrams.sent.map { it.chatId })
+        assertTrue(sentTelegrams.sent.any { it.button!!.url.endsWith("/student/homework/$homework") })
+
+        service.runOnce(now.plusMinutes(5))
+        assertEquals(2, sentTelegrams.sent.size)
+    }
+
+    @Test
+    fun `a failing Telegram channel does not block email`() = testApp {
+        val service = reminders()
+        updateUser(student) { it[telegramId] = 300_003L }
+        sentTelegrams.result = TelegramSendResult.FORBIDDEN
+        seedLesson(now.plusHours(22))
+        seedHomework(LocalDate.parse("2030-03-12"))
+
+        service.runOnce(now)
+        assertEquals(listOf("student@test.com", "student@test.com", "teacher@test.com"), recipients())
+        // The first 403 marks the student unreachable, so the second reminder is not even tried.
+        assertEquals(1, sentTelegrams.sent.size)
     }
 }

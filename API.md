@@ -1869,7 +1869,7 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 | Area | Codes |
 |---|---|
 | Auth | `INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `INVALID_REFRESH_TOKEN`, `REFRESH_TOKEN_EXPIRED` |
-| Telegram | `TELEGRAM_NOT_LINKED`, `TELEGRAM_ALREADY_LINKED`, `TELEGRAM_NOT_CONFIGURED`, `TELEGRAM_AUTH_INVALID`, `TELEGRAM_AUTH_EXPIRED` |
+| Telegram | `TELEGRAM_NOT_LINKED`, `TELEGRAM_ALREADY_LINKED`, `TELEGRAM_NOT_CONFIGURED`, `TELEGRAM_AUTH_INVALID`, `TELEGRAM_AUTH_EXPIRED`, `TELEGRAM_UNREACHABLE` (409), `TELEGRAM_SEND_FAILED` (502) |
 | Users | `USER_NOT_FOUND`, `TEACHER_NOT_FOUND`, `EMAIL_ALREADY_EXISTS`, `UNSUPPORTED_LOCALE`, `UNSUPPORTED_NATIVE_LANGUAGE`, `NATIVE_LANGUAGE_STUDENTS_ONLY`, `APPROVAL_SETTINGS_TEACHERS_ONLY`, `AVATAR_INVALID`, `AVATAR_NOT_FOUND`, `ADMIN_SELF_ACTION` |
 | Registration / reset | `INVITATION_ALREADY_PENDING`, `REGISTRATION_LINK_INVALID`, `REGISTRATION_LINK_EXPIRED`, `REGISTRATION_LINK_USED`, `RESET_TOKEN_INVALID`, `RESET_TOKEN_EXPIRED`, `RESET_TOKEN_USED` |
 | Lessons | `LESSON_NOT_FOUND`, `LESSON_INVALID_STATE`, `CLUB_FULL`, `NOT_TEACHERS_STUDENT`, `LESSON_NOT_JOINABLE`, `LESSON_ALREADY_STARTED`, `LESSON_NOT_STARTED`, `ALREADY_PARTICIPANT`, `STUDENT_NOT_IN_LESSON`, `JOIN_REQUEST_ALREADY_PENDING`, `JOIN_REQUEST_NOT_FOUND`, `RESCHEDULE_ALREADY_PENDING`, `RESCHEDULE_NOT_FOUND`, `VIDEO_ROOM_NOT_READY` |
@@ -1970,3 +1970,23 @@ turns it off, default `true`). Lessons in `CONFIRMED` status remind the teacher 
 before (only while 24h–20h remain, so late bookings skip it) and 1h before; a moved lesson is reminded again for its
 new time. Students get a homework reminder on the day before an `OPEN` homework's due date and an overdue one on the
 day after, each from 09:00 in their timezone. Each reminder goes out once; a failed send is retried on a later run.
+
+## Telegram notifications
+
+The same lesson and homework reminders also go to Telegram, as a short message (in the email's language) with one
+button. `UserResponse` carries `telegramLessonReminders` and `telegramHomeworkReminders` (both default `true`, set with
+`PATCH /api/v1/users/me { "telegramLessonReminders": false }`) and `telegramReachable` (`telegramId` is set and
+Telegram has not refused a message since). Messages only go to users with a linked `telegramId` who are reachable.
+
+When Telegram answers 403 (the user blocked the bot or never started it) the user is marked unreachable and gets no
+more Telegram messages. Linking (`/me/telegram/link`, `/me/telegram/link-widget`), unlinking and a successful test
+message clear the mark.
+
+`POST /api/v1/users/me/telegram/test` sends a "notifications are working" message, ignoring the toggles: 204 on
+success; 400 `TELEGRAM_NOT_LINKED`; 409 `TELEGRAM_UNREACHABLE` on a 403 (and marks the user); 502
+`TELEGRAM_SEND_FAILED` on any other failure.
+
+Sending is configured with `TELEGRAM_PROVIDER` (`log` default: nothing is sent; `bot`: Bot API `sendMessage` with
+`TELEGRAM_BOT_TOKEN`) and `MINIAPP_BASE_URL`: the button opens the Mini App (`/lessons` for students, `/calendar` for
+teachers, `/homework/{id}`) as a `web_app` button. Without `MINIAPP_BASE_URL` it is a plain link to the matching portal
+page under `APP_BASE_URL`.
