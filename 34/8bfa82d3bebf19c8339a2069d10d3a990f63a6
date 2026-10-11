@@ -1,0 +1,19 @@
+src/com/gvart/parleyroom/reminder/service/ReminderService.kt
+  s_fae0993faff7e4::t_27b2dfc9518024 30,40-42,55,71-72,75,99,123-127,164-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "348bfa82d3bebf19c8339a2069d10d3a990f63a6",
+  "prompts": {},
+  "sessions": {
+    "s_fae0993faff7e4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8a90cfd-0334-42c0-bfb2-886ed0dbb1a3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
