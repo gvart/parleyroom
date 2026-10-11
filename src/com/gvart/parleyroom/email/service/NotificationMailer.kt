@@ -15,12 +15,17 @@ import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
 import com.gvart.parleyroom.user.data.UserTable
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertIgnoreAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.jdbc.updateReturning
+import java.time.Duration
 import java.net.URLEncoder
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -28,7 +33,7 @@ import java.util.UUID
 
 enum class SendResult {
     SENT,
-    /** The provider failed; the email_log row stays success = false and is not retried. */
+    /** The provider failed; the email_log row stays success = false and a later call after [NotificationMailer.RETRY_FAILED_AFTER] retries it. */
     FAILED,
     /** This reminder (kind, ref, recipient, variant) was claimed before. */
     ALREADY_SENT,
@@ -74,7 +79,10 @@ class NotificationMailer(
         return sent
     }
 
-    /** [counterpartName]: the teacher for a student; the student(s) or club for a teacher; null to omit. */
+    /**
+     * [counterpartName]: the teacher for a student; the student(s) or club for a teacher; null to omit.
+     * Deduplicated per [startsAt] too, so a rescheduled lesson is reminded again for its new time.
+     */
     suspend fun sendLessonReminder(
         userId: UUID,
         lessonId: UUID,
@@ -82,7 +90,7 @@ class NotificationMailer(
         lessonTitle: String,
         startsAt: OffsetDateTime,
         counterpartName: String?,
-    ): SendResult = sendReminder(userId, EmailCategory.LESSON_REMINDERS, EmailKind.LESSON_REMINDER, lessonId, variant.name) { user, footer ->
+    ): SendResult = sendReminder(userId, EmailCategory.LESSON_REMINDERS, EmailKind.LESSON_REMINDER, lessonId, "${variant.name}@${startsAt.toEpochSecond()}") { user, footer ->
         val role = user[UserTable.role]
         templates.lessonReminder(
             emailLanguageFor(user), variant, lessonTitle, startsAt, zoneOf(user), role, counterpartName,
@@ -128,7 +136,7 @@ class NotificationMailer(
                 it[this.variant] = variant
                 it[sentAt] = OffsetDateTime.now()
                 it[success] = false
-            }
+            } ?: reclaimFailed(userId, kind, refId, variant)
         } ?: return SendResult.ALREADY_SENT
 
         val token = unsubscribeTokens.token(userId, category)
@@ -146,6 +154,21 @@ class NotificationMailer(
         return if (sent) SendResult.SENT else SendResult.FAILED
     }
 
+    /**
+     * Takes over a claim whose last attempt failed at least [RETRY_FAILED_AFTER] ago; the age check keeps a
+     * claim that is still being sent (also success = false) from going out twice. Null when there is none.
+     */
+    private fun reclaimFailed(userId: UUID, kind: EmailKind, refId: UUID, variant: String?) =
+        EmailLogTable.updateReturning(listOf(EmailLogTable.id), where = {
+            (EmailLogTable.kind eq kind) and (EmailLogTable.refId eq refId) and
+                (EmailLogTable.recipientUserId eq userId) and
+                (if (variant == null) EmailLogTable.variant.isNull() else EmailLogTable.variant eq variant) and
+                (EmailLogTable.success eq false) and
+                (EmailLogTable.sentAt less OffsetDateTime.now().minus(RETRY_FAILED_AFTER))
+        }) {
+            it[sentAt] = OffsetDateTime.now()
+        }.singleOrNull()?.get(EmailLogTable.id)
+
     private fun outgoing(to: String, rendered: RenderedEmail, headers: Map<String, String> = emptyMap()) = OutgoingEmail(
         to = to,
         subject = rendered.subject,
@@ -161,4 +184,9 @@ class NotificationMailer(
         runCatching { ZoneId.of(user[UserTable.timezone]) }.getOrDefault(ZoneId.of("Europe/Berlin"))
 
     private fun encode(value: String) = URLEncoder.encode(value, Charsets.UTF_8)
+
+    companion object {
+        /** Well above the sender's request timeout. */
+        val RETRY_FAILED_AFTER: Duration = Duration.ofMinutes(2)
+    }
 }

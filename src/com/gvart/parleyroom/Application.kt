@@ -19,6 +19,7 @@ import com.gvart.parleyroom.notification.config.configureNotificationModule
 import com.gvart.parleyroom.practice.config.configurePracticeModule
 import com.gvart.parleyroom.progress.config.configureProgressModule
 import com.gvart.parleyroom.registration.routing.configureRegistrationModule
+import com.gvart.parleyroom.reminder.config.configureReminderModule
 import com.gvart.parleyroom.library.config.configureLibraryModule
 import com.gvart.parleyroom.topic.config.configureTopicModule
 import com.gvart.parleyroom.user.config.configureUserModule
@@ -56,5 +57,6 @@ fun Application.module(dataSource: javax.sql.DataSource? = null, emailSender: Em
     configureGoalModule()
     configureAiModule()
     configurePracticeModule()
+    configureReminderModule()
     configureHealthRouting()
 }
