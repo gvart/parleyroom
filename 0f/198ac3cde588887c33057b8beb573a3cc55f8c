@@ -1,0 +1,29 @@
+src/com/gvart/parleyroom/common/routing/ProblemResponse.kt
+  s_6b341267e99e70::t_aa0224e369177c 1-32
+src/com/gvart/parleyroom/common/transfer/ProblemDetail.kt
+  s_6b341267e99e70::t_a7ea6baf12ff02 32-34,44,49-58
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_6b341267e99e70::t_57f805b39c56d7 20-22,229-230,233,237,240,244,248,252,256,260,268,276,282,284-285,290,320,322
+src/com/gvart/parleyroom/telegram/routing/Routing.kt
+  s_6b341267e99e70::t_00409aef5a7d0d 4,29
+test/com/gvart/parleyroom/common/ErrorCodeIntegrationTest.kt
+  s_6b341267e99e70::t_16e8a5c63092c0 5,23,27,29,33-34,75,78,82-113
+test/com/gvart/parleyroom/notification/NotificationIntegrationTest.kt
+  s_6b341267e99e70::t_7292133d3a9194 102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "0f198ac3cde588887c33057b8beb573a3cc55f8c",
+  "prompts": {},
+  "sessions": {
+    "s_6b341267e99e70": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3c10af3d-8cd0-4bc3-89fd-cb390bc038be",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
