@@ -1,0 +1,21 @@
+src/com/gvart/parleyroom/email/service/NotificationMailer.kt
+  s_fae0993faff7e4::t_d5eaa2ba7b7654 18,20-21,27-28,36,82-85,93,139,157-171,187-191
+test/com/gvart/parleyroom/email/EmailNotificationIntegrationTest.kt
+  s_fae0993faff7e4::t_26088d281b07d3 121-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "cee5c5d8a78fb65000faf3ee84cb718d1b960446",
+  "prompts": {},
+  "sessions": {
+    "s_fae0993faff7e4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8a90cfd-0334-42c0-bfb2-886ed0dbb1a3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
