@@ -99,7 +99,7 @@ class NotificationIntegrationTest : IntegrationTest() {
         }
 
         assertEquals(HttpStatusCode.Unauthorized, response.status)
-        assertEquals(ContentType.Application.Json, response.contentType()?.withoutParameters())
+        assertEquals(ContentType.Application.ProblemJson, response.contentType()?.withoutParameters())
     }
 
     @Test
