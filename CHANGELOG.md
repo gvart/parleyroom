@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/gvart/parleyroom/compare/v1.6.0...v1.6.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* **admin:** hard-delete users with their data instead of 409 ([#78](https://github.com/gvart/parleyroom/issues/78)) ([1dd2cd2](https://github.com/gvart/parleyroom/commit/1dd2cd29876bb308023840a80db3ea2ce976d043))
+
 ## [1.6.0](https://github.com/gvart/parleyroom/compare/v1.5.0...v1.6.0) (2026-10-11)
 
 
