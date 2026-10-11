@@ -19,4 +19,6 @@ object RegistrationTable : UUIDTable("registrations") {
     val level = pgEnum<LanguageLevel>("level", "LANGUAGE_LEVEL").nullable()
     /** The user created from this invite, set on signup. */
     val userId = reference("user_id", UserTable).nullable()
+    /** When the invite email last went out successfully; null if it never did. */
+    val lastSentAt = timestampWithTimeZone("last_sent_at").nullable()
 }
