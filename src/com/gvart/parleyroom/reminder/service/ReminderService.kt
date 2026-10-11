@@ -27,6 +27,7 @@ import org.jetbrains.exposed.v1.core.lessEq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
+import java.time.Duration
 import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -36,8 +37,9 @@ import java.util.UUID
  * Finds the lesson and homework reminders due at a moment and hands them to [NotificationMailer], which
  * checks preferences and sends each one at most once. Every call can therefore safely re-find the same ones.
  *
- * Lessons (CONFIRMED, teacher + confirmed students): H24 while now ∈ [start − 24h, start − 1h), H1 while
- * now ∈ [start − 1h, start). Homework (OPEN, with a due date, students only), in the student's timezone from
+ * Lessons (CONFIRMED, teacher + confirmed students): H24 while now ∈ [start − 24h, start − [H24_LATEST]), H1
+ * while now ∈ [start − 1h, start). A lesson booked or moved to less than [H24_LATEST] ahead only gets the H1 one,
+ * so the "tomorrow at …" email never lands on the lesson's own day. Homework (OPEN, with a due date, students only), in the student's timezone from
  * 09:00: "due tomorrow" on the day before the due date, "overdue" on the day after.
  */
 class ReminderService(private val mailer: NotificationMailer) {
@@ -50,7 +52,7 @@ class ReminderService(private val mailer: NotificationMailer) {
         val id: UUID,
         val title: String,
         val startsAt: OffsetDateTime,
-        val variant: LessonReminderVariant,
+        val variant: LessonReminderVariant?,
         val recipients: List<Recipient>,
     )
 
@@ -66,10 +68,11 @@ class ReminderService(private val mailer: NotificationMailer) {
         val results = mutableMapOf<SendResult, Int>()
         fun count(result: SendResult) = results.merge(result, 1, Int::plus)
 
-        for (lesson in dueLessons(now)) {
+        for (lesson in upcomingLessons(now)) {
+            val variant = lesson.variant ?: continue
             for (recipient in lesson.recipients) {
                 count(mailer.sendLessonReminder(
-                    recipient.userId, lesson.id, lesson.variant, lesson.title, lesson.startsAt, recipient.counterpartName,
+                    recipient.userId, lesson.id, variant, lesson.title, lesson.startsAt, recipient.counterpartName,
                 ))
             }
         }
@@ -93,7 +96,7 @@ class ReminderService(private val mailer: NotificationMailer) {
         return results
     }
 
-    private fun dueLessons(now: OffsetDateTime): List<DueLesson> = transaction {
+    private fun upcomingLessons(now: OffsetDateTime): List<DueLesson> = transaction {
         LessonTable.join(GroupTable, JoinType.LEFT, LessonTable.groupId, GroupTable.id)
             .selectAll()
             .where {
@@ -117,7 +120,11 @@ class ReminderService(private val mailer: NotificationMailer) {
                     id = id,
                     title = row[LessonTable.title],
                     startsAt = startsAt,
-                    variant = if (startsAt > now.plusHours(1)) LessonReminderVariant.H24 else LessonReminderVariant.H1,
+                    variant = when {
+                        startsAt <= now.plusHours(1) -> LessonReminderVariant.H1
+                        startsAt > now.plus(H24_LATEST) -> LessonReminderVariant.H24
+                        else -> null
+                    },
                     recipients = listOfNotNull(teacher?.let { Recipient(it[UserTable.id].value, teacherCounterpart) }) +
                         students.map { Recipient(it[UserTable.id].value, teacher?.let(::nameOf)) },
                 )
@@ -154,6 +161,9 @@ class ReminderService(private val mailer: NotificationMailer) {
     private fun nameOf(user: ResultRow) = "${user[UserTable.firstName]} ${user[UserTable.lastName]}".trim()
 
     companion object {
+        /** The H24 reminder goes out between 24h and this long before the lesson. */
+        val H24_LATEST: Duration = Duration.ofHours(20)
+
         /** No homework emails before this local time. */
         val SEND_FROM: LocalTime = LocalTime.of(9, 0)
     }
