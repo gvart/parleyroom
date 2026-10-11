@@ -119,6 +119,38 @@ class EmailNotificationIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    fun `a failed reminder is retried once the attempt is old enough`() = testApp {
+        val mailer = mailer()
+        val homework = UUID.randomUUID()
+        sentEmails.succeed = false
+        assertEquals(SendResult.FAILED, mailer.sendHomeworkDueTomorrow(student, homework, "HW", OffsetDateTime.now()))
+        sentEmails.succeed = true
+        // Too fresh: the claim might still be in flight.
+        assertEquals(SendResult.ALREADY_SENT, mailer.sendHomeworkDueTomorrow(student, homework, "HW", OffsetDateTime.now()))
+
+        transaction {
+            EmailLogTable.update({ EmailLogTable.refId eq homework }) {
+                it[sentAt] = OffsetDateTime.now().minus(NotificationMailer.RETRY_FAILED_AFTER).minusSeconds(1)
+            }
+        }
+        assertEquals(SendResult.SENT, mailer.sendHomeworkDueTomorrow(student, homework, "HW", OffsetDateTime.now()))
+        assertEquals(SendResult.ALREADY_SENT, mailer.sendHomeworkDueTomorrow(student, homework, "HW", OffsetDateTime.now()))
+        assertEquals(2, sentEmails.sent.size)
+        val row = transaction { EmailLogTable.selectAll().where { EmailLogTable.refId eq homework }.single() }
+        assertTrue(row[EmailLogTable.success])
+    }
+
+    @Test
+    fun `a lesson reminder is deduplicated per start time`() = testApp {
+        val mailer = mailer()
+        val lesson = UUID.randomUUID()
+        val at = OffsetDateTime.now().plusDays(1)
+        assertEquals(SendResult.SENT, mailer.sendLessonReminder(student, lesson, LessonReminderVariant.H24, "L", at, null))
+        assertEquals(SendResult.SENT, mailer.sendLessonReminder(student, lesson, LessonReminderVariant.H24, "L", at.plusHours(2), null))
+        assertEquals(SendResult.ALREADY_SENT, mailer.sendLessonReminder(student, lesson, LessonReminderVariant.H24, "L", at.plusHours(2), null))
+    }
+
+    @Test
     fun `invite email links to registration and is logged`() = testApp(httpsConfig) {
         val registration = UUID.randomUUID()
         val sent = mailer().sendInvite(
