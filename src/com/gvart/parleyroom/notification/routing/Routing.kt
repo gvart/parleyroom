@@ -3,9 +3,11 @@ package com.gvart.parleyroom.notification.routing
 import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
+import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.config.SSE_AUTH
 import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.notification.service.NotificationSseManager
+import com.gvart.parleyroom.notification.transfer.MarkAllViewedResponse
 import com.gvart.parleyroom.notification.transfer.MarkViewedRequest
 import com.gvart.parleyroom.notification.transfer.NotificationPageResponse
 import io.ktor.http.ContentType
@@ -44,12 +46,21 @@ fun Application.configureNotificationRouting() {
                     val principal = call.requirePrincipal()
                     val pageRequest = PageRequest.from(call)
 
-                    val result = notificationService.getNotifications(principal, pageRequest.page, pageRequest.pageSize)
+                    val unreadOnly = call.request.queryParameters["unread"]?.let {
+                        it.toBooleanStrictOrNull() ?: throw BadRequestException("unread must be true or false", "VALIDATION_FAILED", "/unread")
+                    } ?: false
+
+                    val result = notificationService.getNotifications(principal, pageRequest.page, pageRequest.pageSize, unreadOnly)
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Get notifications"
-                    description = "Retrieves paginated notifications for the authenticated user, sorted by created_at descending."
+                    description = "Retrieves paginated notifications for the authenticated user, sorted by created_at descending. " +
+                        "unread=true returns only unread ones (total counts them); unreadCount is always the number of all unread."
                     parameters {
+                        query("unread") {
+                            description = "true: only unread notifications (default false)"
+                            required = false
+                        }
                         query("page") {
                             description = "Page number (1-based, default 1)"
                             required = false
@@ -63,6 +74,28 @@ fun Application.configureNotificationRouting() {
                         HttpStatusCode.OK {
                             description = "Paginated list of notifications"
                             schema = jsonSchema<NotificationPageResponse>()
+                        }
+                        HttpStatusCode.BadRequest {
+                            description = "unread is not true or false (VALIDATION_FAILED, pointer /unread)"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.Unauthorized {
+                            description = "Missing or invalid authentication token"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                    }
+                }
+
+                post("/viewed-all") {
+                    call.respond(HttpStatusCode.OK, MarkAllViewedResponse(notificationService.markAllAsViewed(call.requirePrincipal())))
+                }.describe {
+                    summary = "Mark all notifications as viewed"
+                    description = "Marks every delivered, unread notification of the authenticated user viewed. Idempotent: " +
+                        "a second call answers updated = 0. Never touches other users' notifications."
+                    responses {
+                        HttpStatusCode.OK {
+                            description = "How many notifications were marked"
+                            schema = jsonSchema<MarkAllViewedResponse>()
                         }
                         HttpStatusCode.Unauthorized {
                             description = "Missing or invalid authentication token"

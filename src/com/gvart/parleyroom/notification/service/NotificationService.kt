@@ -45,16 +45,20 @@ class NotificationService(
         (NotificationTable.userId eq userId) and
                 (NotificationTable.deliverAfter.isNull() or (NotificationTable.deliverAfter lessEq now))
 
-    fun getNotifications(principal: UserPrincipal, page: Int, pageSize: Int): NotificationPageResponse = transaction {
+    /** [unreadOnly] limits the page and [NotificationPageResponse.total] to unread ones; `unreadCount` is always all unread. */
+    fun getNotifications(principal: UserPrincipal, page: Int, pageSize: Int, unreadOnly: Boolean = false): NotificationPageResponse = transaction {
         val now = OffsetDateTime.now()
+        val unread = visibleTo(principal.id, now) and (NotificationTable.viewed eq false)
+        val filter = if (unreadOnly) unread else visibleTo(principal.id, now)
         val total = NotificationTable.selectAll()
-            .where { visibleTo(principal.id, now) }
+            .where { filter }
             .count()
+        val unreadCount = if (unreadOnly) total else NotificationTable.selectAll().where { unread }.count()
 
         val notifications = NotificationTable
             .join(UserTable, JoinType.INNER, NotificationTable.actorId, UserTable.id)
             .selectAll()
-            .where { visibleTo(principal.id, now) }
+            .where { filter }
             .orderBy(NotificationTable.createdAt, SortOrder.DESC)
             .limit(pageSize)
             .offset(((page - 1) * pageSize).toLong())
@@ -65,6 +69,7 @@ class NotificationService(
             total = total,
             page = page,
             pageSize = pageSize,
+            unreadCount = unreadCount,
         )
     }
 
@@ -73,6 +78,13 @@ class NotificationService(
             (NotificationTable.id inList notificationIds) and
                     (NotificationTable.userId eq principal.id)
         }) {
+            it[viewed] = true
+        }
+    }
+
+    /** Marks every delivered, unread notification of the principal viewed; idempotent. Returns how many changed. */
+    fun markAllAsViewed(principal: UserPrincipal): Int = transaction {
+        NotificationTable.update({ visibleTo(principal.id, OffsetDateTime.now()) and (NotificationTable.viewed eq false) }) {
             it[viewed] = true
         }
     }
