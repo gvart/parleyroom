@@ -183,4 +183,16 @@ class LessonListFilterIntegrationTest : IntegrationTest() {
         assertEquals(500, range.pageSize)
         assertTrue(range.lessons.isEmpty())
     }
+
+    @Test
+    fun `lesson participants carry avatarUrl`() = testApp {
+        val client = createJsonClient(this)
+        val teacher = getTeacherToken(client)
+        transaction { exec("UPDATE users SET avatar_url = 'avatars/$STUDENT_ID/s.png' WHERE id = '$STUDENT_ID'") }
+        create(client, teacher, STUDENT_ID, "2027-05-01T10:00:00+02:00")
+
+        val lesson = list(client, teacher, "studentId=$STUDENT_ID").lessons.single()
+        assertEquals("/api/v1/users/$STUDENT_ID/avatar?v=s.png", lesson.students.single().avatarUrl)
+        assertEquals(null, lesson.teacher?.avatarUrl)
+    }
 }

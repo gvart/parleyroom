@@ -14,6 +14,7 @@ import com.gvart.parleyroom.user.security.UserPrincipal
 import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import com.gvart.parleyroom.user.transfer.UserListResponse
 import com.gvart.parleyroom.user.transfer.UserResponse
+import com.gvart.parleyroom.user.transfer.avatarUrl
 import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
@@ -205,12 +206,6 @@ class UserService(
         }
         return key ?: throw NotFoundException("Avatar not found", code = "AVATAR_NOT_FOUND")
     }
-
-    private fun avatarUrl(userId: UUID, key: String?): String? =
-        key?.let {
-            val cacheBust = it.substringAfterLast('/')
-            "/api/v1/users/$userId/avatar?v=$cacheBust"
-        }
 
     private fun toResponse(row: ResultRow): UserResponse {
         val userId = row[UserTable.id].value

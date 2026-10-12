@@ -70,6 +70,7 @@ data class LessonStudentResponse(
     val firstName: String,
     val lastName: String,
     val status: String,
+    val avatarUrl: String? = null,
 )
 
 @Serializable
@@ -77,4 +78,5 @@ data class LessonTeacherResponse(
     val id: String,
     val firstName: String,
     val lastName: String,
+    val avatarUrl: String? = null,
 )

@@ -7,6 +7,7 @@ import com.gvart.parleyroom.notification.transfer.NotificationPageResponse
 import com.gvart.parleyroom.notification.transfer.NotificationResponse
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.security.UserPrincipal
+import com.gvart.parleyroom.user.transfer.avatarUrl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -161,6 +162,7 @@ class NotificationService(
             firstName = row[UserTable.firstName],
             lastName = row[UserTable.lastName],
             role = row[UserTable.role],
+            avatarUrl = avatarUrl(row[UserTable.id].value, row[UserTable.avatarUrl]),
         ),
         createdAt = row[NotificationTable.createdAt],
         oldScheduledAt = row[NotificationTable.oldScheduledAt],

@@ -1147,6 +1147,11 @@ filter or page, so a client can show the bell's count from any page. `unread` ot
 `viewed-all` marks every delivered unread notification of the caller viewed and answers how many changed; a repeat
 answers `{ "updated": 0 }`. Neither route touches other users' notifications.
 
+Each notification embeds its actor, `actor: { id, firstName, lastName, role, avatarUrl? }` (the list and the SSE
+push alike; `avatarUrl` is the same URL as `UserResponse.avatarUrl`, null without an avatar), so clients need no
+`/users` lookup to render names or avatars. Lesson participants carry the same optional `avatarUrl`:
+`LessonResponse.teacher.avatarUrl` and `students[].avatarUrl`.
+
 ## Teacher reminders & Needs attention (feature flag `teacherReminders`)
 
 Reminders for the teacher only (students see no change). In-app always; email and Telegram per type.
@@ -1242,7 +1247,7 @@ rejected; the response's `pageSize` is the size actually applied, so page throug
 
 ### New: Teacher in lesson responses
 Every `LessonResponse` (list, detail, and the lesson returned by mutations) now includes
-`teacher: { id, firstName, lastName }` next to the existing `teacherId`.
+`teacher: { id, firstName, lastName, avatarUrl? }` next to the existing `teacherId`.
 
 ### New: Cancel endpoint
 ```

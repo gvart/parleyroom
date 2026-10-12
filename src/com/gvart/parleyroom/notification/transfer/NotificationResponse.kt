@@ -30,4 +30,6 @@ data class NotificationActorResponse(
     val firstName: String,
     val lastName: String,
     val role: UserRole,
+    /** Same URL as UserResponse.avatarUrl; null without an avatar. */
+    val avatarUrl: String? = null,
 )
