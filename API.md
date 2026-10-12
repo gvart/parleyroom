@@ -28,6 +28,15 @@ Every error response is `Content-Type: application/problem+json`, whatever the r
   `*_HAS_CONTENT`), `resetsAt` (429 `PRACTICE_SENTENCE_LIMIT`).
 - 400 `BAD_REQUEST` from an internal argument check now says only `"Invalid request"`; the
   exception text is logged, not returned.
+- `instance` is the request path (e.g. `/api/v1/lessons`).
+- 400 `MALFORMED_REQUEST` (body not parseable into the endpoint's shape) never names server classes:
+  missing fields → `detail: "Missing required fields: a, b"` with one `errors[]` entry per field
+  (`pointer` `/a`, nested ones prefixed by their path); a bad value the parser can locate (wrong type,
+  unknown enum constant) → `detail: "Invalid value at /type"` with `pointer`; otherwise `"Malformed request"`.
+- 403 `CORS_REJECTED`: a request whose `Origin` (or preflight method/headers) is not allowed now gets a
+  problem body instead of an empty 403. Browsers still can't read it (no `Access-Control-Allow-Origin`),
+  so it helps curl and server-side callers; a portal seeing an opaque network error on login should
+  suspect the CORS allowlist rather than the credentials.
 
 ## Idempotency keys (create endpoints)
 

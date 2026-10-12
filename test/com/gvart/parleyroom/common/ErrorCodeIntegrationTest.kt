@@ -12,17 +12,20 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 class ErrorCodeIntegrationTest : IntegrationTest() {
@@ -128,6 +131,65 @@ class ErrorCodeIntegrationTest : IntegrationTest() {
             contentType(ContentType.Application.Json)
             setBody("{not json")
         }.assertProblem(HttpStatusCode.BadRequest, "MALFORMED_REQUEST")
+    }
+
+    @Test
+    fun `missing fields are listed without class names`() = testApp {
+        val client = createJsonClient(this)
+
+        val problem = client.post("/api/v1/token") {
+            contentType(ContentType.Application.Json)
+            setBody("""{ "email": "student@test.com" }""")
+        }.assertProblem(HttpStatusCode.BadRequest, "MALFORMED_REQUEST")
+
+        assertEquals("Missing required fields: password", problem.detail)
+        assertEquals(listOf(FieldError("/password", "MALFORMED_REQUEST", "password is required")), problem.errors)
+    }
+
+    @Test
+    fun `a bad value is pointed at without class names`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+
+        val problem = client.post("/api/v1/lessons") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(token)
+            setBody(
+                """{ "teacherId": "$TEACHER_ID", "studentIds": ["$STUDENT_ID"], "title": "T", "type": "NOPE",
+                    "scheduledAt": "2027-04-10T10:00:00+02:00", "topic": "T" }"""
+            )
+        }.assertProblem(HttpStatusCode.BadRequest, "MALFORMED_REQUEST")
+
+        assertEquals("/type", problem.pointer)
+        assertFalse("com.gvart" in problem.detail.orEmpty() || "class" in problem.detail.orEmpty(), problem.detail)
+    }
+
+    @Test
+    fun `instance is the request path`() = testApp {
+        val client = createJsonClient(this)
+
+        val problem = client.get("/api/v1/users/me").assertProblem(HttpStatusCode.Unauthorized, "UNAUTHORIZED")
+        assertEquals("/api/v1/users/me", problem.instance)
+    }
+
+    @Test
+    fun `CORS rejection has a problem body`() = testApp {
+        val client = createJsonClient(this)
+
+        client.get("/api/v1/users/me") {
+            header(HttpHeaders.Origin, "https://evil.example")
+        }.assertProblem(HttpStatusCode.Forbidden, "CORS_REJECTED")
+    }
+
+    @Test
+    fun `a forbidden problem keeps its own body`() = testApp {
+        val client = createJsonClient(this)
+        val token = getStudentToken(client)
+
+        client.get("/api/v1/admin/users") {
+            bearerAuth(token)
+            header(HttpHeaders.Origin, "http://localhost")
+        }.assertProblem(HttpStatusCode.Forbidden, "FORBIDDEN")
     }
 
     @Test
