@@ -6,7 +6,7 @@ import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
-enum class EmailKind { INVITE, LESSON_REMINDER, HOMEWORK_DUE_TOMORROW, HOMEWORK_OVERDUE }
+enum class EmailKind { INVITE, LESSON_REMINDER, HOMEWORK_DUE_TOMORROW, HOMEWORK_OVERDUE, TEACHER_FOLLOW_UP, TEACHER_PREP, TEACHER_DIGEST }
 
 /** Every send attempt. Reminders claim their row first (unique on kind, ref_id, recipient, variant). */
 object EmailLogTable : UUIDTable("email_log") {

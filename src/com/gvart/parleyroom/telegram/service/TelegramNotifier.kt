@@ -6,6 +6,9 @@ import com.gvart.parleyroom.email.service.SendResult
 import com.gvart.parleyroom.email.template.LessonReminderVariant
 import com.gvart.parleyroom.email.template.emailLanguageFor
 import com.gvart.parleyroom.email.transfer.EmailCategory
+import com.gvart.parleyroom.reminder.service.TeacherLesson
+import com.gvart.parleyroom.reminder.service.TeacherLinks
+import com.gvart.parleyroom.reminder.transfer.TeacherDigestLine
 import com.gvart.parleyroom.telegram.config.TelegramNotificationConfig
 import com.gvart.parleyroom.telegram.data.TelegramKind
 import com.gvart.parleyroom.telegram.data.TelegramLogTable
@@ -89,12 +92,34 @@ class TelegramNotifier(
             templates.homeworkOverdue(emailLanguageFor(user), assignmentTitle) to appUrl(user, "/homework/$homeworkId")
         }
 
+    /** See NotificationMailer.sendTeacherFollowUp. Teacher reminders link the portal (D-004: teacher features are portal-only). */
+    suspend fun sendTeacherFollowUp(lesson: TeacherLesson, studentFirstName: String, wrapUp: Boolean, homework: Boolean): SendResult =
+        sendReminder(lesson.teacherId, EmailCategory.TEACHER_REMINDERS, TelegramKind.TEACHER_FOLLOW_UP, lesson.id, null, webApp = false) { user ->
+            templates.teacherFollowUp(emailLanguageFor(user), studentFirstName, lesson.title, wrapUp, homework) to
+                TeacherLinks.wrapUp(config.appBaseUrl, lesson)
+        }
+
+    /** See NotificationMailer.sendTeacherPrep. */
+    suspend fun sendTeacherPrep(lesson: TeacherLesson, studentFirstName: String): SendResult =
+        sendReminder(lesson.teacherId, EmailCategory.TEACHER_REMINDERS, TelegramKind.TEACHER_PREP, lesson.id, "@${lesson.startsAt.toEpochSecond()}", webApp = false) { user ->
+            templates.teacherPrep(emailLanguageFor(user), studentFirstName, lesson.title, lesson.startsAt, zoneOf(user)) to
+                TeacherLinks.prep(config.appBaseUrl, lesson)
+        }
+
+    /** See NotificationMailer.sendTeacherDigest. */
+    suspend fun sendTeacherDigest(teacherId: UUID, week: String, students: List<TeacherDigestLine>): SendResult =
+        sendReminder(teacherId, EmailCategory.TEACHER_REMINDERS, TelegramKind.TEACHER_DIGEST, teacherId, week, webApp = false) { user ->
+            templates.teacherDigest(emailLanguageFor(user), students) to TeacherLinks.dashboard(config.appBaseUrl)
+        }
+
     private suspend fun sendReminder(
         userId: UUID,
         category: EmailCategory,
         kind: TelegramKind,
         refId: UUID,
         variant: String?,
+        /** False: [render]'s URL is a portal page, opened as a plain link even when the Mini App is configured. */
+        webApp: Boolean = true,
         render: (ResultRow) -> Pair<TelegramContent, String>,
     ): SendResult {
         val user = transaction { UserTable.selectAll().where { UserTable.id eq userId }.singleOrNull() }
@@ -103,6 +128,8 @@ class TelegramNotifier(
         val enabled = when (category) {
             EmailCategory.LESSON_REMINDERS -> user[UserTable.telegramLessonReminders]
             EmailCategory.HOMEWORK_REMINDERS -> user[UserTable.telegramHomeworkReminders]
+            // Toggled per type in teacher_reminder_settings, which the caller checked.
+            EmailCategory.TEACHER_REMINDERS -> true
         }
         if (!enabled) return SendResult.OPTED_OUT
         val chatId = user[UserTable.telegramId] ?: return SendResult.SKIPPED
@@ -121,7 +148,7 @@ class TelegramNotifier(
         } ?: return SendResult.ALREADY_SENT
 
         val (content, url) = render(user)
-        val result = sender.send(message(chatId, content, url))
+        val result = sender.send(message(chatId, content, url, webApp))
         transaction {
             TelegramLogTable.update({ TelegramLogTable.id eq logId }) {
                 it[success] = result == TelegramSendResult.SENT
@@ -151,8 +178,8 @@ class TelegramNotifier(
             it[sentAt] = OffsetDateTime.now()
         }.singleOrNull()?.get(TelegramLogTable.id)
 
-    private fun message(chatId: Long, content: TelegramContent, url: String) =
-        OutgoingTelegramMessage(chatId, content.text, TelegramButton(content.buttonLabel, url, webApp = config.miniAppBaseUrl.isNotEmpty()))
+    private fun message(chatId: Long, content: TelegramContent, url: String, webApp: Boolean = true) =
+        OutgoingTelegramMessage(chatId, content.text, TelegramButton(content.buttonLabel, url, webApp = webApp && config.miniAppBaseUrl.isNotEmpty()))
 
     /** [path] in the Mini App, or the matching portal page (under /student or /teacher) without one. */
     private fun appUrl(user: ResultRow, path: String): String =

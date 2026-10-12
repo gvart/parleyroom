@@ -5,6 +5,8 @@ import com.gvart.parleyroom.email.template.EmailLanguage.DE
 import com.gvart.parleyroom.email.template.EmailLanguage.EN
 import com.gvart.parleyroom.email.template.EmailLanguage.RU
 import com.gvart.parleyroom.email.template.EmailLanguage.UK
+import com.gvart.parleyroom.reminder.transfer.AttentionReasonType
+import com.gvart.parleyroom.reminder.transfer.TeacherDigestLine
 import com.gvart.parleyroom.user.data.UserRole
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -288,6 +290,182 @@ class EmailTemplates(private val brand: Brand) {
         return render(content)
     }
 
+    /**
+     * To the teacher hours after a 1:1: what is still open ([wrapUp]: check off what was covered, [homework]: none
+     * assigned). Only the student's first name; no lesson notes.
+     */
+    fun teacherFollowUp(
+        lang: EmailLanguage,
+        studentFirstName: String,
+        lessonTitle: String,
+        startsAt: OffsetDateTime,
+        zone: ZoneId,
+        wrapUp: Boolean,
+        homework: Boolean,
+        url: String,
+        footer: ReminderFooter,
+    ): RenderedEmail {
+        val n = studentFirstName
+        val whenText = dateTime(lang, startsAt, zone)
+        val content = when (lang) {
+            EN -> EmailContent(
+                lang,
+                subject = if (wrapUp) "Wrap up your lesson with $n" else "Homework for $n?",
+                preheader = "A minute now keeps the roadmap and homework on track.",
+                robbi = RobbiPose.IDLE, heading = "How did it go?",
+                paragraphs = listOfNotNull(
+                    "Your lesson with $n is over. Still open:",
+                    "• Check off what you covered".takeIf { wrapUp },
+                    "• Create homework".takeIf { homework },
+                ),
+                details = listOf("Lesson" to lessonTitle, "When" to whenText, "Student" to n),
+                ctaLabel = "Wrap up lesson", ctaUrl = url, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = teacherReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            RU -> EmailContent(
+                lang,
+                subject = if (wrapUp) "Итоги урока: $n" else "Домашнее задание: $n",
+                preheader = "Минута сейчас — и план с домашними заданиями в порядке.",
+                robbi = RobbiPose.IDLE, heading = "Как прошёл урок?",
+                paragraphs = listOfNotNull(
+                    "Урок закончился ($n). Осталось:",
+                    "• Отметить, что прошли".takeIf { wrapUp },
+                    "• Задать домашнее задание".takeIf { homework },
+                ),
+                details = listOf("Урок" to lessonTitle, "Когда" to whenText, "Ученик" to n),
+                ctaLabel = "Подвести итоги", ctaUrl = url, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = teacherReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            UK -> EmailContent(
+                lang,
+                subject = if (wrapUp) "Підсумки уроку: $n" else "Домашнє завдання: $n",
+                preheader = "Хвилина зараз — і план із домашніми завданнями в порядку.",
+                robbi = RobbiPose.IDLE, heading = "Як минув урок?",
+                paragraphs = listOfNotNull(
+                    "Урок закінчився ($n). Залишилося:",
+                    "• Позначити, що пройшли".takeIf { wrapUp },
+                    "• Задати домашнє завдання".takeIf { homework },
+                ),
+                details = listOf("Урок" to lessonTitle, "Коли" to whenText, "Учень" to n),
+                ctaLabel = "Підбити підсумки", ctaUrl = url, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = teacherReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            DE -> EmailContent(
+                lang,
+                subject = if (wrapUp) "Schließ die Stunde mit $n ab" else "Hausaufgabe für $n?",
+                preheader = "Eine Minute jetzt hält Lernplan und Hausaufgaben aktuell.",
+                robbi = RobbiPose.IDLE, heading = "Wie lief die Stunde?",
+                paragraphs = listOfNotNull(
+                    "Deine Stunde mit $n ist vorbei. Noch offen:",
+                    "• Abhaken, was ihr geschafft habt".takeIf { wrapUp },
+                    "• Hausaufgabe erstellen".takeIf { homework },
+                ),
+                details = listOf("Stunde" to lessonTitle, "Wann" to whenText, "Lernende" to n),
+                ctaLabel = "Stunde abschließen", ctaUrl = url, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = teacherReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+        }
+        return render(content)
+    }
+
+    /** To the teacher before a 1:1 that is not prepared yet; links the preparation assistant. */
+    fun teacherPrep(
+        lang: EmailLanguage,
+        studentFirstName: String,
+        lessonTitle: String,
+        startsAt: OffsetDateTime,
+        zone: ZoneId,
+        url: String,
+        footer: ReminderFooter,
+    ): RenderedEmail {
+        val n = studentFirstName
+        val whenText = dateTime(lang, startsAt, zone)
+        val time = time(startsAt, zone)
+        val content = when (lang) {
+            EN -> EmailContent(
+                lang, subject = "Prepare your lesson with $n", preheader = "Your lesson starts at $time.",
+                robbi = RobbiPose.WAVE, heading = "Time to prepare",
+                paragraphs = listOf("Your next lesson with $n is coming up. The preparation assistant drafts a plan from the roadmap and your last lessons."),
+                details = listOf("Lesson" to lessonTitle, "When" to whenText, "Student" to n),
+                ctaLabel = "Prepare lesson", ctaUrl = url, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = teacherReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            RU -> EmailContent(
+                lang, subject = "Подготовка к уроку: $n", preheader = "Урок начнётся в $time.",
+                robbi = RobbiPose.WAVE, heading = "Пора готовиться",
+                paragraphs = listOf("Скоро следующий урок ($n). Помощник подготовки составит план по учебному плану и прошлым урокам."),
+                details = listOf("Урок" to lessonTitle, "Когда" to whenText, "Ученик" to n),
+                ctaLabel = "Подготовить урок", ctaUrl = url, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = teacherReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            UK -> EmailContent(
+                lang, subject = "Підготовка до уроку: $n", preheader = "Урок почнеться о $time.",
+                robbi = RobbiPose.WAVE, heading = "Час готуватися",
+                paragraphs = listOf("Незабаром наступний урок ($n). Помічник підготовки складе план за навчальним планом і минулими уроками."),
+                details = listOf("Урок" to lessonTitle, "Коли" to whenText, "Учень" to n),
+                ctaLabel = "Підготувати урок", ctaUrl = url, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = teacherReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            DE -> EmailContent(
+                lang, subject = "Bereite deine Stunde mit $n vor", preheader = "Die Stunde beginnt um $time.",
+                robbi = RobbiPose.WAVE, heading = "Zeit für die Vorbereitung",
+                paragraphs = listOf("Deine nächste Stunde mit $n steht bevor. Der Vorbereitungsassistent entwirft einen Plan aus dem Lernplan und den letzten Stunden."),
+                details = listOf("Stunde" to lessonTitle, "Wann" to whenText, "Lernende" to n),
+                ctaLabel = "Stunde vorbereiten", ctaUrl = url, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = teacherReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+        }
+        return render(content)
+    }
+
+    /** The weekly overview: one line per student (first name and reason counts, no content). */
+    fun teacherDigest(lang: EmailLanguage, students: List<TeacherDigestLine>, url: String, footer: ReminderFooter): RenderedEmail {
+        val count = students.size
+        val details = students.map { line -> line.firstName to line.reasons.entries.joinToString("\n") { (type, n) -> digestReason(lang, type, n) } }
+        val content = when (lang) {
+            EN -> EmailContent(
+                lang, subject = "Your week: $count ${if (count == 1) "student needs" else "students need"} attention",
+                preheader = "Who is behind, what is not wrapped up, who has no homework.",
+                robbi = RobbiPose.IDLE, heading = "Weekly overview",
+                paragraphs = listOf("Here is who could use a little extra attention this week:"),
+                details = details, ctaLabel = "Open dashboard", ctaUrl = url, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = teacherReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            RU -> EmailContent(
+                lang, subject = "Обзор недели: учеников, которым нужно внимание — $count",
+                preheader = "Кто отстаёт, где нет итогов урока, у кого нет домашних заданий.",
+                robbi = RobbiPose.IDLE, heading = "Обзор недели",
+                paragraphs = listOf("Вот кому на этой неделе стоит уделить чуть больше внимания:"),
+                details = details, ctaLabel = "Открыть панель", ctaUrl = url, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = teacherReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            UK -> EmailContent(
+                lang, subject = "Огляд тижня: учнів, яким потрібна увага — $count",
+                preheader = "Хто відстає, де немає підсумків уроку, у кого немає домашніх завдань.",
+                robbi = RobbiPose.IDLE, heading = "Огляд тижня",
+                paragraphs = listOf("Ось кому цього тижня варто приділити трохи більше уваги:"),
+                details = details, ctaLabel = "Відкрити панель", ctaUrl = url, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = teacherReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            DE -> EmailContent(
+                lang, subject = "Deine Woche: Lernende, die Aufmerksamkeit brauchen – $count",
+                preheader = "Wer hinter dem Plan liegt, was nicht abgeschlossen ist, wer keine Hausaufgabe hat.",
+                robbi = RobbiPose.IDLE, heading = "Wochenüberblick",
+                paragraphs = listOf("Diese Lernenden könnten diese Woche etwas mehr Aufmerksamkeit gebrauchen:"),
+                details = details, ctaLabel = "Zum Dashboard", ctaUrl = url, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = teacherReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+        }
+        return render(content)
+    }
+
+    private fun teacherReason(lang: EmailLanguage): String = when (lang) {
+        EN -> "You're getting this because teacher reminders are on in your ${brand.name} account."
+        RU -> "Вы получили это письмо, потому что в вашем аккаунте ${brand.name} включены напоминания для преподавателя."
+        UK -> "Ви отримали цей лист, бо у вашому акаунті ${brand.name} увімкнено нагадування для викладача."
+        DE -> "Du bekommst diese E-Mail, weil in deinem ${brand.name}-Konto Erinnerungen für Lehrkräfte aktiviert sind."
+    }
+
     private fun render(content: EmailContent) =
         RenderedEmail(content.subject, EmailLayout.html(content, brand), EmailLayout.text(content), content.robbi)
 
@@ -339,5 +517,33 @@ class EmailTemplates(private val brand: Brand) {
     private fun date(lang: EmailLanguage, at: OffsetDateTime, zone: ZoneId): String {
         val pattern = if (lang == DE) "d. MMMM yyyy" else "d MMMM yyyy"
         return at.atZoneSameInstant(zone).format(DateTimeFormatter.ofPattern(pattern, lang.locale))
+    }
+}
+
+/** One weekly digest reason (email and Telegram); counts go after a colon so no plural forms are needed. */
+fun digestReason(lang: EmailLanguage, type: AttentionReasonType, count: Int): String = when (lang) {
+    EN -> when (type) {
+        AttentionReasonType.BEHIND -> "behind schedule"
+        AttentionReasonType.MISMATCH -> "self-assessment mismatches: $count"
+        AttentionReasonType.NOT_WRAPPED_UP -> "lessons not wrapped up: $count"
+        AttentionReasonType.NO_HOMEWORK -> "no homework for 2 weeks"
+    }
+    RU -> when (type) {
+        AttentionReasonType.BEHIND -> "отстаёт от плана"
+        AttentionReasonType.MISMATCH -> "расхождения в самооценке: $count"
+        AttentionReasonType.NOT_WRAPPED_UP -> "уроки без итогов: $count"
+        AttentionReasonType.NO_HOMEWORK -> "нет домашних заданий 2 недели"
+    }
+    UK -> when (type) {
+        AttentionReasonType.BEHIND -> "відстає від плану"
+        AttentionReasonType.MISMATCH -> "розбіжності в самооцінці: $count"
+        AttentionReasonType.NOT_WRAPPED_UP -> "уроки без підсумків: $count"
+        AttentionReasonType.NO_HOMEWORK -> "немає домашніх завдань 2 тижні"
+    }
+    DE -> when (type) {
+        AttentionReasonType.BEHIND -> "hinter dem Plan"
+        AttentionReasonType.MISMATCH -> "abweichende Selbsteinschätzung: $count"
+        AttentionReasonType.NOT_WRAPPED_UP -> "Stunden ohne Abschluss: $count"
+        AttentionReasonType.NO_HOMEWORK -> "seit 2 Wochen keine Hausaufgabe"
     }
 }

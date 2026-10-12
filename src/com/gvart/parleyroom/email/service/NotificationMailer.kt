@@ -11,6 +11,9 @@ import com.gvart.parleyroom.email.template.RobbiPose
 import com.gvart.parleyroom.email.template.ReminderFooter
 import com.gvart.parleyroom.email.template.emailLanguageFor
 import com.gvart.parleyroom.email.transfer.EmailCategory
+import com.gvart.parleyroom.reminder.service.TeacherLesson
+import com.gvart.parleyroom.reminder.service.TeacherLinks
+import com.gvart.parleyroom.reminder.transfer.TeacherDigestLine
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
 import com.gvart.parleyroom.user.data.UserTable
@@ -109,6 +112,27 @@ class NotificationMailer(
             templates.homeworkOverdue(emailLanguageFor(user), assignmentTitle, dueAt, zoneOf(user), homeworkUrl(homeworkId), footer)
         }
 
+    /** The [lesson]'s follow-up to its teacher, once per lesson; links the wrap-up flow. */
+    suspend fun sendTeacherFollowUp(lesson: TeacherLesson, studentFirstName: String, wrapUp: Boolean, homework: Boolean): SendResult =
+        sendReminder(lesson.teacherId, EmailCategory.TEACHER_REMINDERS, EmailKind.TEACHER_FOLLOW_UP, lesson.id, null) { user, footer ->
+            templates.teacherFollowUp(
+                emailLanguageFor(user), studentFirstName, lesson.title, lesson.startsAt, zoneOf(user), wrapUp, homework,
+                TeacherLinks.wrapUp(config.appBaseUrl, lesson), footer,
+            )
+        }
+
+    /** Once per lesson start, so a rescheduled lesson is reminded again; links the preparation assistant. */
+    suspend fun sendTeacherPrep(lesson: TeacherLesson, studentFirstName: String): SendResult =
+        sendReminder(lesson.teacherId, EmailCategory.TEACHER_REMINDERS, EmailKind.TEACHER_PREP, lesson.id, "@${lesson.startsAt.toEpochSecond()}") { user, footer ->
+            templates.teacherPrep(emailLanguageFor(user), studentFirstName, lesson.title, lesson.startsAt, zoneOf(user), TeacherLinks.prep(config.appBaseUrl, lesson), footer)
+        }
+
+    /** Once per teacher and [week] (e.g. "2030-W11"). */
+    suspend fun sendTeacherDigest(teacherId: UUID, week: String, students: List<TeacherDigestLine>): SendResult =
+        sendReminder(teacherId, EmailCategory.TEACHER_REMINDERS, EmailKind.TEACHER_DIGEST, teacherId, week) { user, footer ->
+            templates.teacherDigest(emailLanguageFor(user), students, TeacherLinks.dashboard(config.appBaseUrl), footer)
+        }
+
     private suspend fun sendReminder(
         userId: UUID,
         category: EmailCategory,
@@ -123,6 +147,8 @@ class NotificationMailer(
         val enabled = when (category) {
             EmailCategory.LESSON_REMINDERS -> user[UserTable.emailLessonReminders]
             EmailCategory.HOMEWORK_REMINDERS -> user[UserTable.emailHomeworkReminders]
+            // Toggled per type in teacher_reminder_settings, which the caller checked.
+            EmailCategory.TEACHER_REMINDERS -> true
         }
         if (!enabled) return SendResult.OPTED_OUT
 

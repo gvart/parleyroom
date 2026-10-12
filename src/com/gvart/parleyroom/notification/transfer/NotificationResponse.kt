@@ -20,6 +20,8 @@ data class NotificationResponse(
     val oldScheduledAt: OffsetDateTime? = null,
     @Serializable(with = OffsetDateTimeSerializer::class)
     val newScheduledAt: OffsetDateTime? = null,
+    /** Type-specific facts, e.g. ["WRAP_UP", "HOMEWORK"] for LESSON_FOLLOW_UP_DUE. */
+    val details: List<String>? = null,
 )
 
 @Serializable

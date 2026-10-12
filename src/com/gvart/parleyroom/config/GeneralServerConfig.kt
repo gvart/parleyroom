@@ -35,6 +35,7 @@ import com.gvart.parleyroom.availability.transfer.CreateAvailabilityExceptionReq
 import com.gvart.parleyroom.availability.transfer.ReplaceWeeklyAvailabilityRequest
 import com.gvart.parleyroom.common.routing.respondProblem
 import com.gvart.parleyroom.common.routing.validationPointer
+import com.gvart.parleyroom.reminder.transfer.TeacherReminderSettingsRequest
 import com.gvart.parleyroom.common.transfer.FieldError
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
@@ -253,6 +254,7 @@ fun Application.generalConfig() {
         validate<RegenerateLessonPlanRequest> { it.validate() }
         validate<LessonPlanPatch> { it.validate() }
         validate<WrapUpRequest> { it.validate() }
+        validate<TeacherReminderSettingsRequest> { it.validate() }
     }
 
 

@@ -90,6 +90,7 @@ class NotificationService(
         deliverAfter: OffsetDateTime? = null,
         oldScheduledAt: OffsetDateTime? = null,
         newScheduledAt: OffsetDateTime? = null,
+        details: List<String>? = null,
     ): NotificationResponse {
         val response = transaction {
             val id = NotificationTable.insertAndGetId {
@@ -100,6 +101,7 @@ class NotificationService(
                 it[NotificationTable.deliverAfter] = deliverAfter
                 it[NotificationTable.oldScheduledAt] = oldScheduledAt
                 it[NotificationTable.newScheduledAt] = newScheduledAt
+                it[NotificationTable.details] = details
             }
             findResponse(id.value)!!
         }
@@ -151,5 +153,6 @@ class NotificationService(
         createdAt = row[NotificationTable.createdAt],
         oldScheduledAt = row[NotificationTable.oldScheduledAt],
         newScheduledAt = row[NotificationTable.newScheduledAt],
+        details = row[NotificationTable.details],
     )
 }

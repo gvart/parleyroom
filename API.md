@@ -1132,6 +1132,78 @@ LESSON_PREP.
 | `LESSON_PLAN_DONE` | 409 | regenerate after the wrap-up |
 | `LESSON_PLAN_NOT_FOUND`, `LESSON_PLAN_DONE` | – | job `error.code`: deleted / wrapped up while the job ran |
 
+## Teacher reminders & Needs attention (feature flag `teacherReminders`)
+
+Reminders for the teacher only (students see no change). In-app always; email and Telegram per type.
+
+```
+GET /api/v1/users/me/teacher-reminders     -> TeacherReminderSettings          (teachers, admins; students 403)
+PUT /api/v1/users/me/teacher-reminders     TeacherReminderSettingsRequest -> TeacherReminderSettings
+GET /api/v1/teacher/attention              -> [AttentionStudent]               (teachers, admins; students 403)
+```
+
+The settings routes are 404 while `teacherReminders` is off; `/teacher/attention` exists while `teacherReminders`
+**or** `roadmap` is on (it is the dashboard's "Needs attention" list as well as the digest's content).
+
+```json
+{
+  "afterLesson":  { "enabled": true, "hoursAfter": 2, "email": false, "telegram": true },
+  "beforeLesson": { "enabled": true, "mode": "DAY_BEFORE", "time": "18:00", "hoursBefore": 3, "email": false, "telegram": true },
+  "weeklyDigest": { "enabled": true, "weekday": "MONDAY", "time": "08:00", "email": false, "telegram": true },
+  "timezone": "Europe/Berlin",
+  "telegramLinked": false
+}
+```
+
+- These are the defaults (no row in `teacher_reminder_settings`, V38). `timezone` (the profile's) and
+  `telegramLinked` are read-only; times are read in that zone, DST-safe.
+- PUT replaces everything; a missing section or field takes its default. `hoursAfter` 0..48, `mode` `DAY_BEFORE`
+  (at `time` "HH:mm" the day before) | `HOURS_BEFORE` (`hoursBefore` 1..72), `weekday` `MONDAY`..`SUNDAY`. Errors are
+  400 `VALIDATION_FAILED` with `errors[].pointer`, e.g. `/afterLesson/hoursAfter`, `/weeklyDigest/time`.
+- Telegram goes only to a linked, reachable account (see Telegram notifications). Email links carry an unsubscribe
+  link of the new category `TEACHER_REMINDERS` (`POST /email/unsubscribe` answers `{ "category": "TEACHER_REMINDERS" }`):
+  it switches all three `email` toggles off. The lesson/homework reminder toggles on `/users/me` do not apply.
+
+### What is sent (job every `reminders.interval`, in every pod)
+
+| Type | When | Notification | Link |
+|---|---|---|---|
+| After the lesson | a 1:1 (COMPLETED, or CONFIRMED / IN_PROGRESS past its end) ended `hoursAfter` ago, at most 7 days ago, and is not wrapped up (no DONE plan, no roadmap item checked with it) and/or has no assignment from it. Nothing missing: nothing sent. | `LESSON_FOLLOW_UP_DUE`, `referenceId` lesson, `actor` the student, `details` ⊆ `["WRAP_UP", "HOMEWORK"]` | `/teacher/students/{studentId}/wrap-up?lesson={lessonId}` |
+| Before the lesson | a CONFIRMED 1:1 without a READY / DONE plan, at the day-before time or `hoursBefore` ahead; again after a reschedule. Needs `lessonPrep`. | `LESSON_PREP_DUE`, `referenceId` lesson, `actor` the student | `/teacher/students/{studentId}/prepare?lesson={lessonId}` |
+| Weekly digest | `weekday` + `time` in the teacher's zone (sent up to 6 h late), when `/teacher/attention` is not empty | `WEEKLY_DIGEST`, no reference, `actor` the teacher, `details` `["students:<n>"]` | `/teacher/dashboard` |
+
+"Wrapped up" counts only while it can happen: with `lessonPrep` on, or with `roadmap` on for students with an ACTIVE
+goal; otherwise only `HOMEWORK` is reminded. Emails / Telegram name the student by first name and never include lesson
+notes. Telegram buttons are plain links to the portal pages above, also when `MINIAPP_BASE_URL` is set (teacher
+features are portal-only). `NotificationResponse` has a new optional `details: [string]`.
+
+Each reminder is claimed once per channel before sending — in-app in `teacher_reminder_log` (unique kind + lesson or
+teacher + variant), email / Telegram in `email_log` / `telegram_log` (kinds `TEACHER_FOLLOW_UP`, `TEACHER_PREP`,
+`TEACHER_DIGEST`). The variant is the lesson start (`@<epoch>`) for preparation and the ISO week (`2030-W11`) for the
+digest, so restarts and several pods never double-send.
+
+### Needs attention
+
+```json
+[
+  {
+    "studentId": "…", "studentName": "Anna Schmidt",
+    "reasons": [
+      { "type": "BEHIND", "refId": "<goalId>", "detail": "33/50" },
+      { "type": "MISMATCH", "refId": "<milestoneId>", "detail": "Begrüßung", "at": "2030-03-10T09:00:00Z" },
+      { "type": "NOT_WRAPPED_UP", "refId": "<lessonId>", "detail": "Perfekt", "at": "2030-03-11T16:00:00Z" },
+      { "type": "NO_HOMEWORK", "at": "2030-02-20T10:00:00Z" }
+    ]
+  }
+]
+```
+
+The teacher's ACTIVE students with at least one reason: `BEHIND` (goal behind schedule; `detail` "progress/expected"
+percent), `MISMATCH` (done milestone self-assessed PARTLY / NOT_YET; `at` the answer), `NOT_WRAPPED_UP` (1:1 that
+ended in the last 14 days; `at` its start), `NO_HOMEWORK` (nothing assigned by this teacher in 14 days; `at` the last
+one, absent = never). `BEHIND` / `MISMATCH` need `roadmap`; `NOT_WRAPPED_UP` as above. Sorted by the most severe reason
+(the order above), then by the number of reasons, then by name; reasons in the same order. A fixed number of queries.
+
 ## Lesson Changes
 
 ### New: Teacher in lesson responses
