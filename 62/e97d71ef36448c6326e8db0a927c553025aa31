@@ -1,0 +1,82 @@
+test/com/gvart/parleyroom/reminder/TeacherAttentionIntegrationTest.kt
+  s_6b341267e99e70::t_5f9417a692edc3 1-132
+  s_6b341267e99e70::t_fb47b73c36c40b 133-141
+src/com/gvart/parleyroom/reminder/service/TeacherAttentionService.kt
+  s_6b341267e99e70::t_8ab067faaccb59 1-201
+  s_6b341267e99e70::t_04b51fce766b00 202-212
+test/com/gvart/parleyroom/reminder/TeacherReminderFixtures.kt
+  s_6b341267e99e70::t_cdec0a1a52b6ab 1-68
+resources/db/migration/V38__teacher_reminders.sql
+  s_6b341267e99e70::t_b0c797708f450a 1-45
+src/com/gvart/parleyroom/reminder/data/TeacherReminderTables.kt
+  s_6b341267e99e70::t_7e134644d45a5a 1-46
+  s_6b341267e99e70::t_f8964e07e101ab 47
+src/com/gvart/parleyroom/reminder/service/TeacherReminderSettingsService.kt
+  s_6b341267e99e70::t_c8636f172f0e08 1-127
+src/com/gvart/parleyroom/reminder/transfer/TeacherReminderDtos.kt
+  s_6b341267e99e70::t_b3ecc66c44cc24 1-101
+  s_6b341267e99e70::t_b48b5065fee234 102-107
+src/com/gvart/parleyroom/reminder/service/TeacherReminderService.kt
+  s_6b341267e99e70::t_c4956d8a8c86b3 1-276
+  s_6b341267e99e70::t_1b0c218f7d8d2b 277-278
+test/com/gvart/parleyroom/reminder/TeacherReminderSettingsIntegrationTest.kt
+  s_6b341267e99e70::t_d6edfba7eaea97 1-134
+  s_6b341267e99e70::t_9d86cb33639703 135-142
+test/com/gvart/parleyroom/reminder/TeacherReminderIntegrationTest.kt
+  s_6b341267e99e70::t_4bc089de7ad67e 1-312
+  s_6b341267e99e70::t_90a13a432d7a29 313-314
+API.md
+  s_6b341267e99e70::t_7d49e4d6d6bdc7 1135-1206
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_6b341267e99e70::t_513b82a1ba8310 38,257
+src/com/gvart/parleyroom/email/data/EmailLogTable.kt
+  s_6b341267e99e70::t_ec94d6ebaba77a 9
+src/com/gvart/parleyroom/email/service/EmailPreferenceService.kt
+  s_6b341267e99e70::t_3d27fbee024190 5,19-20,24
+src/com/gvart/parleyroom/email/service/NotificationMailer.kt
+  s_6b341267e99e70::t_5bd74dca277dae 14-16,115-135,150-151
+src/com/gvart/parleyroom/email/service/UnsubscribeTokens.kt
+  s_6b341267e99e70::t_347405fbb341e3 67-71
+src/com/gvart/parleyroom/email/template/EmailTemplates.kt
+  s_6b341267e99e70::t_9a76d497855cce 8-9,293-468,522-549
+src/com/gvart/parleyroom/email/transfer/EmailCategory.kt
+  s_6b341267e99e70::t_71d5d86cfc20c4 3-7
+src/com/gvart/parleyroom/notification/data/NotificationTable.kt
+  s_6b341267e99e70::t_cc1d9d2454f29f 5,40-45,58
+src/com/gvart/parleyroom/notification/service/NotificationService.kt
+  s_6b341267e99e70::t_ff7a1aeb87d5d3 93,104,156
+src/com/gvart/parleyroom/notification/transfer/NotificationResponse.kt
+  s_6b341267e99e70::t_c282e23e904fc8 23-24
+src/com/gvart/parleyroom/reminder/config/ReminderModuleConfig.kt
+  s_6b341267e99e70::t_aa1a0a9de7565e 3,5-7,21,25-27,30-31,40,49-50
+src/com/gvart/parleyroom/reminder/routing/Routing.kt
+  s_6b341267e99e70::t_76a4281c31ab10 1-100
+src/com/gvart/parleyroom/reminder/service/TeacherLinks.kt
+  s_6b341267e99e70::t_c815bc2472f79a 1-10
+src/com/gvart/parleyroom/telegram/data/TelegramLogTable.kt
+  s_6b341267e99e70::t_7fff6c93f31d81 9
+src/com/gvart/parleyroom/telegram/service/TelegramNotifier.kt
+  s_6b341267e99e70::t_0ff1f99f70845d 9-11,95-114,129-130,190-193
+src/com/gvart/parleyroom/telegram/template/TelegramTemplates.kt
+  s_6b341267e99e70::t_f8da0a3f201842 10-11,93-132
+test/com/gvart/parleyroom/email/EmailTemplatesTest.kt
+  s_6b341267e99e70::t_2364095ba1e3fe 11-12,116-130
+test/com/gvart/parleyroom/telegram/TelegramTemplatesTest.kt
+  s_6b341267e99e70::t_01f0874a10c87d 6-7,46-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "62e97d71ef36448c6326e8db0a927c553025aa31",
+  "prompts": {},
+  "sessions": {
+    "s_6b341267e99e70": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3c10af3d-8cd0-4bc3-89fd-cb390bc038be",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
