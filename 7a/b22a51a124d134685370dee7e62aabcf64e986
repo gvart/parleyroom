@@ -1,0 +1,25 @@
+API.md
+  s_6b341267e99e70::t_8f49e11c2350fd 31-39
+src/com/gvart/parleyroom/common/routing/ProblemResponse.kt
+  s_6b341267e99e70::t_c46134d3922620 8,16,20
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_6b341267e99e70::t_1f813bc41adccf 86,113-114,283,286-297,416-443
+test/com/gvart/parleyroom/common/ErrorCodeIntegrationTest.kt
+  s_6b341267e99e70::t_fe2de9a5d2b36d 15,21,28,136-194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "7ab22a51a124d134685370dee7e62aabcf64e986",
+  "prompts": {},
+  "sessions": {
+    "s_6b341267e99e70": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3c10af3d-8cd0-4bc3-89fd-cb390bc038be",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
