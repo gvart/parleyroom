@@ -1,0 +1,103 @@
+src/com/gvart/parleyroom/goal/transfer/GoalDtos.kt
+  s_6b341267e99e70::t_c93364d46adc92 6-12,14,16-71,76-77,79-100,102,105-106,108-114,116-164,168,171-180,183-230,233,235,238-248,250-253,259-427
+src/com/gvart/parleyroom/goal/routing/Routing.kt
+  s_6b341267e99e70::t_3feb4d5c6c4f91 3-5,9,12,15-18,20,22-31,35,44,48-50,52-60,65-66,69-70,72,75-76,80-81,83,87,90-91,94-123,129,131-133,136,142,145-146,148,150-152,157,161,165-331
+src/com/gvart/parleyroom/goal/service/RoadmapGenerationService.kt
+  s_6b341267e99e70::t_cd8e7ebacb29f9 1-248
+src/com/gvart/parleyroom/goal/service/GoalViews.kt
+  s_6b341267e99e70::t_bf80b46dbbd8e3 1-257
+  s_6b341267e99e70::t_1ea72318df9749 258-261
+test/com/gvart/parleyroom/goal/GoalIntegrationTest.kt
+  s_6b341267e99e70::t_532f0afed77202 5-15,25,29,31,37,42-46,48-49,52-53,56-58,62-63,65-74,78-80,84-111,115-117,119-127,129-133,137-140,142-167,171-173,176-198,202-204,206-230,233-238,240,244
+  s_6b341267e99e70::t_be0fbf92fc30af 239,241-243
+test/com/gvart/parleyroom/goal/RoadmapIntegrationTest.kt
+  s_6b341267e99e70::t_126c9705454b88 1-237
+src/com/gvart/parleyroom/goal/service/GoalService.kt
+  s_6b341267e99e70::t_13d388072cfd7f 5,7,12,14-15,20-21,24,31,36-37,39-41,43-44,46-50,53-55,58-59,61,63,68-77,81,84-92,95-106,108,112,116-122,125-128,131
+resources/db/migration/V36__goal_roadmap.sql
+  s_6b341267e99e70::t_497465b113dccc 1-103
+test/com/gvart/parleyroom/goal/RoadmapGenerationIntegrationTest.kt
+  s_6b341267e99e70::t_6b5131af390b81 1-214
+  s_6b341267e99e70::t_13f02d1fe968c6 215-218
+src/com/gvart/parleyroom/goal/service/RoadmapService.kt
+  s_6b341267e99e70::t_172b2172f5d5e5 1-324
+  s_6b341267e99e70::t_0af0c4bbe2db58 325
+API.md
+  s_6b341267e99e70::t_47a96bbd7a660a 858-923,925-931,934-991,997-1009,1353,1360,1364-1365,1801-1803,1987
+resources/ai/exams/goethe-a1.md
+  s_6b341267e99e70::t_02a056f55b5edc 1-17
+resources/ai/exams/goethe-a2.md
+  s_6b341267e99e70::t_b50f417b3ccb22 1-17
+resources/ai/exams/goethe-b1.md
+  s_6b341267e99e70::t_3f83a5b458ba14 1-20
+resources/ai/exams/telc-a1.md
+  s_6b341267e99e70::t_3412224d6e0c41 1-13
+resources/ai/exams/telc-b1.md
+  s_6b341267e99e70::t_67b2f62c63c1c9 1-18
+resources/ai/milestone-regen.md
+  s_6b341267e99e70::t_0193dbbe68f966 1-27
+resources/ai/roadmap.md
+  s_6b341267e99e70::t_bb5b0678b14c90 1-52
+src/com/gvart/parleyroom/Application.kt
+  s_6b341267e99e70::t_2ddb6d2672fe2d 65-66
+src/com/gvart/parleyroom/ai/data/AiUsageTables.kt
+  s_6b341267e99e70::t_3122ac20472980 10
+src/com/gvart/parleyroom/ai/data/GenerationJobTable.kt
+  s_6b341267e99e70::t_94423a682a4e8b 6,16,41-42
+src/com/gvart/parleyroom/ai/llm/FakeLlmGateway.kt
+  s_6b341267e99e70::t_3ea0857d380c83 9,20-21,33,60-61,304-350
+src/com/gvart/parleyroom/ai/service/AiJobSummaries.kt
+  s_6b341267e99e70::t_31b39814f92b48 12,75-79,90-91,100,117
+src/com/gvart/parleyroom/ai/service/AiOutput.kt
+  s_6b341267e99e70::t_7348454b246253 8,24,130-170,413-499
+src/com/gvart/parleyroom/ai/service/GenerationJobRunner.kt
+  s_6b341267e99e70::t_ae86ddec681519 82,106
+src/com/gvart/parleyroom/ai/service/GenerationJobs.kt
+  s_6b341267e99e70::t_14f299f088c05d 76
+src/com/gvart/parleyroom/ai/service/LessonContextService.kt
+  s_6b341267e99e70::t_8d669aaed5449b 354,358-364
+src/com/gvart/parleyroom/ai/service/Prompts.kt
+  s_6b341267e99e70::t_bf35ccecd77602 5,8-10,23-24,55-102,190-191
+src/com/gvart/parleyroom/ai/transfer/AiDtos.kt
+  s_6b341267e99e70::t_d77ce26381a92b 36-39,60-61
+src/com/gvart/parleyroom/ai/transfer/AiJobDtos.kt
+  s_6b341267e99e70::t_88f493143563ab 10,31-32
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_6b341267e99e70::t_b9ace0bf1c9ae7 3-14,236-247
+src/com/gvart/parleyroom/goal/config/GoalModuleConfig.kt
+  s_6b341267e99e70::t_46ca5f988d89fd 5-6,13-14
+src/com/gvart/parleyroom/goal/data/GoalTables.kt
+  s_6b341267e99e70::t_d7c9b66ae93f79 5,7,13-15,17,21-30,35-73
+src/com/gvart/parleyroom/goal/service/GoalProgress.kt
+  s_6b341267e99e70::t_9191ce88d46379 1-38
+src/com/gvart/parleyroom/notification/data/NotificationTable.kt
+  s_6b341267e99e70::t_2ce3c3a8016468 35-38
+test/com/gvart/parleyroom/admin/AdminUserHardDeleteIntegrationTest.kt
+  s_6b341267e99e70::t_f99104f2bb67e3 14-15,262-264,357
+test/com/gvart/parleyroom/common/ErrorCodeIntegrationTest.kt
+  s_6b341267e99e70::t_d4273b40fe8372 7,15,22,101-105,108,111-112
+test/com/gvart/parleyroom/goal/GoalFixtures.kt
+  s_6b341267e99e70::t_0779727a35815e 1-125
+test/com/gvart/parleyroom/goal/GoalProgressTest.kt
+  s_6b341267e99e70::t_a6d502b5db2492 1-59
+test/com/gvart/parleyroom/security/AuthorizationBypassIntegrationTest.kt
+  s_6b341267e99e70::t_b37327fcc1f891 5-6,34,38-46,128-129,131,133-136,139
+testResources/test-data.sql
+  s_6b341267e99e70::t_6156bcccc5dc13 23,29-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "f48da401252821740a824ea961b3bdc9a95112ab",
+  "prompts": {},
+  "sessions": {
+    "s_6b341267e99e70": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3c10af3d-8cd0-4bc3-89fd-cb390bc038be",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
