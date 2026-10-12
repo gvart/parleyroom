@@ -5,6 +5,7 @@ import com.gvart.parleyroom.common.data.pgEnum
 import com.gvart.parleyroom.document.data.DocumentTable
 import com.gvart.parleyroom.goal.data.GoalTable
 import com.gvart.parleyroom.lesson.data.LessonTable
+import com.gvart.parleyroom.lessonprep.data.LessonPlanTable
 import com.gvart.parleyroom.material.data.MaterialTable
 import com.gvart.parleyroom.user.data.UserTable
 import kotlinx.serialization.json.Json
@@ -13,7 +14,7 @@ import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 import org.jetbrains.exposed.v1.json.jsonb
 
-enum class GenerationJobKind { GENERATE, REFINE, FILL_TRANSLATIONS, SUGGEST_TAGS, ROADMAP, MILESTONE_REGEN }
+enum class GenerationJobKind { GENERATE, REFINE, FILL_TRANSLATIONS, SUGGEST_TAGS, ROADMAP, MILESTONE_REGEN, LESSON_PREP }
 enum class GenerationJobStatus { QUEUED, RUNNING, SUCCEEDED, FAILED }
 enum class PromptTemplateLessonType { ONE_ON_ONE, CLUB }
 
@@ -40,6 +41,8 @@ object GenerationJobTable : UUIDTable("generation_jobs") {
     val bundleId = reference("bundle_id", DraftBundleTable).nullable()
     /** ROADMAP / MILESTONE_REGEN: the goal whose roadmap is written. */
     val goalId = reference("goal_id", GoalTable).nullable()
+    /** LESSON_PREP: the lesson plan that is written. */
+    val lessonPlanId = reference("lesson_plan_id", LessonPlanTable).nullable()
 }
 
 object PromptTemplateTable : UUIDTable("prompt_templates") {

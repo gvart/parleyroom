@@ -960,7 +960,7 @@ teacher (`SELF_ASSESSMENT_MISMATCH`, reference = goal id). Marking undone keeps 
 
 `roadmap/generate` and `regenerate` start generation jobs (see "Generation jobs": poll
 `GET /api/v1/ai/jobs/{id}`, tray `targetType: GOAL`, `goalId`) routed by `ai_model_settings`
-use cases `ROADMAP` / `MILESTONE_REGEN` (default `claude-sonnet-5-5`; `LESSON_PREP` is reserved).
+use cases `ROADMAP` / `MILESTONE_REGEN` (default `claude-sonnet-5-5`; `LESSON_PREP`: see "Lesson preparation & history").
 Generate needs a goal without milestones unless `replace: true` (409 `ROADMAP_EXISTS`; checked again
 when the job finishes → job error `ROADMAP_EXISTS`). One job per goal at a time (409 `ROADMAP_BUSY`).
 Regenerate rewrites one milestone that is not done (409 `ROADMAP_MILESTONE_DONE`): it keeps id,
@@ -1007,6 +1007,130 @@ SELF_ASSESSMENT_MISMATCH; `ai_model_settings` rows ROADMAP, MILESTONE_REGEN, LES
 | `ROADMAP_MILESTONE_DONE` | 409 | regenerate a done milestone |
 | `MILESTONE_NOT_DONE` | 409 | self-assessment before the milestone is done |
 | `GOAL_NOT_FOUND`, `ROADMAP_MILESTONE_NOT_FOUND` | – | job `error.code`: deleted while the job ran |
+
+## Lesson preparation & history (feature flag `lessonPrep`)
+
+Stage 2 (V37). Before a lesson the teacher writes a short note on the last one ("Selbstvorstellung und
+Verbposition 2 gemacht, er hatte Probleme mit du-Formen") and the AI drafts a plan for the next lesson.
+After the lesson the teacher wraps it up: what was actually covered and which roadmap items were
+worked on. Plans and covered notes form the lesson history that feeds the next preparation. Students
+never see any of it.
+
+While the flag `lessonPrep` is off every route below answers **404 `NOT_FOUND`** (problem+json).
+
+```
+POST   /api/v1/lesson-plans                  { studentId, prepNote, lessonId?, explainInRussian? } -> 202 LessonPlan (+ job)
+GET    /api/v1/lesson-plans/{id}                              -> LessonPlan
+PATCH  /api/v1/lesson-plans/{id}             LessonPlanPatch  -> LessonPlan
+POST   /api/v1/lesson-plans/{id}/regenerate  { prepNote?, explainInRussian? } -> 202 LessonPlan (+ job)
+DELETE /api/v1/lesson-plans/{id}                              -> 204
+POST   /api/v1/lessons/{lessonId}/wrap-up    { coveredNote?, itemStates: [{ itemId, state }] } -> { plan: LessonPlan, suggestedHomework? }
+GET    /api/v1/students/{studentId}/lesson-history?page=&pageSize=  -> LessonHistory
+GET    /api/v1/students/{studentId}/next-lesson-prep          -> { lesson: PlanLesson | null, plan: LessonPlan | null }
+```
+Roles: plan routes are for the plan's teacher or an admin (other teachers 404 `LESSON_PLAN_NOT_FOUND`);
+student routes for a teacher linked to the student (`teacher_students`) or an admin (others 404
+`STUDENT_NOT_FOUND`); wrap-up for the lesson's teacher or an admin (others 404 `LESSON_NOT_FOUND`).
+Students get 403 everywhere. Lessons are always the teacher's own lessons with the student (admins:
+any teacher's); pending requests (`REQUEST`) and rejected participations never count.
+
+**Create.** `prepNote` 1..4 000. `lessonId` must be a lesson of the teacher with the student (400
+`LESSON_PLAN_LESSON_INVALID`, `/lessonId`); without it the student's next upcoming `CONFIRMED` lesson
+that has no plan yet is linked (none → unlinked). One plan per lesson (409 `LESSON_PLAN_EXISTS`). The
+student's `ACTIVE` goal (of this teacher) is attached. Answers 202 with the plan (`plan: null`) and its
+`job`; poll `GET /api/v1/ai/jobs/{id}` (tray `targetType: LESSON_PLAN`, `lessonPlanId`) or the plan.
+**Regenerate** keeps the lesson link, optionally replaces prepNote / explainInRussian, and replaces
+the plan when the job succeeds (status back to `DRAFT`); not for a `DONE` plan (409 `LESSON_PLAN_DONE`).
+One job per plan at a time (409 `LESSON_PLAN_BUSY`).
+
+```
+LessonPlan {
+  id, studentId, teacherId, goalId?, lesson?: PlanLesson, prepNote, explainInRussian,
+  plan: PlanContent | null,                     // null until the first generation succeeded
+  roadmapItems: [{ id, title, kind, state }],    // plan.roadmapItemIds resolved (deleted items left out)
+  coveredNote?, status: DRAFT | READY | DONE, job?: GenerationJob (latest), createdAt, updatedAt
+}
+PlanLesson = { id, title, scheduledAt, durationMinutes, status }
+PlanContent {
+  lessonGoal: string,                            // one German sentence, ≤ 300
+  timePlan: [{ phase: WARMUP | INPUT | GRAMMAR | PRACTICE | EXAM_PRACTICE | WRAPUP, title, minutes: 1..240, description }],  // 1..10
+  phrases: [{ de, note? }],                      // ≤ 20
+  vocabulary: [{ lemma, article?: der | die | das, plural?, example }],   // ≤ 30
+  activities: [{ type: SPEAKING_CARDS | ROLE_PLAY | EXERCISE | GAME | OTHER, title, instructions, materialsNeeded? }],  // ≤ 8
+  skipIfShort: [string],                         // ≤ 10
+  suggestedHomework: { summary, prompt } | null,
+  roadmapItemIds: [uuid]                         // ≤ 30, items of the plan's goal this lesson targets
+}
+LessonPlanPatch = { prepNote?, coveredNote? ("" clears), lessonId? ("" unlinks), status?: DRAFT | READY, plan?: PlanContent (replaces it) }
+```
+**PATCH** checks the plan's shape; field errors are 400 `VALIDATION_FAILED` with one `errors[]` entry
+each, `pointer` into the body (`/plan/timePlan/0/minutes`, `/plan/vocabulary/2/article`, `/status`).
+`roadmapItemIds` must be items of the plan's goal (400 `LESSON_PLAN_ITEM_INVALID`,
+`/plan/roadmapItemIds/<i>`). The time plan sum is only enforced on the model's answer, so the teacher
+can edit freely. `DONE` is set by the wrap-up only.
+
+**Wrap-up** (idempotent: the same body twice gives the same result) saves `coveredNote` (absent keeps
+it), sets the lesson's plan `DONE` and applies `itemStates` exactly like `PATCH /goals/{id}/items` with
+`lessonId` = this lesson, in the same transaction (all or nothing; 404 `ROADMAP_ITEM_NOT_FOUND`; 400
+`LESSON_PLAN_NO_GOAL` without an active goal). A 1:1 lesson without a plan gets an empty one (so the
+covered note lands in the history); a group lesson without a plan is 404 `LESSON_PLAN_NOT_FOUND`.
+`suggestedHomework` is the plan's: the portal hands `prompt` to the existing follow-up generator
+unchanged, `POST /api/v1/lessons/{lessonId}/draft-bundles { prompt, kinds: ["HOMEWORK"] }` (its
+free-text `prompt` ≤ 10 000; the suggestion is ≤ 2 000).
+
+```
+LessonHistory = { nextLesson: HistoryEntry | null, items: [HistoryEntry], total, page, pageSize }
+HistoryEntry {
+  lessonId, title, scheduledAt, status, durationMinutes, rawNotes?,
+  plan?: { id, lessonGoal?, status }, coveredNote?,
+  roadmapItems: [{ id, title, state }],          // items of the student's goals last checked in this lesson
+  homework: [{ id, assignmentId, title, status }]  // the student's homework from this lesson's assignments
+}
+```
+**History**: past lessons (scheduledAt ≤ now, cancelled included) newest first, paginated in SQL
+(`pageSize` default 20, ≤ 100); `nextLesson` (the upcoming `CONFIRMED` lesson) is on every page. A
+page costs a fixed number of queries whatever its size (a test counts them). Roadmap items store only
+the lesson they were *last* checked in, so an item re-checked later moves to the later lesson.
+
+### AI preparation
+
+Use case `LESSON_PREP` (default `claude-sonnet-5-5`, admin-switchable). The model gets only what the
+plan needs: the prep note; lesson minutes (the linked lesson's duration, else the goal's
+lessonMinutes, else 60), the student's CEFR level and the date; the goal's title, exam, target level
+and deadline; the current milestone (first not done) and the next one with topic, grammar points,
+word fields, exam part, teacher tips and items keyed `I1…` with their states; titles of items already
+done; open self-assessment mismatches (milestone, answer, comment ≤ 300); the last three earlier
+lessons (not cancelled) with raw notes (≤ 1 500), planned lessonGoal and covered note (≤ 800); the
+goal's interests (examples only, the prompt forbids inventing facts); the exam reference (as for the
+roadmap). No names (first/last name masked as `[Name]` in all free text), emails or other personal
+data. `explainInRussian` allows short Russian explanations in the teacher-facing text; default German.
+Prompt: `resources/ai/lesson-prep.md`. Output (validated, one retry with the problems): the
+PlanContent shape above, the time plan within ±5 minutes of the lesson, a `suggestedHomework`, and
+`roadmapItemIds` only from the given keys (mapped back to item uuids). Rough size: 3–5k input and
+2–3k output tokens, about $0.04 per preparation at Sonnet prices.
+
+### Tables (V37)
+
+`lesson_plans` (student_id / teacher_id CASCADE, goal_id SET NULL, lesson_id SET NULL with
+`uq_lesson_plans_lesson` WHERE NOT NULL, prep_note, explain_in_russian, plan JSONB?, covered_note?,
+status `LESSON_PLAN_STATUS`); `generation_jobs.lesson_plan_id` (SET NULL); `GENERATION_JOB_KIND` +
+LESSON_PREP.
+
+### Error codes
+
+| Code | Status | Notes |
+|---|---|---|
+| `NOT_FOUND` | 404 | flag `lessonPrep` off |
+| `LESSON_PLAN_NOT_FOUND` | 404 | also another teacher's plan; group lesson wrap-up without a plan |
+| `STUDENT_NOT_FOUND` | 404 | not the teacher's student |
+| `LESSON_NOT_FOUND` | 404 | wrap-up of another teacher's lesson |
+| `LESSON_PLAN_LESSON_INVALID` | 400 | `/lessonId` |
+| `LESSON_PLAN_ITEM_INVALID` | 400 | `/plan/roadmapItemIds/<i>` |
+| `LESSON_PLAN_NO_GOAL` | 400 | wrap-up itemStates without an active goal; `/itemStates` |
+| `LESSON_PLAN_EXISTS` | 409 | the lesson already has a plan |
+| `LESSON_PLAN_BUSY` | 409 | a LESSON_PREP job of the plan is QUEUED / RUNNING |
+| `LESSON_PLAN_DONE` | 409 | regenerate after the wrap-up |
+| `LESSON_PLAN_NOT_FOUND`, `LESSON_PLAN_DONE` | – | job `error.code`: deleted / wrapped up while the job ran |
 
 ## Lesson Changes
 
@@ -1350,7 +1474,7 @@ marked `FAILED` with `AI_INTERRUPTED`. A teacher may have at most `max_active_jo
 
 ```
 GenerationJob {
-  id, kind: GENERATE | REFINE | FILL_TRANSLATIONS | SUGGEST_TAGS | ROADMAP | MILESTONE_REGEN,
+  id, kind: GENERATE | REFINE | FILL_TRANSLATIONS | SUGGEST_TAGS | ROADMAP | MILESTONE_REGEN | LESSON_PREP,
   status: QUEUED | RUNNING | SUCCEEDED | FAILED,
   lessonId: uuid | null,            // lesson-scope drafts only
   materialId: uuid | null,          // SUGGEST_TAGS only
@@ -1358,11 +1482,13 @@ GenerationJob {
   documentId: uuid | null,          // REFINE of a document (see "Document draft revisions")
   bundleId: uuid | null,            // GENERATE / REFINE of a draft bundle
   goalId: uuid | null,              // ROADMAP / MILESTONE_REGEN (see "Goals & roadmap")
+  lessonPlanId: uuid | null,        // LESSON_PREP (see "Lesson preparation & history"); lessonId = the plan's lesson
   input: {
     notes?, prompt?, promptTemplateId?, pastLessonIds?, topicIds?, grammarTopicIds?, materialIds?,   // GENERATE
     instruction?, itemId?,                                                              // REFINE
     entryIds?, fields?,                                                                 // FILL_TRANSLATIONS
     replace?, milestoneId?                                                              // ROADMAP / MILESTONE_REGEN (+ instruction)
+    explainInRussian?                                                                   // LESSON_PREP (+ notes = the prep note)
   },
   result: object | null,            // only when SUCCEEDED. GENERATE/REFINE of a bundle: { bundleId, itemCount }
                                     // (the items are in the bundle); document REFINE: { documentId, draft: true };

@@ -30,7 +30,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * `[fake:error]`, `[fake:rate-limit]`, `[fake:delay=<ms>]`, `[fake:empty-once]`, `[fake:truncated]`,
  * `[fake:ignore-exclude]`, `[fake:suggest-tags]` (words also get a new topic, the library's Perfekt
  * and a new grammar topic), `[fake:dup-words]` (every word with an umlaut again, spelled out);
- * sentence feedback also `[fake:wrong]`. Roadmap and milestone answers are canned (see [roadmap]).
+ * sentence feedback also `[fake:wrong]`. Roadmap, milestone and lesson plan answers are canned (see [roadmap], [lessonPrep]).
  */
 class FakeLlmGateway : LlmGateway {
 
@@ -59,6 +59,7 @@ class FakeLlmGateway : LlmGateway {
             Prompts.TASK_SENTENCE_FEEDBACK -> sentenceFeedback(request, invalid)
             Prompts.TASK_ROADMAP -> roadmap(request, invalid)
             Prompts.TASK_MILESTONE_REGEN -> milestoneRegen(request, invalid)
+            Prompts.TASK_LESSON_PREP -> lessonPrep(request, invalid)
             else -> generate(request, invalid)
         }
         val text = output.toString()
@@ -331,6 +332,43 @@ class FakeLlmGateway : LlmGateway {
         val instruction = Prompts.section(request, "teacher_instructions").orEmpty().takeIf { it != NONE }
         val title = instruction?.let { "Neu: ${it.take(100)}" } ?: "Neu geplant"
         return buildJsonObject { put("milestone", fakeMilestone(title, invalid, null, null, listOf("SKILL", "EXAM"))) }
+    }
+
+    /**
+     * A plan filling the `<lesson>`'s "Minutes: n" that targets the first two `<roadmap>` item keys.
+     * Invalid: an unknown item key and a time plan 30 minutes too long.
+     */
+    private fun lessonPrep(request: String, invalid: Boolean): JsonObject {
+        val minutes = Prompts.section(request, "lesson").orEmpty().lineSequence()
+            .firstOrNull { it.startsWith("Minutes:") }?.removePrefix("Minutes:")?.trim()?.toIntOrNull() ?: 60
+        val keys = Prompts.section(request, "roadmap").orEmpty().lineSequence()
+            .mapNotNull { Regex("^(I\\d+) ").find(it)?.groupValues?.get(1) }.take(2).toList()
+        val grammar = (minutes - 10) / 2
+        val phases = listOf("WARMUP" to 5, "GRAMMAR" to grammar, "PRACTICE" to minutes - 10 - grammar, "WRAPUP" to 5 + if (invalid) 30 else 0)
+        return buildJsonObject {
+            put("lessonGoal", "Der Lernende kann sich vorstellen und Fragen mit du stellen.")
+            putJsonArray("timePlan") {
+                phases.forEach { (phase, m) ->
+                    add(buildJsonObject { put("phase", phase); put("title", "Phase $phase"); put("minutes", m); put("description", "Ablauf $phase") })
+                }
+            }
+            putJsonArray("phrases") { add(buildJsonObject { put("de", "Woher kommst du?"); put("note", "du-Form: -st") }) }
+            putJsonArray("vocabulary") {
+                add(buildJsonObject { put("lemma", "Beruf"); put("article", "der"); put("plural", "Berufe"); put("example", "Was ist dein Beruf?") })
+            }
+            putJsonArray("activities") {
+                add(buildJsonObject {
+                    put("type", "SPEAKING_CARDS"); put("title", "Fragekarten"); put("instructions", "Karten ziehen und Fragen stellen.")
+                    put("materialsNeeded", "10 Karten")
+                })
+            }
+            putJsonArray("skipIfShort") { add(JsonPrimitive("Rollenwechsel")) }
+            putJsonObject("suggestedHomework") {
+                put("summary", "Lückentext zu du-Formen.")
+                put("prompt", "Erstelle einen Lückentext mit 8 Sätzen zu den du-Formen im Präsens.")
+            }
+            putJsonArray("roadmapItemIds") { (if (invalid) keys + "I999" else keys).forEach { add(JsonPrimitive(it)) } }
+        }
     }
 
     private fun fakeMilestone(title: String, invalid: Boolean, from: LocalDate?, to: LocalDate?, kinds: List<String>) = buildJsonObject {

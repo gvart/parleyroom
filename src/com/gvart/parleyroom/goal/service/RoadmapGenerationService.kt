@@ -230,14 +230,7 @@ class RoadmapGenerationService(private val ai: AiRuntime, private val runner: Ge
         }
 
     /** The teacher's free text with the student's first and last name replaced by "[Name]". */
-    private fun mask(goal: ResultRow, text: String?): String? {
-        if (text.isNullOrBlank()) return text
-        val user = UserTable.select(UserTable.firstName, UserTable.lastName).where { UserTable.id eq goal[GoalTable.studentId] }.singleOrNull()
-            ?: return text
-        return listOf(user[UserTable.firstName], user[UserTable.lastName])
-            .filter { it.trim().length >= 2 }
-            .fold(text) { acc, name -> acc.replace(Regex("\\b${Regex.escape(name.trim())}\\b", RegexOption.IGNORE_CASE), "[Name]") }
-    }
+    private fun mask(goal: ResultRow, text: String?): String? = NameMask.forStudent(goal[GoalTable.studentId].value).mask(text)
 
     companion object {
         const val ROADMAP_MAX_TOKENS = 16_000

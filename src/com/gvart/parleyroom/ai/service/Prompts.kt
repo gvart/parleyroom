@@ -22,6 +22,7 @@ object Prompts {
     const val TASK_SENTENCE_FEEDBACK = "sentence_feedback"
     const val TASK_ROADMAP = "roadmap"
     const val TASK_MILESTONE_REGEN = "milestone_regen"
+    const val TASK_LESSON_PREP = "lesson_prep"
     const val VALIDATION_ERRORS = "validation_errors"
 
     /** Block types numbered "Übung n" in the portal; keep identical to `isExercise` in the portal's documents/lib/blocks.ts. */
@@ -54,6 +55,7 @@ object Prompts {
     val sentenceFeedbackSystem: String by lazy { resource("sentence-feedback-system.md") }
     val roadmapSystem: String by lazy { resource("roadmap.md") }
     val milestoneRegenSystem: String by lazy { resource("milestone-regen.md") }
+    val lessonPrepSystem: String by lazy { resource("lesson-prep.md") }
 
     /**
      * The curated reference (`ai/exams/<provider>-<level>.md`) for a goal's exam: telc when the name
@@ -89,6 +91,28 @@ object Prompts {
         section("goal", goal)
         section("roadmap", roadmap)
         roadmapNotes(teacherNotes, examReference, instruction)
+    }
+
+    /**
+     * The next lesson of one student: no name, email or other personal data (names in the teacher's
+     * text are masked by the caller). Absent parts are "(none)".
+     */
+    fun lessonPrep(
+        lesson: String, prepNote: String, goal: String?, roadmap: String?, doneItems: String?, hints: String?,
+        pastLessons: String?, interests: String?, examReference: String?, language: String,
+    ): String = buildString {
+        fun teacherText(value: String?) = value?.replace("</", "< /")?.takeIf { it.isNotBlank() } ?: NONE
+        section("task", TASK_LESSON_PREP)
+        section("lesson", lesson)
+        section("language", language)
+        section("prep_note", teacherText(prepNote))
+        section("goal", goal ?: NONE)
+        section("roadmap", teacherText(roadmap))
+        section("done_items", teacherText(doneItems))
+        section("self_assessment_hints", teacherText(hints))
+        section("past_lessons", teacherText(pastLessons))
+        section("interests", teacherText(interests))
+        section("exam_reference", examReference ?: NONE)
     }
 
     /** The teacher's free text: kept from closing our sections. */

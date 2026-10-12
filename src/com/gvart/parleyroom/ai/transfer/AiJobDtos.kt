@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 import java.time.OffsetDateTime
 
 /** What a job works on, so the task tray can name it and link to its review page. */
-enum class AiJobTargetType { LESSON, STUDENT, DOCUMENT, MATERIAL, VOCAB, GOAL }
+enum class AiJobTargetType { LESSON, STUDENT, DOCUMENT, MATERIAL, VOCAB, GOAL, LESSON_PLAN }
 
 /** One row of the teacher's AI task tray (GET /api/v1/ai/jobs): no input or result payloads. */
 @Serializable
@@ -30,6 +30,8 @@ data class AiJobSummary(
     val materialName: String? = null,
     /** ROADMAP / MILESTONE_REGEN (the student is in studentId / studentName). */
     val goalId: String? = null,
+    /** LESSON_PREP (the student is in studentId / studentName; a linked lesson in lessonId / lessonTitle). */
+    val lessonPlanId: String? = null,
     /** FILL_TRANSLATIONS: how many words get proposals. */
     val entryCount: Int? = null,
     /** GENERATE / REFINE of a draft: the parts worked on. */

@@ -10,6 +10,10 @@ import com.gvart.parleyroom.goal.transfer.MilestoneInput
 import com.gvart.parleyroom.goal.transfer.MilestonePatch
 import com.gvart.parleyroom.goal.transfer.MoveItemRequest
 import com.gvart.parleyroom.goal.transfer.RegenerateMilestoneRequest
+import com.gvart.parleyroom.lessonprep.transfer.CreateLessonPlanRequest
+import com.gvart.parleyroom.lessonprep.transfer.LessonPlanPatch
+import com.gvart.parleyroom.lessonprep.transfer.RegenerateLessonPlanRequest
+import com.gvart.parleyroom.lessonprep.transfer.WrapUpRequest
 import com.gvart.parleyroom.goal.transfer.ReorderRequest
 import com.gvart.parleyroom.goal.transfer.SelfAssessmentInput
 import com.auth0.jwt.JWT
@@ -245,6 +249,10 @@ fun Application.generalConfig() {
         validate<SelfAssessmentInput> { it.validate() }
         validate<GenerateRoadmapRequest> { it.validate() }
         validate<RegenerateMilestoneRequest> { it.validate() }
+        validate<CreateLessonPlanRequest> { it.validate() }
+        validate<RegenerateLessonPlanRequest> { it.validate() }
+        validate<LessonPlanPatch> { it.validate() }
+        validate<WrapUpRequest> { it.validate() }
     }
 
 

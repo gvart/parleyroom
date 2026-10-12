@@ -37,6 +37,8 @@ data class JobInput(
     val milestoneId: String? = null,
     /** ROADMAP: replace an existing roadmap. */
     val replace: Boolean? = null,
+    /** LESSON_PREP: short Russian explanations allowed in the teacher-facing notes ([notes] is the prep note). */
+    val explainInRussian: Boolean? = null,
 )
 
 @Serializable
@@ -59,6 +61,8 @@ data class GenerationJobResponse(
     val bundleId: String? = null,
     /** ROADMAP / MILESTONE_REGEN. */
     val goalId: String? = null,
+    /** LESSON_PREP. */
+    val lessonPlanId: String? = null,
     val input: JobInput,
     val result: JsonElement? = null,
     val error: JobError? = null,

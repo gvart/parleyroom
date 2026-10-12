@@ -14,6 +14,7 @@ import com.gvart.parleyroom.goal.config.configureGoalModule
 import com.gvart.parleyroom.group.config.configureGroupModule
 import com.gvart.parleyroom.homework.config.configureHomeworkModule
 import com.gvart.parleyroom.lesson.config.configureLessonModule
+import com.gvart.parleyroom.lessonprep.config.configureLessonPrepModule
 import com.gvart.parleyroom.material.config.configureMaterialModule
 import com.gvart.parleyroom.notification.config.configureNotificationModule
 import com.gvart.parleyroom.practice.config.configurePracticeModule
@@ -64,6 +65,8 @@ fun Application.module(
     configureAiModule()
     // After AI: roadmap generation runs as AI jobs.
     configureGoalModule()
+    // After goals: preparation reads the roadmap and wraps up through RoadmapService.
+    configureLessonPrepModule()
     configurePracticeModule()
     configureReminderModule()
     configureHealthRouting()
