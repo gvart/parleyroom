@@ -1,6 +1,9 @@
 package com.gvart.parleyroom.registration.routing
 
 
+import com.gvart.parleyroom.common.routing.idempotencyKeyHeader
+import com.gvart.parleyroom.common.routing.respondIdempotent
+import com.gvart.parleyroom.common.service.IdempotencyService
 import com.gvart.parleyroom.ai.service.OnboardingService
 import com.gvart.parleyroom.common.routing.getPathUUID
 import com.gvart.parleyroom.common.routing.requirePrincipal
@@ -34,6 +37,7 @@ import java.util.UUID
 fun Application.configureRegistrationModule() {
     val registrationService: RegistrationService by dependencies
     val passwordResetService: PasswordResetService by dependencies
+    val idempotency: IdempotencyService by dependencies
 
     dependencies {
         provide(RegistrationService::class)
@@ -83,9 +87,9 @@ fun Application.configureRegistrationModule() {
                 post<InviteUserRequest>("/invite") {
                     val principal = call.requirePrincipal()
 
-                    val result = registrationService.inviteUser(it, principal)
-                    call.respond(HttpStatusCode.Created, result)
+                    call.respondIdempotent(idempotency, it, HttpStatusCode.Created) { registrationService.inviteUser(it, principal) }
                 }.describe {
+                    idempotencyKeyHeader()
                     summary = "Invite user"
                     description = "Creates an invitation for a new user with a specified role and emails the registration link " +
                         "(${'$'}{APP_BASE_URL}/register?token=…&email=…). Requires authentication. " +

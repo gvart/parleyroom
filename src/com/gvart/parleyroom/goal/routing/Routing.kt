@@ -1,5 +1,8 @@
 package com.gvart.parleyroom.goal.routing
 
+import com.gvart.parleyroom.common.routing.idempotencyKeyHeader
+import com.gvart.parleyroom.common.routing.respondIdempotent
+import com.gvart.parleyroom.common.service.IdempotencyService
 import com.gvart.parleyroom.admin.data.FeatureFlag
 import com.gvart.parleyroom.admin.service.FeatureFlagService
 import com.gvart.parleyroom.ai.transfer.GenerationJobResponse
@@ -53,6 +56,7 @@ fun Application.configureGoalRouting() {
     val roadmap: RoadmapService by dependencies
     val generation: RoadmapGenerationService by dependencies
     val flags: FeatureFlagService by dependencies
+    val idempotency: IdempotencyService by dependencies
 
     // Feature flag `roadmap` (D-007): while it is off the goal routes do not exist.
     val roadmapFlag = createRouteScopedPlugin("RoadmapFeatureFlag") {
@@ -84,8 +88,9 @@ fun Application.configureGoalRouting() {
                 }
 
                 post<GoalInput> {
-                    call.respond(HttpStatusCode.Created, goals.create(it, call.requirePrincipal()))
+                    call.respondIdempotent(idempotency, it, HttpStatusCode.Created) { goals.create(it, call.requirePrincipal()) }
                 }.describe {
+                    idempotencyKeyHeader()
                     summary = "Create goal"
                     description = "Teacher only, for a linked student (403). At most one ACTIVE goal per student (409 GOAL_ACTIVE_EXISTS). " +
                             "Field errors are 400 VALIDATION_FAILED with errors[].pointer."

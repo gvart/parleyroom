@@ -5,6 +5,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.DefaultJson
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.request.path
 import io.ktor.server.response.respondText
 import kotlinx.serialization.descriptors.elementNames
 import kotlinx.serialization.serializerOrNull
@@ -12,10 +13,11 @@ import kotlinx.serialization.serializerOrNull
 /**
  * Responds with an RFC 9457 body as application/problem+json. Serialized by hand so it never
  * depends on content negotiation (an SSE client's Accept: text/event-stream would turn it into a 406).
+ * `instance` defaults to the request path.
  */
 suspend fun ApplicationCall.respondProblem(status: HttpStatusCode, problem: ProblemDetail) =
     respondText(
-        DefaultJson.encodeToString(ProblemDetail.serializer(), problem),
+        DefaultJson.encodeToString(ProblemDetail.serializer(), problem.copy(instance = problem.instance ?: request.path())),
         ContentType.Application.ProblemJson,
         status,
     )

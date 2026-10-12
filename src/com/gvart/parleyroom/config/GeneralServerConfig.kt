@@ -1,5 +1,7 @@
 package com.gvart.parleyroom.config
 
+import com.gvart.parleyroom.common.routing.IDEMPOTENCY_KEY_HEADER
+import com.gvart.parleyroom.common.routing.IDEMPOTENT_REPLAYED_HEADER
 import com.gvart.parleyroom.goal.transfer.BatchItemStatesRequest
 import com.gvart.parleyroom.goal.transfer.GenerateRoadmapRequest
 import com.gvart.parleyroom.goal.transfer.GoalInput
@@ -80,6 +82,7 @@ import com.gvart.parleyroom.user.transfer.UpdateProfileRequest
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.http.content.HttpStatusCodeContent
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -106,6 +109,8 @@ import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.routing.host
 import io.ktor.server.routing.routing
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.MissingFieldException
 import org.slf4j.event.Level
 import java.util.UUID
 import kotlin.time.Duration
@@ -164,6 +169,8 @@ fun Application.generalConfig() {
         allowHeader(HttpHeaders.ContentType)
         allowHeader(HttpHeaders.Accept)
         allowHeader(HttpHeaders.XRequestId)
+        allowHeader(IDEMPOTENCY_KEY_HEADER)
+        exposeHeader(IDEMPOTENT_REPLAYED_HEADER)
 
         config.property("cors.allowed_origins").getString()
             .split(",")
@@ -268,10 +275,21 @@ fun Application.generalConfig() {
             )
         }
         exception<ContentTransformationException> { call, cause ->
-            call.respondProblem(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, "MALFORMED_REQUEST"))
+            call.respondProblem(HttpStatusCode.BadRequest, malformedRequestProblem(cause))
         }
         exception<io.ktor.server.plugins.BadRequestException> { call, cause ->
-            call.respondProblem(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, "MALFORMED_REQUEST"))
+            call.respondProblem(HttpStatusCode.BadRequest, malformedRequestProblem(cause))
+        }
+
+        // The CORS plugin rejects with a bare 403; give it a body (curl, server-side callers; a browser
+        // can't read it, since the response has no Access-Control-Allow-Origin).
+        status(HttpStatusCode.Forbidden) { _: HttpStatusCode ->
+            if (content is HttpStatusCodeContent && call.request.headers[HttpHeaders.Origin] != null) {
+                call.respondProblem(
+                    HttpStatusCode.Forbidden,
+                    ProblemDetail.of(HttpStatusCode.Forbidden, "Origin, method or headers not allowed by CORS", "CORS_REJECTED"),
+                )
+            }
         }
 
         exception<UnauthorizedException> { call, cause ->
@@ -294,7 +312,7 @@ fun Application.generalConfig() {
             call.respondProblem(
                 HttpStatusCode.Conflict,
                 ProblemDetail.of(HttpStatusCode.Conflict, cause.message, cause.code ?: "CONFLICT")
-                    .copy(currentRevision = cause.currentRevision, usage = cause.usage),
+                    .copy(currentRevision = cause.currentRevision, usage = cause.usage, existingId = cause.existingId),
             )
         }
 
@@ -390,4 +408,31 @@ fun Application.generalConfig() {
             }
         }
     }
+}
+
+private val JSON_PATH = Regex("""at path:? (\$\S*)""")
+
+/**
+ * MALFORMED_REQUEST without Kotlin class names (Ktor and kotlinx.serialization put them in their messages):
+ * the missing fields, or the JSON pointer of the bad value when the parser reports one.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+private fun malformedRequestProblem(cause: Throwable): ProblemDetail {
+    val chain = generateSequence(cause) { it.cause }.toList()
+    val pointer = chain.firstNotNullOfOrNull { e -> e.message?.let { JSON_PATH.find(it)?.groupValues?.get(1) } }
+        ?.removePrefix("$")
+        ?.replace(Regex("""\[(\d+)]"""), ".$1")
+        ?.replace('.', '/')
+        ?.takeIf { it.isNotEmpty() }
+    chain.firstNotNullOfOrNull { it as? MissingFieldException }?.let { missing ->
+        val errors = missing.missingFields.map { FieldError("${pointer.orEmpty()}/$it", "MALFORMED_REQUEST", "$it is required") }
+        return ProblemDetail.of(HttpStatusCode.BadRequest, "Missing required fields: ${missing.missingFields.joinToString()}", "MALFORMED_REQUEST")
+            .copy(errors = errors)
+    }
+    return ProblemDetail.of(
+        HttpStatusCode.BadRequest,
+        if (pointer != null) "Invalid value at $pointer" else "Malformed request",
+        "MALFORMED_REQUEST",
+        pointer,
+    )
 }

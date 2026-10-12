@@ -28,6 +28,34 @@ Every error response is `Content-Type: application/problem+json`, whatever the r
   `*_HAS_CONTENT`), `resetsAt` (429 `PRACTICE_SENTENCE_LIMIT`).
 - 400 `BAD_REQUEST` from an internal argument check now says only `"Invalid request"`; the
   exception text is logged, not returned.
+- `instance` is the request path (e.g. `/api/v1/lessons`).
+- 400 `MALFORMED_REQUEST` (body not parseable into the endpoint's shape) never names server classes:
+  missing fields → `detail: "Missing required fields: a, b"` with one `errors[]` entry per field
+  (`pointer` `/a`, nested ones prefixed by their path); a bad value the parser can locate (wrong type,
+  unknown enum constant) → `detail: "Invalid value at /type"` with `pointer`; otherwise `"Malformed request"`.
+- 403 `CORS_REJECTED`: a request whose `Origin` (or preflight method/headers) is not allowed now gets a
+  problem body instead of an empty 403. Browsers still can't read it (no `Access-Control-Allow-Origin`),
+  so it helps curl and server-side callers; a portal seeing an opaque network error on login should
+  suspect the CORS allowlist rather than the credentials.
+
+## Idempotency keys (create endpoints)
+
+`POST /api/v1/lessons`, `POST /api/v1/assignments`, `POST /api/v1/goals`, `POST /api/v1/registration/invite` and
+`POST /api/v1/lesson-plans` take an optional `Idempotency-Key` header (1..255 chars; send a fresh UUID per submit
+and reuse it for retries of that submit). Without the header nothing changes.
+
+- The key is scoped to the caller and kept 24h (`idempotency_keys`, V39). The request is identified by method,
+  path and a SHA-256 of the body as the server parsed it (whitespace and key order don't matter).
+- Same key + same request → the first **successful** response is replayed: same status and body, plus
+  `Idempotent-Replayed: true` (exposed to browsers via CORS). Nothing is created again.
+- Same key + other route or body → 422 `IDEMPOTENCY_KEY_REUSED`.
+- Same key while the first request is still running → 409 `IDEMPOTENCY_REQUEST_IN_PROGRESS` (retry shortly; it
+  then replays). A claim still running after 60s counts as abandoned (e.g. the pod died) and the next request
+  with the key takes it over; the abandoned request, should it still finish, no longer stores its response.
+- Errors are not stored: a failed request frees the key, so a corrected retry may use it again.
+- Blank or longer than 255 chars → 400 `IDEMPOTENCY_KEY_INVALID`.
+- Expired keys are deleted by their own job (`idempotency.cleanup_interval`, default 1h, independent of
+  `reminders.enabled`); an expired key is also reclaimed on use.
 
 ## Feature flags
 
@@ -1021,6 +1049,7 @@ While the flag `lessonPrep` is off every route below answers **404 `NOT_FOUND`**
 ```
 POST   /api/v1/lesson-plans                  { studentId, prepNote, lessonId?, explainInRussian? } -> 202 LessonPlan (+ job)
 GET    /api/v1/lesson-plans/{id}                              -> LessonPlan
+GET    /api/v1/lessons/{lessonId}/plan                       -> LessonPlan   (404 LESSON_PLAN_NOT_FOUND without one)
 PATCH  /api/v1/lesson-plans/{id}             LessonPlanPatch  -> LessonPlan
 POST   /api/v1/lesson-plans/{id}/regenerate  { prepNote?, explainInRussian? } -> 202 LessonPlan (+ job)
 DELETE /api/v1/lesson-plans/{id}                              -> 204
@@ -1036,7 +1065,7 @@ any teacher's); pending requests (`REQUEST`) and rejected participations never c
 
 **Create.** `prepNote` 1..4 000. `lessonId` must be a lesson of the teacher with the student (400
 `LESSON_PLAN_LESSON_INVALID`, `/lessonId`); without it the student's next upcoming `CONFIRMED` lesson
-that has no plan yet is linked (none → unlinked). One plan per lesson (409 `LESSON_PLAN_EXISTS`). The
+that has no plan yet is linked (none → unlinked). One plan per lesson (409 `LESSON_PLAN_EXISTS`, `existingId` = that plan's id, so a client can open it). The
 student's `ACTIVE` goal (of this teacher) is attached. Answers 202 with the plan (`plan: null`) and its
 `job`; poll `GET /api/v1/ai/jobs/{id}` (tray `targetType: LESSON_PLAN`, `lessonPlanId`) or the plan.
 **Regenerate** keeps the lesson link, optionally replaces prepNote / explainInRussian, and replaces
@@ -1087,8 +1116,10 @@ HistoryEntry {
   homework: [{ id, assignmentId, title, status }]  // the student's homework from this lesson's assignments
 }
 ```
-**History**: past lessons (scheduledAt ≤ now, cancelled included) newest first, paginated in SQL
-(`pageSize` default 20, ≤ 100); `nextLesson` (the upcoming `CONFIRMED` lesson) is on every page. A
+**History**: lessons that took place — scheduledAt ≤ now (cancelled included), or taught early
+(`IN_PROGRESS`, `COMPLETED`, or wrapped up = plan `DONE`) — newest first, paginated in SQL
+(`pageSize` default 20, ≤ 100); `nextLesson` (the upcoming `CONFIRMED` lesson that is not wrapped up yet;
+also what `next-lesson-prep` returns) is on every page. A
 page costs a fixed number of queries whatever its size (a test counts them). Roadmap items store only
 the lesson they were *last* checked in, so an item re-checked later moves to the later lesson.
 
@@ -1146,6 +1177,11 @@ filter or page, so a client can show the bell's count from any page. `unread` ot
 `VALIDATION_FAILED` (pointer `/unread`). Notifications with a future `deliverAfter` are neither listed nor counted.
 `viewed-all` marks every delivered unread notification of the caller viewed and answers how many changed; a repeat
 answers `{ "updated": 0 }`. Neither route touches other users' notifications.
+
+Each notification embeds its actor, `actor: { id, firstName, lastName, role, avatarUrl? }` (the list and the SSE
+push alike; `avatarUrl` is the same URL as `UserResponse.avatarUrl`, null without an avatar), so clients need no
+`/users` lookup to render names or avatars. Lesson participants carry the same optional `avatarUrl`:
+`LessonResponse.teacher.avatarUrl` and `students[].avatarUrl`.
 
 ## Teacher reminders & Needs attention (feature flag `teacherReminders`)
 
@@ -1221,9 +1257,28 @@ one, absent = never). `BEHIND` / `MISMATCH` need `roadmap`; `NOT_WRAPPED_UP` as 
 
 ## Lesson Changes
 
+### New: list filters (`GET /api/v1/lessons`)
+Server-side filters, all optional and combined with AND inside the caller's normal scope
+(teacher: own lessons; student: own seats + the linked teachers' scrubbed schedule; admin: all):
+
+| Param | Meaning |
+|---|---|
+| `studentId` | lessons where that student has a `CONFIRMED` or `REQUESTED` seat. Students may only pass their own id (403 otherwise); a teacher gets only their own lessons with that student |
+| `status` | `CONFIRMED`, `REQUEST`, `CANCELLED`, `COMPLETED`, `IN_PROGRESS`; repeat the param or use a comma list |
+| `upcoming` | `true`: `scheduledAt >= now` or `IN_PROGRESS`; `false`: `scheduledAt < now` and not `IN_PROGRESS` |
+| `order` | `asc` (default) or `desc` by `scheduledAt`, then `id` |
+| `from` / `to` | unchanged: `scheduledAt` within `[from, to]` |
+
+Bad values → 400 `LESSON_FILTER_INVALID` with `pointer` `/status`, `/upcoming` or `/order`.
+Examples: next lesson `?studentId=…&upcoming=true&status=CONFIRMED,IN_PROGRESS&pageSize=1`;
+history `?studentId=…&upcoming=false&order=desc`.
+
+`pageSize` above the maximum (100, or 500 with both `from` and `to`) is still clamped, not
+rejected; the response's `pageSize` is the size actually applied, so page through `total` with it.
+
 ### New: Teacher in lesson responses
 Every `LessonResponse` (list, detail, and the lesson returned by mutations) now includes
-`teacher: { id, firstName, lastName }` next to the existing `teacherId`.
+`teacher: { id, firstName, lastName, avatarUrl? }` next to the existing `teacherId`.
 
 ### New: Cancel endpoint
 ```
@@ -2186,6 +2241,8 @@ on `PRACTICE_SENTENCE_LIMIT`).
 
 Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATION_FAILED`,
 `MALFORMED_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_ERROR`.
+Idempotency keys: `IDEMPOTENCY_KEY_INVALID` (400), `IDEMPOTENCY_KEY_REUSED` (422),
+`IDEMPOTENCY_REQUEST_IN_PROGRESS` (409).
 
 | Area | Codes |
 |---|---|
@@ -2193,7 +2250,7 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 | Telegram | `TELEGRAM_NOT_LINKED`, `TELEGRAM_ALREADY_LINKED`, `TELEGRAM_NOT_CONFIGURED`, `TELEGRAM_AUTH_INVALID`, `TELEGRAM_AUTH_EXPIRED`, `TELEGRAM_UNREACHABLE` (409), `TELEGRAM_SEND_FAILED` (502) |
 | Users | `USER_NOT_FOUND`, `TEACHER_NOT_FOUND`, `EMAIL_ALREADY_EXISTS`, `UNSUPPORTED_LOCALE`, `UNSUPPORTED_NATIVE_LANGUAGE`, `NATIVE_LANGUAGE_STUDENTS_ONLY`, `APPROVAL_SETTINGS_TEACHERS_ONLY`, `AVATAR_INVALID`, `AVATAR_NOT_FOUND`, `ADMIN_SELF_ACTION` |
 | Registration / reset | `INVITATION_ALREADY_PENDING`, `REGISTRATION_LINK_INVALID`, `REGISTRATION_LINK_EXPIRED`, `REGISTRATION_LINK_USED`, `RESET_TOKEN_INVALID`, `RESET_TOKEN_EXPIRED`, `RESET_TOKEN_USED` |
-| Lessons | `LESSON_NOT_FOUND`, `LESSON_INVALID_STATE`, `CLUB_FULL`, `NOT_TEACHERS_STUDENT`, `LESSON_NOT_JOINABLE`, `LESSON_ALREADY_STARTED`, `LESSON_NOT_STARTED`, `ALREADY_PARTICIPANT`, `STUDENT_NOT_IN_LESSON`, `JOIN_REQUEST_ALREADY_PENDING`, `JOIN_REQUEST_NOT_FOUND`, `RESCHEDULE_ALREADY_PENDING`, `RESCHEDULE_NOT_FOUND`, `VIDEO_ROOM_NOT_READY` |
+| Lessons | `LESSON_NOT_FOUND`, `LESSON_FILTER_INVALID`, `LESSON_INVALID_STATE`, `CLUB_FULL`, `NOT_TEACHERS_STUDENT`, `LESSON_NOT_JOINABLE`, `LESSON_ALREADY_STARTED`, `LESSON_NOT_STARTED`, `ALREADY_PARTICIPANT`, `STUDENT_NOT_IN_LESSON`, `JOIN_REQUEST_ALREADY_PENDING`, `JOIN_REQUEST_NOT_FOUND`, `RESCHEDULE_ALREADY_PENDING`, `RESCHEDULE_NOT_FOUND`, `VIDEO_ROOM_NOT_READY` |
 | Availability | `AVAILABILITY_SLOT_BLOCKED`, `AVAILABILITY_MIN_NOTICE`, `AVAILABILITY_OVERLAP`, `AVAILABILITY_BUFFER_CONFLICT`, `AVAILABILITY_EXCEPTION_NOT_FOUND` |
 | Materials | `MATERIAL_NOT_FOUND`, `MATERIAL_FILE_NOT_FOUND`, `FOLDER_NOT_FOUND`, `TARGET_FOLDER_NOT_FOUND`, `FOLDER_NOT_EMPTY`, `FOLDER_NAME_TAKEN`, `FOLDER_CYCLE`, `FILE_TOO_LARGE` |
 | Homework | `ASSIGNMENT_NOT_FOUND`, `ASSIGNMENT_NO_STUDENTS`, `HOMEWORK_NOT_FOUND`, `HOMEWORK_ITEM_INVALID` (+ `pointer`), `HOMEWORK_ANSWER_INVALID` (+ `pointer`), `HOMEWORK_INVALID_STATE` (409), `SUBMISSION_LOCKED` (409), `UPLOAD_TYPE_NOT_ALLOWED`, `UPLOAD_LIMIT_REACHED` (409), `HOMEWORK_UPLOAD_NOT_FOUND` |

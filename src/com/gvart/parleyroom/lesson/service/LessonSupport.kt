@@ -26,6 +26,7 @@ import com.gvart.parleyroom.topic.service.LibraryAccess
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
 import com.gvart.parleyroom.user.security.UserPrincipal
+import com.gvart.parleyroom.user.transfer.avatarUrl
 import com.gvart.parleyroom.vocabulary.data.LessonVocabTable
 import com.gvart.parleyroom.vocabulary.data.VocabEntryTable
 import com.gvart.parleyroom.vocabulary.service.VocabDisplay
@@ -190,6 +191,7 @@ class LessonSupport {
                     firstName = studentRow[UserTable.firstName],
                     lastName = studentRow[UserTable.lastName],
                     status = studentRow[LessonStudentTable.status].name,
+                    avatarUrl = avatarUrl(studentRow[UserTable.id].value, studentRow[UserTable.avatarUrl]),
                 )
             }
 
@@ -200,6 +202,7 @@ class LessonSupport {
                     id = teacherRow[UserTable.id].value.toString(),
                     firstName = teacherRow[UserTable.firstName],
                     lastName = teacherRow[UserTable.lastName],
+                    avatarUrl = avatarUrl(teacherRow[UserTable.id].value, teacherRow[UserTable.avatarUrl]),
                 )
             }
 

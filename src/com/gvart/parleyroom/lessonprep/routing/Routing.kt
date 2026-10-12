@@ -1,5 +1,8 @@
 package com.gvart.parleyroom.lessonprep.routing
 
+import com.gvart.parleyroom.common.routing.idempotencyKeyHeader
+import com.gvart.parleyroom.common.routing.respondIdempotent
+import com.gvart.parleyroom.common.service.IdempotencyService
 import com.gvart.parleyroom.admin.data.FeatureFlag
 import com.gvart.parleyroom.admin.service.FeatureFlagService
 import com.gvart.parleyroom.common.routing.getPathUUID
@@ -40,6 +43,7 @@ fun Application.configureLessonPrepRouting() {
     val prep: LessonPrepService by dependencies
     val history: LessonHistoryService by dependencies
     val flags: FeatureFlagService by dependencies
+    val idempotency: IdempotencyService by dependencies
 
     // Feature flag `lessonPrep` (D-007): while it is off these routes do not exist.
     val lessonPrepFlag = createRouteScopedPlugin("LessonPrepFeatureFlag") {
@@ -52,8 +56,9 @@ fun Application.configureLessonPrepRouting() {
                 install(lessonPrepFlag)
 
                 post<CreateLessonPlanRequest> {
-                    call.respond(HttpStatusCode.Accepted, prep.create(it, call.requirePrincipal()))
+                    call.respondIdempotent(idempotency, it, HttpStatusCode.Accepted) { prep.create(it, call.requirePrincipal()) }
                 }.describe {
+                    idempotencyKeyHeader()
                     summary = "Prepare a lesson with AI"
                     description = "$STUDENT $JOB Links lessonId (a lesson of the teacher with the student) or, without it, the " +
                             "student's next upcoming CONFIRMED lesson that has no plan yet (none: unlinked). The student's ACTIVE goal " +
@@ -62,7 +67,7 @@ fun Application.configureLessonPrepRouting() {
                     responses {
                         HttpStatusCode.Accepted { description = "The plan (plan null until the job succeeds) with its job"; schema = jsonSchema<LessonPlanResponse>() }
                         HttpStatusCode.BadRequest { description = "VALIDATION_FAILED, LESSON_PLAN_LESSON_INVALID"; schema = jsonSchema<ProblemDetail>() }
-                        HttpStatusCode.Conflict { description = "LESSON_PLAN_EXISTS (the lesson has a plan)"; schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.Conflict { description = "LESSON_PLAN_EXISTS (the lesson has a plan; existingId is its id)"; schema = jsonSchema<ProblemDetail>() }
                         HttpStatusCode.TooManyRequests { description = "AI_RATE_LIMITED"; schema = jsonSchema<ProblemDetail>() }
                         HttpStatusCode.ServiceUnavailable { description = "AI_NOT_CONFIGURED"; schema = jsonSchema<ProblemDetail>() }
                     }
@@ -125,6 +130,24 @@ fun Application.configureLessonPrepRouting() {
                 }
             }
 
+            route("/api/v1/lessons/{lessonId}/plan") {
+                install(lessonPrepFlag)
+
+                get {
+                    call.respond(prep.getByLesson(call.getPathUUID("lessonId"), call.requirePrincipal()))
+                }.describe {
+                    summary = "Get a lesson's plan"
+                    description = "$PLAN The plan linked to the lesson (at most one), as GET /lesson-plans/{id}."
+                    parameters { path("lessonId") { description = "Lesson UUID" } }
+                    responses {
+                        HttpStatusCode.OK { schema = jsonSchema<LessonPlanResponse>() }
+                        HttpStatusCode.NotFound {
+                            description = "LESSON_PLAN_NOT_FOUND (no plan, or another teacher's)"; schema = jsonSchema<ProblemDetail>()
+                        }
+                    }
+                }
+            }
+
             route("/api/v1/lessons/{lessonId}/wrap-up") {
                 install(lessonPrepFlag)
 
@@ -158,9 +181,10 @@ fun Application.configureLessonPrepRouting() {
                     call.respond(history.history(call.getPathUUID("studentId"), call.requirePrincipal(), PageRequest.from(call)))
                 }.describe {
                     summary = "A student's lesson history"
-                    description = "$STUDENT Past lessons of the teacher with the student (admins: all), newest first, paginated, " +
+                    description = "$STUDENT Lessons of the teacher with the student that took place (admins: all): scheduled in the past, " +
+                            "or taught early (IN_PROGRESS, COMPLETED or wrapped up), newest first, paginated, " +
                             "with raw notes, the plan (lessonGoal, status), covered note, roadmap items checked in the lesson and the " +
-                            "student's homework from it. nextLesson: the upcoming CONFIRMED lesson, on every page."
+                            "student's homework from it. nextLesson: the upcoming CONFIRMED lesson not wrapped up yet, on every page."
                     parameters {
                         path("studentId") { description = "Student UUID" }
                         query("page") { description = "1-based page (default 1)"; required = false }

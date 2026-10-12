@@ -130,4 +130,18 @@ class NotificationUnreadIntegrationTest : IntegrationTest() {
         }
         assertEquals(1, page(client, token).unreadCount)
     }
+
+    @Test
+    fun `actor carries display info and avatarUrl`() = testApp {
+        val client = createJsonClient(this)
+        val token = getStudentToken(client)
+        transaction { exec("UPDATE users SET avatar_url = 'avatars/$TEACHER_ID/abc.png' WHERE id = '$TEACHER_ID'") }
+        notify(STUDENT_ID)
+
+        val actor = page(client, token).notifications.single().actor
+        assertEquals(TEACHER_ID, actor.id)
+        assertEquals("Test", actor.firstName)
+        assertEquals("Teacher", actor.lastName)
+        assertEquals("/api/v1/users/$TEACHER_ID/avatar?v=abc.png", actor.avatarUrl)
+    }
 }

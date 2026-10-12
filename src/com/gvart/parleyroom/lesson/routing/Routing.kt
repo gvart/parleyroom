@@ -1,12 +1,19 @@
 package com.gvart.parleyroom.lesson.routing
 
 
+import com.gvart.parleyroom.common.routing.idempotencyKeyHeader
+import com.gvart.parleyroom.common.routing.respondIdempotent
+import com.gvart.parleyroom.common.service.IdempotencyService
 import com.gvart.parleyroom.common.routing.getPathUUID
+import com.gvart.parleyroom.common.routing.getQueryUUID
 import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.common.transfer.PageRequest
 import com.gvart.parleyroom.common.transfer.ProblemDetail
+import com.gvart.parleyroom.common.transfer.exception.BadRequestException
+import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.lesson.service.LessonContentService
 import com.gvart.parleyroom.lesson.service.LessonLifecycleService
+import com.gvart.parleyroom.lesson.service.LessonListFilter
 import com.gvart.parleyroom.lesson.service.LessonParticipantService
 import com.gvart.parleyroom.lesson.service.LessonRescheduleService
 import com.gvart.parleyroom.lesson.service.LessonService
@@ -49,6 +56,7 @@ fun Application.configureLessonRouting() {
     val participantService: LessonParticipantService by dependencies
     val rescheduleService: LessonRescheduleService by dependencies
     val contentService: LessonContentService by dependencies
+    val idempotency: IdempotencyService by dependencies
 
     routing {
         // Public (no auth) teacher calendar — used by the portal's shareable
@@ -91,17 +99,35 @@ fun Application.configureLessonRouting() {
             route("/api/v1/lessons") {
                 get {
                     val principal = call.requirePrincipal()
-                    val from = call.request.queryParameters["from"]?.let(OffsetDateTime::parse)
-                    val to = call.request.queryParameters["to"]?.let(OffsetDateTime::parse)
+                    val params = call.request.queryParameters
+                    val from = params["from"]?.let(OffsetDateTime::parse)
+                    val to = params["to"]?.let(OffsetDateTime::parse)
+                    val statuses = params.getAll("status")?.flatMap { it.split(',') }?.map { raw ->
+                        LessonStatus.entries.firstOrNull { it.name == raw.trim() }
+                            ?: throw BadRequestException("Unknown lesson status: $raw", "LESSON_FILTER_INVALID", "/status")
+                    }
+                    val upcoming = params["upcoming"]?.let {
+                        it.toBooleanStrictOrNull()
+                            ?: throw BadRequestException("upcoming must be true or false", "LESSON_FILTER_INVALID", "/upcoming")
+                    }
+                    val descending = when (params["order"]) {
+                        null, "asc" -> false
+                        "desc" -> true
+                        else -> throw BadRequestException("order must be asc or desc", "LESSON_FILTER_INVALID", "/order")
+                    }
+                    val filter = LessonListFilter(from, to, call.getQueryUUID("studentId"), statuses, upcoming, descending)
 
                     // A bounded range is how the calendar loads a visible period in one request.
                     val maxPageSize = if (from != null && to != null) RANGE_MAX_PAGE_SIZE else PageRequest.MAX_PAGE_SIZE
 
-                    val result = lessonService.getLessons(principal, from, to, PageRequest.from(call, maxPageSize))
+                    val result = lessonService.getLessons(principal, filter, PageRequest.from(call, maxPageSize))
                     call.respond(HttpStatusCode.OK, result)
                 }.describe {
                     summary = "Get lessons"
-                    description = "Retrieves a paginated list of lessons for the authenticated user. Teachers see their lessons, students see confirmed lessons they participate in, admins see all. Supports date range filtering via 'from' and 'to' query parameters (ISO 8601 with offset; scheduledAt within [from, to]). Always ordered by scheduledAt ascending, then id. When both 'from' and 'to' are given, pageSize may go up to 500."
+                    description = "Retrieves a paginated list of lessons for the authenticated user. Teachers see their lessons, students see confirmed lessons they participate in plus their teachers' non-cancelled schedule (scrubbed), admins see all. " +
+                            "Filters narrow that scope and combine with AND: 'from'/'to' (scheduledAt within [from, to]), 'studentId' (lessons with a non-rejected seat for that student; students may only pass their own id, 403 otherwise), " +
+                            "'status' (repeatable or comma list), 'upcoming' (true: not started yet or IN_PROGRESS; false: started in the past and not running). " +
+                            "Ordered by scheduledAt then id, ascending unless order=desc. pageSize above the maximum is clamped, never rejected: the response's pageSize is the effective one, so page through 'total' with it."
                     parameters {
                         query("from") {
                             description = "Start of date range (ISO 8601, e.g. 2026-04-01T00:00:00+02:00)"
@@ -111,12 +137,28 @@ fun Application.configureLessonRouting() {
                             description = "End of date range (ISO 8601, e.g. 2026-04-30T23:59:59+02:00)"
                             required = false
                         }
+                        query("studentId") {
+                            description = "Only lessons the student has a CONFIRMED or REQUESTED seat in"
+                            required = false
+                        }
+                        query("status") {
+                            description = "CONFIRMED, REQUEST, CANCELLED, COMPLETED, IN_PROGRESS; repeat the parameter or use a comma list (400 LESSON_FILTER_INVALID otherwise)"
+                            required = false
+                        }
+                        query("upcoming") {
+                            description = "true: scheduledAt >= now or IN_PROGRESS; false: scheduledAt < now and not IN_PROGRESS"
+                            required = false
+                        }
+                        query("order") {
+                            description = "asc (default) or desc by scheduledAt; desc lists the most recent first"
+                            required = false
+                        }
                         query("page") {
                             description = "Page number (1-based, default 1)"
                             required = false
                         }
                         query("pageSize") {
-                            description = "Number of lessons per page (default 20, max 100; max 500 when both from and to are given)"
+                            description = "Number of lessons per page (default 20, max 100; max 500 when both from and to are given). Larger values are clamped; the response's pageSize is the one applied."
                             required = false
                         }
                     }
@@ -125,8 +167,16 @@ fun Application.configureLessonRouting() {
                             description = "Paginated list of lessons"
                             schema = jsonSchema<LessonPageResponse>()
                         }
+                        HttpStatusCode.BadRequest {
+                            description = "LESSON_FILTER_INVALID (pointer names the query parameter), BAD_REQUEST for a malformed studentId"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
                         HttpStatusCode.Unauthorized {
                             description = "Missing or invalid authentication token"
+                            schema = jsonSchema<ProblemDetail>()
+                        }
+                        HttpStatusCode.Forbidden {
+                            description = "A student filtered by another student's id"
                             schema = jsonSchema<ProblemDetail>()
                         }
                     }
@@ -135,9 +185,9 @@ fun Application.configureLessonRouting() {
                 post<CreateLessonRequest> {
                     val principal = call.requirePrincipal()
 
-                    val result = lifecycleService.createLesson(it, principal)
-                    call.respond(HttpStatusCode.Created, result)
+                    call.respondIdempotent(idempotency, it, HttpStatusCode.Created) { lifecycleService.createLesson(it, principal) }
                 }.describe {
+                    idempotencyKeyHeader()
                     summary = "Create lesson"
                     description = "Creates a new lesson. Students can only create ONE_ON_ONE lessons, as a REQUEST (or CONFIRMED when the teacher has autoConfirmBookings on); teachers and admins can create any type. offline = true (teachers/admins only) creates an in-person lesson without a video room."
                     requestBody {

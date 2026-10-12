@@ -7,4 +7,5 @@ class ConflictException(
     val code: String? = null,
     val currentRevision: Int? = null,
     val usage: TagUsage? = null,
+    val existingId: String? = null,
 ) : Exception(message)
