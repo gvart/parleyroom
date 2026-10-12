@@ -29,6 +29,23 @@ Every error response is `Content-Type: application/problem+json`, whatever the r
 - 400 `BAD_REQUEST` from an internal argument check now says only `"Invalid request"`; the
   exception text is logged, not returned.
 
+## Idempotency keys (create endpoints)
+
+`POST /api/v1/lessons`, `POST /api/v1/assignments`, `POST /api/v1/goals`, `POST /api/v1/registration/invite` and
+`POST /api/v1/lesson-plans` take an optional `Idempotency-Key` header (1..255 chars; send a fresh UUID per submit
+and reuse it for retries of that submit). Without the header nothing changes.
+
+- The key is scoped to the caller and kept 24h (`idempotency_keys`, V39). The request is identified by method,
+  path and a SHA-256 of the body as the server parsed it (whitespace and key order don't matter).
+- Same key + same request → the first **successful** response is replayed: same status and body, plus
+  `Idempotent-Replayed: true` (exposed to browsers via CORS). Nothing is created again.
+- Same key + other route or body → 422 `IDEMPOTENCY_KEY_REUSED`.
+- Same key while the first request is still running → 409 `IDEMPOTENCY_REQUEST_IN_PROGRESS` (retry shortly; it
+  then replays).
+- Errors are not stored: a failed request frees the key, so a corrected retry may use it again.
+- Blank or longer than 255 chars → 400 `IDEMPOTENCY_KEY_INVALID`.
+- Expired keys are deleted by the reminder job loop (`reminders.interval`); an expired key is also reclaimed on use.
+
 ## Feature flags
 
 Server-side booleans for features that ship dark; all default to `false`. Flags: `roadmap`,
@@ -2210,6 +2227,8 @@ on `PRACTICE_SENTENCE_LIMIT`).
 
 Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATION_FAILED`,
 `MALFORMED_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_ERROR`.
+Idempotency keys: `IDEMPOTENCY_KEY_INVALID` (400), `IDEMPOTENCY_KEY_REUSED` (422),
+`IDEMPOTENCY_REQUEST_IN_PROGRESS` (409).
 
 | Area | Codes |
 |---|---|

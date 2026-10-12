@@ -1,5 +1,8 @@
 package com.gvart.parleyroom.lessonprep.routing
 
+import com.gvart.parleyroom.common.routing.idempotencyKeyHeader
+import com.gvart.parleyroom.common.routing.respondIdempotent
+import com.gvart.parleyroom.common.service.IdempotencyService
 import com.gvart.parleyroom.admin.data.FeatureFlag
 import com.gvart.parleyroom.admin.service.FeatureFlagService
 import com.gvart.parleyroom.common.routing.getPathUUID
@@ -40,6 +43,7 @@ fun Application.configureLessonPrepRouting() {
     val prep: LessonPrepService by dependencies
     val history: LessonHistoryService by dependencies
     val flags: FeatureFlagService by dependencies
+    val idempotency: IdempotencyService by dependencies
 
     // Feature flag `lessonPrep` (D-007): while it is off these routes do not exist.
     val lessonPrepFlag = createRouteScopedPlugin("LessonPrepFeatureFlag") {
@@ -52,8 +56,9 @@ fun Application.configureLessonPrepRouting() {
                 install(lessonPrepFlag)
 
                 post<CreateLessonPlanRequest> {
-                    call.respond(HttpStatusCode.Accepted, prep.create(it, call.requirePrincipal()))
+                    call.respondIdempotent(idempotency, it, HttpStatusCode.Accepted) { prep.create(it, call.requirePrincipal()) }
                 }.describe {
+                    idempotencyKeyHeader()
                     summary = "Prepare a lesson with AI"
                     description = "$STUDENT $JOB Links lessonId (a lesson of the teacher with the student) or, without it, the " +
                             "student's next upcoming CONFIRMED lesson that has no plan yet (none: unlinked). The student's ACTIVE goal " +

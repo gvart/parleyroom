@@ -1,6 +1,9 @@
 package com.gvart.parleyroom.lesson.routing
 
 
+import com.gvart.parleyroom.common.routing.idempotencyKeyHeader
+import com.gvart.parleyroom.common.routing.respondIdempotent
+import com.gvart.parleyroom.common.service.IdempotencyService
 import com.gvart.parleyroom.common.routing.getPathUUID
 import com.gvart.parleyroom.common.routing.getQueryUUID
 import com.gvart.parleyroom.common.routing.requirePrincipal
@@ -53,6 +56,7 @@ fun Application.configureLessonRouting() {
     val participantService: LessonParticipantService by dependencies
     val rescheduleService: LessonRescheduleService by dependencies
     val contentService: LessonContentService by dependencies
+    val idempotency: IdempotencyService by dependencies
 
     routing {
         // Public (no auth) teacher calendar — used by the portal's shareable
@@ -181,9 +185,9 @@ fun Application.configureLessonRouting() {
                 post<CreateLessonRequest> {
                     val principal = call.requirePrincipal()
 
-                    val result = lifecycleService.createLesson(it, principal)
-                    call.respond(HttpStatusCode.Created, result)
+                    call.respondIdempotent(idempotency, it, HttpStatusCode.Created) { lifecycleService.createLesson(it, principal) }
                 }.describe {
+                    idempotencyKeyHeader()
                     summary = "Create lesson"
                     description = "Creates a new lesson. Students can only create ONE_ON_ONE lessons, as a REQUEST (or CONFIRMED when the teacher has autoConfirmBookings on); teachers and admins can create any type. offline = true (teachers/admins only) creates an in-person lesson without a video room."
                     requestBody {

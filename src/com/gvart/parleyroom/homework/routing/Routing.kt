@@ -1,5 +1,8 @@
 package com.gvart.parleyroom.homework.routing
 
+import com.gvart.parleyroom.common.routing.idempotencyKeyHeader
+import com.gvart.parleyroom.common.routing.respondIdempotent
+import com.gvart.parleyroom.common.service.IdempotencyService
 import com.gvart.parleyroom.common.routing.getPathUUID
 import com.gvart.parleyroom.common.routing.getQueryUUID
 import com.gvart.parleyroom.common.routing.requirePrincipal
@@ -57,13 +60,15 @@ fun Application.configureHomeworkRouting() {
     val uploadService: HomeworkUploadService by dependencies
     val storage: StorageService by dependencies
     val storageConfig: StorageConfig by dependencies
+    val idempotency: IdempotencyService by dependencies
 
     routing {
         authenticate {
             route("/api/v1/assignments") {
                 post<CreateAssignmentRequest> {
-                    call.respond(HttpStatusCode.Created, assignmentService.create(it, call.requirePrincipal()))
+                    call.respondIdempotent(idempotency, it, HttpStatusCode.Created) { assignmentService.create(it, call.requirePrincipal()) }
                 }.describe {
+                    idempotencyKeyHeader()
                     summary = "Assign homework"
                     description = "Teacher only. Recipients = studentIds + members of groupIds (expanded now). DOCUMENT items snapshot the document."
                     requestBody { schema = jsonSchema<CreateAssignmentRequest>() }
