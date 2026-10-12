@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.8.0](https://github.com/gvart/parleyroom/compare/v1.7.0...v1.8.0) (2026-10-12)
+
+
+### Features
+
+* **api:** backend foundations — CI, problem+json errors, feature flags ([#82](https://github.com/gvart/parleyroom/issues/82)) ([dd55b58](https://github.com/gvart/parleyroom/commit/dd55b58455ce6e95945bcfa87055e84a292d4a7c))
+* **goal:** student goal with AI roadmap, progress and self-assessment ([#84](https://github.com/gvart/parleyroom/issues/84)) ([fd203d9](https://github.com/gvart/parleyroom/commit/fd203d9a7d879d3091dc1576f2cb800e81627ef3))
+* **lesson-prep:** AI lesson preparation, wrap-up and lesson history ([#85](https://github.com/gvart/parleyroom/issues/85)) ([71e454d](https://github.com/gvart/parleyroom/commit/71e454d0b6694557512cca1cd4ce87b9cc14f6ba))
+* **notifications:** unread filter, unread count and mark all viewed ([#87](https://github.com/gvart/parleyroom/issues/87)) ([f8b6c3b](https://github.com/gvart/parleyroom/commit/f8b6c3b5b79faaba99708be58e2f0776a4c7b344))
+* **reminders:** teacher reminders, needs-attention list and weekly digest ([#86](https://github.com/gvart/parleyroom/issues/86)) ([8673ae7](https://github.com/gvart/parleyroom/commit/8673ae78a293df15fa34cbbe641ed70b16bdbb02))
+
+
+### Bug Fixes
+
+* backend audit fixes (lesson filters, actor avatars, idempotency keys, problem details) ([#88](https://github.com/gvart/parleyroom/issues/88)) ([f92accc](https://github.com/gvart/parleyroom/commit/f92accc77e1e86b110069fc5599111a6d8c6509e))
+
 ## [1.7.0](https://github.com/gvart/parleyroom/compare/v1.6.1...v1.7.0) (2026-10-11)
 
 
