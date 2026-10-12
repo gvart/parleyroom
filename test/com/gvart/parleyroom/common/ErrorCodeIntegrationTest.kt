@@ -2,6 +2,7 @@ package com.gvart.parleyroom.common
 
 import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.common.data.LessonType
+import com.gvart.parleyroom.common.transfer.FieldError
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
@@ -19,14 +20,18 @@ import io.ktor.http.contentType
 import java.time.OffsetDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class ErrorCodeIntegrationTest : IntegrationTest() {
 
-    private suspend fun HttpResponse.assertProblem(status: HttpStatusCode, code: String) {
+    private suspend fun HttpResponse.assertProblem(status: HttpStatusCode, code: String): ProblemDetail {
         assertEquals(status, this.status)
+        assertEquals(ContentType.Application.ProblemJson, contentType()?.withoutParameters())
         val problem = body<ProblemDetail>()
         assertEquals(code, problem.code)
         assertEquals(status.value, problem.status)
+        assertEquals("about:blank", problem.type)
+        return problem
     }
 
     @Test
@@ -67,13 +72,45 @@ class ErrorCodeIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `request validation failure returns VALIDATION_FAILED`() = testApp {
+    fun `request validation failure returns VALIDATION_FAILED with field errors`() = testApp {
         val client = createJsonClient(this)
 
-        client.post("/api/v1/token") {
+        val problem = client.post("/api/v1/token") {
             contentType(ContentType.Application.Json)
             setBody(AuthenticateRequest("", ""))
         }.assertProblem(HttpStatusCode.BadRequest, "VALIDATION_FAILED")
+
+        assertEquals(
+            listOf(
+                FieldError("/email", "VALIDATION_FAILED", "Email can't be empty"),
+                FieldError("/password", "VALIDATION_FAILED", "Password can't be empty"),
+            ),
+            problem.errors,
+        )
+        assertEquals("Email can't be empty, Password can't be empty", problem.detail)
+    }
+
+    @Test
+    fun `service validation failure carries its pointer in errors`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+
+        val problem = client.post("/api/v1/goals") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(token)
+            setBody("""{ "studentId": "$STUDENT_ID", "type": "LEVEL", "targetLevel": "B3" }""")
+        }.assertProblem(HttpStatusCode.BadRequest, "GOAL_INVALID")
+
+        assertEquals("/targetLevel", problem.pointer)
+        assertEquals(listOf(FieldError("/targetLevel", "GOAL_INVALID", problem.detail)), problem.errors)
+    }
+
+    @Test
+    fun `errors is omitted when nothing points at a field`() = testApp {
+        val client = createJsonClient(this)
+
+        val problem = client.get("/api/v1/users/me").assertProblem(HttpStatusCode.Unauthorized, "UNAUTHORIZED")
+        assertNull(problem.errors)
     }
 
     @Test

@@ -4,9 +4,12 @@ import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.common.serialization.OffsetDateTimeSerializer
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import java.time.OffsetDateTime
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class UserResponse(
     val id: String,
@@ -45,4 +48,7 @@ data class UserResponse(
     val telegramHomeworkReminders: Boolean = true,
     /** Telegram is linked and has not refused a message (403) since the last link or successful test message. */
     val telegramReachable: Boolean,
+    /** Feature flags by name; only on GET and PATCH /users/me. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val features: Map<String, Boolean>? = null,
 )

@@ -4,6 +4,7 @@ import com.gvart.parleyroom.common.routing.requirePrincipal
 import com.gvart.parleyroom.admin.service.AdminService
 import com.gvart.parleyroom.admin.service.AdminStatsService
 import com.gvart.parleyroom.admin.service.AppSettingsService
+import com.gvart.parleyroom.admin.service.FeatureFlagService
 import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetPasswordRequest
 import com.gvart.parleyroom.admin.transfer.AdminSetStatusRequest
@@ -40,6 +41,7 @@ fun Application.configureAdminRouting() {
     val adminService: AdminService by dependencies
     val adminStatsService: AdminStatsService by dependencies
     val appSettingsService: AppSettingsService by dependencies
+    val featureFlagService: FeatureFlagService by dependencies
 
     routing {
         authenticate {
@@ -93,6 +95,36 @@ fun Application.configureAdminRouting() {
                     requestBody { schema = jsonSchema<AppSettingsDto>() }
                     responses {
                         HttpStatusCode.OK { schema = jsonSchema<AppSettingsDto>() }
+                        HttpStatusCode.BadRequest { schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.Forbidden { schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.Unauthorized { schema = jsonSchema<ProblemDetail>() }
+                    }
+                }
+
+                get("/feature-flags") {
+                    requireAdmin(call.requirePrincipal())
+                    call.respond(HttpStatusCode.OK, featureFlagService.flags())
+                }.describe {
+                    summary = "Feature flags (admin)"
+                    description = "Every feature flag by name (roadmap, lessonPrep, teacherReminders); all default to false. Admin only."
+                    responses {
+                        HttpStatusCode.OK { schema = jsonSchema<Map<String, Boolean>>() }
+                        HttpStatusCode.Forbidden { schema = jsonSchema<ProblemDetail>() }
+                        HttpStatusCode.Unauthorized { schema = jsonSchema<ProblemDetail>() }
+                    }
+                }
+
+                put<Map<String, Boolean>>("/feature-flags") { request ->
+                    val principal = call.requirePrincipal()
+                    requireAdmin(principal)
+                    call.respond(HttpStatusCode.OK, featureFlagService.update(request, principal))
+                }.describe {
+                    summary = "Toggle feature flags (admin)"
+                    description = "Sets the flags in the body, e.g. {\"roadmap\": true}; flags left out keep their value. " +
+                        "Returns every flag. An unknown name is 400 UNKNOWN_FEATURE_FLAG with its pointer. Admin only."
+                    requestBody { schema = jsonSchema<Map<String, Boolean>>() }
+                    responses {
+                        HttpStatusCode.OK { schema = jsonSchema<Map<String, Boolean>>() }
                         HttpStatusCode.BadRequest { schema = jsonSchema<ProblemDetail>() }
                         HttpStatusCode.Forbidden { schema = jsonSchema<ProblemDetail>() }
                         HttpStatusCode.Unauthorized { schema = jsonSchema<ProblemDetail>() }

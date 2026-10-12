@@ -1,6 +1,7 @@
 package com.gvart.parleyroom.telegram.routing
 
 import com.gvart.parleyroom.common.routing.requirePrincipal
+import com.gvart.parleyroom.common.routing.respondProblem
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.ConflictException
 import com.gvart.parleyroom.telegram.service.TelegramNotifier
@@ -25,7 +26,7 @@ fun Application.configureTelegramRouting() {
                     TelegramSendResult.SENT -> call.respond(HttpStatusCode.NoContent)
                     TelegramSendResult.FORBIDDEN ->
                         throw ConflictException("Telegram refused the message: start the bot or unblock it", code = "TELEGRAM_UNREACHABLE")
-                    TelegramSendResult.FAILED -> call.respond(
+                    TelegramSendResult.FAILED -> call.respondProblem(
                         HttpStatusCode.BadGateway,
                         ProblemDetail.of(HttpStatusCode.BadGateway, "Telegram could not be reached", "TELEGRAM_SEND_FAILED"),
                     )

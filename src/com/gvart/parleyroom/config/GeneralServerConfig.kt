@@ -17,6 +17,9 @@ import com.gvart.parleyroom.ai.transfer.PromptTemplateInput
 import com.gvart.parleyroom.ai.transfer.RefineRequest
 import com.gvart.parleyroom.availability.transfer.CreateAvailabilityExceptionRequest
 import com.gvart.parleyroom.availability.transfer.ReplaceWeeklyAvailabilityRequest
+import com.gvart.parleyroom.common.routing.respondProblem
+import com.gvart.parleyroom.common.routing.validationPointer
+import com.gvart.parleyroom.common.transfer.FieldError
 import com.gvart.parleyroom.common.transfer.ProblemDetail
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.document.transfer.CreateDocumentRequest
@@ -68,9 +71,6 @@ import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.auth.jwt.JWTAuthenticationProvider
 import io.ktor.server.auth.parseAuthorizationHeader
 import io.ktor.http.auth.HttpAuthHeader
-import io.ktor.http.ContentType
-import io.ktor.serialization.kotlinx.json.DefaultJson
-import io.ktor.server.response.respondText
 import io.ktor.server.plugins.callid.CallId
 import io.ktor.server.plugins.callid.callIdMdc
 import io.ktor.server.plugins.calllogging.CallLogging
@@ -87,7 +87,6 @@ import io.ktor.server.request.authorization
 import io.ktor.server.request.header
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
-import io.ktor.server.response.respond
 import io.ktor.server.routing.host
 import io.ktor.server.routing.routing
 import org.slf4j.event.Level
@@ -227,36 +226,38 @@ fun Application.generalConfig() {
 
     install(StatusPages) {
         exception<RequestValidationException> { call, cause ->
-            call.respond(
+            val errors = cause.reasons.map { FieldError(validationPointer(cause.value, it), "VALIDATION_FAILED", it) }
+            call.respondProblem(
                 HttpStatusCode.BadRequest,
                 ProblemDetail.of(HttpStatusCode.BadRequest, cause.reasons.joinToString(), "VALIDATION_FAILED")
+                    .copy(errors = errors),
             )
         }
         exception<ContentTransformationException> { call, cause ->
-            call.respond(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, "MALFORMED_REQUEST"))
+            call.respondProblem(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, "MALFORMED_REQUEST"))
         }
         exception<io.ktor.server.plugins.BadRequestException> { call, cause ->
-            call.respond(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, "MALFORMED_REQUEST"))
+            call.respondProblem(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, "MALFORMED_REQUEST"))
         }
 
         exception<UnauthorizedException> { call, cause ->
-            call.respond(HttpStatusCode.Unauthorized, ProblemDetail.of(HttpStatusCode.Unauthorized, cause.message, cause.code ?: "UNAUTHORIZED"))
+            call.respondProblem(HttpStatusCode.Unauthorized, ProblemDetail.of(HttpStatusCode.Unauthorized, cause.message, cause.code ?: "UNAUTHORIZED"))
         }
 
         exception<ForbiddenException> { call, cause ->
-            call.respond(HttpStatusCode.Forbidden, ProblemDetail.of(HttpStatusCode.Forbidden, cause.message, cause.code ?: "FORBIDDEN"))
+            call.respondProblem(HttpStatusCode.Forbidden, ProblemDetail.of(HttpStatusCode.Forbidden, cause.message, cause.code ?: "FORBIDDEN"))
         }
 
         exception<NotFoundException> { call, cause ->
-            call.respond(HttpStatusCode.NotFound, ProblemDetail.of(HttpStatusCode.NotFound, cause.message, cause.code ?: "NOT_FOUND"))
+            call.respondProblem(HttpStatusCode.NotFound, ProblemDetail.of(HttpStatusCode.NotFound, cause.message, cause.code ?: "NOT_FOUND"))
         }
 
         exception<BadRequestException> { call, cause ->
-            call.respond(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, cause.code ?: "BAD_REQUEST", cause.pointer))
+            call.respondProblem(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, cause.code ?: "BAD_REQUEST", cause.pointer))
         }
 
         exception<ConflictException> { call, cause ->
-            call.respond(
+            call.respondProblem(
                 HttpStatusCode.Conflict,
                 ProblemDetail.of(HttpStatusCode.Conflict, cause.message, cause.code ?: "CONFLICT")
                     .copy(currentRevision = cause.currentRevision, usage = cause.usage),
@@ -264,7 +265,7 @@ fun Application.generalConfig() {
         }
 
         exception<TooManyRequestsException> { call, cause ->
-            call.respond(
+            call.respondProblem(
                 HttpStatusCode.TooManyRequests,
                 ProblemDetail.of(HttpStatusCode.TooManyRequests, cause.message, cause.code ?: "TOO_MANY_REQUESTS")
                     .copy(resetsAt = cause.resetsAt),
@@ -272,19 +273,21 @@ fun Application.generalConfig() {
         }
 
         exception<ServiceUnavailableException> { call, cause ->
-            call.respond(
+            call.respondProblem(
                 HttpStatusCode.ServiceUnavailable,
                 ProblemDetail.of(HttpStatusCode.ServiceUnavailable, cause.message, cause.code ?: "SERVICE_UNAVAILABLE"),
             )
         }
 
+        // Thrown by library and internal code: the message is not written for clients.
         exception<IllegalArgumentException> { call, cause ->
-            call.respond(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, cause.message, "BAD_REQUEST"))
+            call.application.environment.log.warn("Rejected request with IllegalArgumentException", cause)
+            call.respondProblem(HttpStatusCode.BadRequest, ProblemDetail.of(HttpStatusCode.BadRequest, "Invalid request", "BAD_REQUEST"))
         }
 
         exception<Throwable> { call, cause ->
             call.application.environment.log.error("Unhandled exception", cause)
-            call.respond(
+            call.respondProblem(
                 HttpStatusCode.InternalServerError,
                 ProblemDetail.of(HttpStatusCode.InternalServerError, "Internal server error", "INTERNAL_ERROR")
             )
@@ -313,16 +316,10 @@ fun Application.generalConfig() {
             ) else null
         }
 
-        // Serialized by hand: an SSE client sends Accept: text/event-stream, and ContentNegotiation
-        // would turn a negotiated JSON body into an empty 406 instead of the 401.
         challenge { _, _ ->
-            call.respondText(
-                DefaultJson.encodeToString(
-                    ProblemDetail.serializer(),
-                    ProblemDetail.of(HttpStatusCode.Unauthorized, "Missing or invalid access token", "UNAUTHORIZED"),
-                ),
-                ContentType.Application.Json,
+            call.respondProblem(
                 HttpStatusCode.Unauthorized,
+                ProblemDetail.of(HttpStatusCode.Unauthorized, "Missing or invalid access token", "UNAUTHORIZED"),
             )
         }
     }

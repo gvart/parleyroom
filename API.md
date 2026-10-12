@@ -1,5 +1,49 @@
 # New Backend Endpoints
 
+## Errors (RFC 9457 problem details)
+
+Every error response is `Content-Type: application/problem+json`, whatever the request's `Accept`:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Email can't be empty, Password can't be empty",
+  "code": "VALIDATION_FAILED",
+  "errors": [
+    { "pointer": "/email", "code": "VALIDATION_FAILED", "detail": "Email can't be empty" },
+    { "pointer": "/password", "code": "VALIDATION_FAILED", "detail": "Password can't be empty" }
+  ]
+}
+```
+
+- `type` stays `about:blank` (so `title` is the HTTP status phrase); `code` is the machine-readable
+  error and the thing to switch on.
+- `errors` (field-level failures) is present only when something points at a request field:
+  every reason of a `VALIDATION_FAILED` (its `pointer` is omitted when a reason is not about one
+  property) and service validation that names a field (e.g. `GOAL_INVALID`, `UNKNOWN_FEATURE_FLAG`).
+  The single-field `pointer` at the top level is kept for existing clients.
+- Other extensions stay where they were: `currentRevision` (409 revision conflicts), `usage` (409
+  `*_HAS_CONTENT`), `resetsAt` (429 `PRACTICE_SENTENCE_LIMIT`).
+- 400 `BAD_REQUEST` from an internal argument check now says only `"Invalid request"`; the
+  exception text is logged, not returned.
+
+## Feature flags
+
+Server-side booleans for features that ship dark; all default to `false`. Flags: `roadmap`,
+`lessonPrep`, `teacherReminders`. Stored in `feature_flags` (V35); a flag without a row is off.
+
+```
+GET /api/v1/users/me                  -> UserResponse + features: { roadmap, lessonPrep, teacherReminders }  (also on PATCH /users/me)
+GET /api/v1/admin/feature-flags       -> { "roadmap": false, "lessonPrep": false, "teacherReminders": false }   (admin)
+PUT /api/v1/admin/feature-flags       { "roadmap": true } -> every flag                                      (admin)
+```
+
+PUT sets only the flags in the body; an unknown name is 400 `UNKNOWN_FEATURE_FLAG` with
+`errors[0].pointer = "/<name>"` and nothing is applied. Non-admins get 403. Server code checks
+`FeatureFlagService.isEnabled(FeatureFlag.X)`; a new flag is one enum entry, no migration.
+
 ## Teacher library: topics & grammar (`/api/v1/topics`, `/api/v1/grammar-topics`)
 
 Each teacher owns their library; it starts empty. Writes are **teacher only**; students

@@ -29,6 +29,9 @@ data class ProblemDetail(
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     @Serializable(with = OffsetDateTimeSerializer::class)
     val resetsAt: OffsetDateTime? = null,
+    /** Field-level failures (validation); each names the offending value by JSON pointer when known. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val errors: List<FieldError>? = null,
 ) {
     companion object {
         fun of(httpStatus: HttpStatusCode, detail: String? = null, code: String? = null, pointer: String? = null): ProblemDetail {
@@ -38,7 +41,18 @@ data class ProblemDetail(
                 detail = detail,
                 code = code,
                 pointer = pointer,
+                errors = pointer?.let { listOf(FieldError(it, code, detail)) },
             )
         }
     }
 }
+
+/** One entry of [ProblemDetail.errors]. */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class FieldError(
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val pointer: String? = null,
+    val code: String? = null,
+    val detail: String? = null,
+)
