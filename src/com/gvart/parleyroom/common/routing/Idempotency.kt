@@ -23,7 +23,7 @@ const val IDEMPOTENT_REPLAYED_HEADER = "Idempotent-Replayed"
  * Responds with [create]'s result. Without an `Idempotency-Key` header this is a plain respond. With one, the first
  * successful response is stored for 24h per user and key and replayed for a retry with the same route and [request]
  * (as parsed, so formatting does not matter); another route or payload is 422 IDEMPOTENCY_KEY_REUSED and a retry
- * while the first is still running 409 IDEMPOTENCY_REQUEST_IN_PROGRESS. Errors are not stored: a failed request
+ * while the first is still running (up to 60s) 409 IDEMPOTENCY_REQUEST_IN_PROGRESS. Errors are not stored: a failed request
  * frees the key.
  */
 suspend inline fun <reified Req : Any, reified Res : Any> ApplicationCall.respondIdempotent(
@@ -56,14 +56,14 @@ suspend fun ApplicationCall.respondWithIdempotencyKey(
         .joinToString("") { "%02x".format(it) }
 
     when (val claim = idempotency.claim(userId, key, request.httpMethod.value, request.path(), hash)) {
-        Claim.Acquired -> {
+        is Claim.Acquired -> {
             val body = try {
                 create()
             } catch (e: Throwable) {
-                idempotency.release(userId, key)
+                idempotency.release(userId, key, claim.claimedAt)
                 throw e
             }
-            idempotency.complete(userId, key, status.value, body)
+            idempotency.complete(userId, key, claim.claimedAt, status.value, body)
             respondText(body, ContentType.Application.Json, status)
         }
         is Claim.Replay -> {
@@ -96,7 +96,7 @@ fun Operation.Builder.idempotencyKeyHeader() {
             description = "Optional, 1..255 chars (a UUID per submit). A retry with the same key, route and body " +
                     "within 24h replays the first successful response (header $IDEMPOTENT_REPLAYED_HEADER: true); " +
                     "another route or body is 422 IDEMPOTENCY_KEY_REUSED, a retry while the first still runs " +
-                    "409 IDEMPOTENCY_REQUEST_IN_PROGRESS, a bad key 400 IDEMPOTENCY_KEY_INVALID. Errors are not stored."
+                    "409 IDEMPOTENCY_REQUEST_IN_PROGRESS (a claim older than 60s is taken over), a bad key 400 IDEMPOTENCY_KEY_INVALID. Errors are not stored."
             required = false
         }
     }

@@ -2,7 +2,6 @@ package com.gvart.parleyroom.config
 
 import com.gvart.parleyroom.common.routing.IDEMPOTENCY_KEY_HEADER
 import com.gvart.parleyroom.common.routing.IDEMPOTENT_REPLAYED_HEADER
-import com.gvart.parleyroom.common.service.IdempotencyService
 import com.gvart.parleyroom.goal.transfer.BatchItemStatesRequest
 import com.gvart.parleyroom.goal.transfer.GenerateRoadmapRequest
 import com.gvart.parleyroom.goal.transfer.GoalInput
@@ -153,10 +152,6 @@ fun Application.generalConfig() {
                 initDataMaxAge = Duration.parse(config.property("telegram.init_data_max_age").getString()),
             )
         }
-    }
-
-    dependencies {
-        provide(IdempotencyService::class)
     }
 
     install(ContentNegotiation) {

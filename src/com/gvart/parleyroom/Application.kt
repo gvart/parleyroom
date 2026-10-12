@@ -9,6 +9,7 @@ import com.gvart.parleyroom.document.config.configureDocumentModule
 import com.gvart.parleyroom.email.config.configureEmailModule
 import com.gvart.parleyroom.email.service.EmailSender
 import com.gvart.parleyroom.config.configureHealthRouting
+import com.gvart.parleyroom.config.configureIdempotency
 import com.gvart.parleyroom.config.generalConfig
 import com.gvart.parleyroom.goal.config.configureGoalModule
 import com.gvart.parleyroom.group.config.configureGroupModule
@@ -42,6 +43,7 @@ fun Application.module(
 ) {
     generalConfig()
     configureDatabase(dataSource)
+    configureIdempotency()
     configureEmailModule(emailSender)
     configureTelegramModule(telegramSender)
     configureRegistrationModule()

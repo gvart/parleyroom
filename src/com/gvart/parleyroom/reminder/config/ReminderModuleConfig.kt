@@ -1,6 +1,5 @@
 package com.gvart.parleyroom.reminder.config
 
-import com.gvart.parleyroom.common.service.IdempotencyService
 import com.gvart.parleyroom.reminder.routing.configureReminderRouting
 import com.gvart.parleyroom.reminder.service.ReminderService
 import com.gvart.parleyroom.reminder.service.TeacherAttentionService
@@ -39,7 +38,6 @@ fun Application.configureReminderModule() {
         val scope = CoroutineScope(Dispatchers.IO + supervisor)
         val reminderService: ReminderService by dependencies
         val teacherReminderService: TeacherReminderService by dependencies
-        val idempotency: IdempotencyService by dependencies
 
         val log = environment.log
         monitor.subscribe(ApplicationStarted) {
@@ -50,8 +48,6 @@ fun Application.configureReminderModule() {
                         .onFailure { log.warn("Reminder job failed", it) }
                     runCatching { teacherReminderService.runOnce() }
                         .onFailure { log.warn("Teacher reminder job failed", it) }
-                    runCatching { idempotency.deleteExpired() }
-                        .onFailure { log.warn("Idempotency key cleanup failed", it) }
                 }
             }
         }

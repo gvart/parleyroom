@@ -203,4 +203,46 @@ class IdempotencyIntegrationTest : IntegrationTest() {
         assertEquals(1, IdempotencyService().deleteExpired())
         assertEquals(0, count("SELECT count(*) FROM idempotency_keys"))
     }
+
+    @Test
+    fun `an abandoned in-progress claim is taken over after 60s`() = testApp {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        val service = IdempotencyService()
+        val teacher = java.util.UUID.fromString(TEACHER_ID)
+        // A request for the same lesson that claimed the key and died before completing.
+        val json = io.ktor.serialization.kotlinx.json.DefaultJson.encodeToString(CreateLessonRequest.serializer(), lesson())
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(json.toByteArray()).joinToString("") { "%02x".format(it) }
+        val abandoned = service.claim(teacher, "crashed", "POST", "/api/v1/lessons", hash)
+        assertTrue(abandoned is IdempotencyService.Claim.Acquired)
+
+        createLesson(client, token, lesson(), "crashed")
+            .assertProblem(HttpStatusCode.Conflict, "IDEMPOTENCY_REQUEST_IN_PROGRESS")
+
+        transaction { exec("UPDATE idempotency_keys SET created_at = created_at - interval '61 seconds'") }
+        val taken = createLesson(client, token, lesson(), "crashed")
+        assertEquals(HttpStatusCode.Created, taken.status)
+        assertEquals(1, lessonCount())
+
+        // Should the abandoned request still finish, it neither overwrites nor frees the new claim.
+        service.complete(teacher, "crashed", abandoned.claimedAt, 201, "{}")
+        service.release(teacher, "crashed", abandoned.claimedAt)
+        val replay = createLesson(client, token, lesson(), "crashed")
+        assertEquals("true", replay.headers[IDEMPOTENT_REPLAYED_HEADER])
+        assertEquals(taken.body<LessonResponse>().id, replay.body<LessonResponse>().id)
+    }
+
+    @Test
+    fun `expired keys are cleaned up even with reminders off`() = testApp(mapOf("idempotency.cleanup_interval" to "200ms")) {
+        val client = createJsonClient(this)
+        val token = getTeacherToken(client)
+        assertEquals(HttpStatusCode.Created, createLesson(client, token, lesson(), "old").status)
+        transaction { exec("UPDATE idempotency_keys SET expires_at = now() - interval '1 minute'") }
+
+        val deadline = System.currentTimeMillis() + 10_000
+        while (count("SELECT count(*) FROM idempotency_keys") > 0 && System.currentTimeMillis() < deadline) {
+            kotlinx.coroutines.delay(100)
+        }
+        assertEquals(0, count("SELECT count(*) FROM idempotency_keys"))
+    }
 }

@@ -50,10 +50,12 @@ and reuse it for retries of that submit). Without the header nothing changes.
   `Idempotent-Replayed: true` (exposed to browsers via CORS). Nothing is created again.
 - Same key + other route or body → 422 `IDEMPOTENCY_KEY_REUSED`.
 - Same key while the first request is still running → 409 `IDEMPOTENCY_REQUEST_IN_PROGRESS` (retry shortly; it
-  then replays).
+  then replays). A claim still running after 60s counts as abandoned (e.g. the pod died) and the next request
+  with the key takes it over; the abandoned request, should it still finish, no longer stores its response.
 - Errors are not stored: a failed request frees the key, so a corrected retry may use it again.
 - Blank or longer than 255 chars → 400 `IDEMPOTENCY_KEY_INVALID`.
-- Expired keys are deleted by the reminder job loop (`reminders.interval`); an expired key is also reclaimed on use.
+- Expired keys are deleted by their own job (`idempotency.cleanup_interval`, default 1h, independent of
+  `reminders.enabled`); an expired key is also reclaimed on use.
 
 ## Feature flags
 
