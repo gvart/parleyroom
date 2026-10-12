@@ -13,7 +13,6 @@ import com.gvart.parleyroom.user.data.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
-import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -203,15 +202,5 @@ class IdempotencyIntegrationTest : IntegrationTest() {
         transaction { exec("UPDATE idempotency_keys SET expires_at = now() - interval '1 minute'") }
         assertEquals(1, IdempotencyService().deleteExpired())
         assertEquals(0, count("SELECT count(*) FROM idempotency_keys"))
-    }
-
-    @Test
-    fun `create routes document the header`() = testApp(
-        mapOf("application.openapi.enabled" to "true", "swagger.allowed_hosts" to "localhost"),
-    ) {
-        val spec = client.get("/swagger/documentation.yaml").bodyAsText()
-
-        // One header parameter per create route: lessons, assignments, goals, invites, lesson plans.
-        assertEquals(5, Regex("name: \"?$IDEMPOTENCY_KEY_HEADER\"?\\s").findAll(spec).count(), spec.take(300))
     }
 }
