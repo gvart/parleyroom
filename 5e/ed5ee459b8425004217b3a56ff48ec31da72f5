@@ -1,0 +1,33 @@
+API.md
+  s_6b341267e99e70::t_361bf81129b473 1050,1066,1117-1120
+src/com/gvart/parleyroom/common/transfer/ProblemDetail.kt
+  s_6b341267e99e70::t_6dd17cebd19037 28-30
+src/com/gvart/parleyroom/common/transfer/exception/ConflictException.kt
+  s_6b341267e99e70::t_99ce2768fdf28b 10
+src/com/gvart/parleyroom/config/GeneralServerConfig.kt
+  s_6b341267e99e70::t_fb812829d61d22 320
+src/com/gvart/parleyroom/lessonprep/routing/Routing.kt
+  s_6b341267e99e70::t_cd77dde9801d04 70,133-150,184-185,187
+src/com/gvart/parleyroom/lessonprep/service/LessonHistoryService.kt
+  s_6b341267e99e70::t_85f5e034e06127 39
+src/com/gvart/parleyroom/lessonprep/service/LessonPrepService.kt
+  s_6b341267e99e70::t_f134c772a7a191 57-58,60,63-64,117-125,254-255,348-358,366
+test/com/gvart/parleyroom/lessonprep/LessonPrepIntegrationTest.kt
+  s_6b341267e99e70::t_5b6c7abc954700 445-502
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "5eed5ee459b8425004217b3a56ff48ec31da72f5",
+  "prompts": {},
+  "sessions": {
+    "s_6b341267e99e70": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3c10af3d-8cd0-4bc3-89fd-cb390bc038be",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
