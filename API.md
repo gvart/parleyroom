@@ -1132,6 +1132,21 @@ LESSON_PREP.
 | `LESSON_PLAN_DONE` | 409 | regenerate after the wrap-up |
 | `LESSON_PLAN_NOT_FOUND`, `LESSON_PLAN_DONE` | – | job `error.code`: deleted / wrapped up while the job ran |
 
+## Notifications (`/api/v1/notifications`)
+
+```
+GET  /api/v1/notifications?page=&pageSize=&unread=   -> NotificationPage        newest first, pageSize ≤ 100
+POST /api/v1/notifications/viewed      { notificationIds: [id] }  -> 200       own notifications only
+POST /api/v1/notifications/viewed-all                             -> { updated }
+GET  /api/v1/notifications/stream                                 -> SSE
+```
+`NotificationPage = { notifications, total, page, pageSize, unreadCount }`. `unread=true` lists only unread
+notifications and `total` counts them; `unreadCount` is always all of the user's unread notifications, whatever the
+filter or page, so a client can show the bell's count from any page. `unread` other than `true`/`false` is 400
+`VALIDATION_FAILED` (pointer `/unread`). Notifications with a future `deliverAfter` are neither listed nor counted.
+`viewed-all` marks every delivered unread notification of the caller viewed and answers how many changed; a repeat
+answers `{ "updated": 0 }`. Neither route touches other users' notifications.
+
 ## Teacher reminders & Needs attention (feature flag `teacherReminders`)
 
 Reminders for the teacher only (students see no change). In-app always; email and Telegram per type.

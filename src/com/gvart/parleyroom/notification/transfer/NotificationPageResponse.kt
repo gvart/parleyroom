@@ -8,4 +8,12 @@ data class NotificationPageResponse(
     val total: Long,
     val page: Int,
     val pageSize: Int,
+    /** All of the user's unread notifications, whatever the page or filter. */
+    val unreadCount: Long,
+)
+
+@Serializable
+data class MarkAllViewedResponse(
+    /** How many notifications this call marked viewed (0 when everything was read already). */
+    val updated: Int,
 )
