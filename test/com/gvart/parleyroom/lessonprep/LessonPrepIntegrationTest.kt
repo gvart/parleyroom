@@ -442,5 +442,63 @@ class LessonPrepIntegrationTest : IntegrationTest() {
         assertEquals(small, count(6))
     }
 
+    @Test
+    fun `lessons taught early are history, not the next lesson`() = testApp {
+        startApplication()
+        LessonPrepFixtures.enable()
+        val client = createJsonClient(this)
+        val teacher = getTeacherToken(client)
+        val past = LessonPrepFixtures.lesson(now.minusDays(1))
+        val completedEarly = LessonPrepFixtures.lesson(now.plusDays(1), status = LessonStatus.COMPLETED)
+        val runningEarly = LessonPrepFixtures.lesson(now.plusDays(2), status = LessonStatus.IN_PROGRESS)
+        val wrappedEarly = LessonPrepFixtures.lesson(now.plusDays(3), status = LessonStatus.CONFIRMED)
+        LessonPrepFixtures.plan(wrappedEarly, status = LessonPlanStatus.DONE, coveredNote = "früher gemacht")
+        val next = LessonPrepFixtures.lesson(now.plusDays(4), status = LessonStatus.CONFIRMED)
+        LessonPrepFixtures.plan(next, status = LessonPlanStatus.READY)
+
+        val history = client.send("GET", teacher, "/api/v1/students/$STUDENT/lesson-history").body<LessonHistoryResponse>()
+        assertEquals(listOf(wrappedEarly, runningEarly, completedEarly, past).map { it.toString() }, history.items.map { it.lessonId })
+        assertEquals(4, history.total)
+        assertEquals("früher gemacht", history.items.first().coveredNote)
+        assertEquals(next.toString(), history.nextLesson?.lessonId)
+
+        val prep = client.send("GET", teacher, "/api/v1/students/$STUDENT/next-lesson-prep").body<NextLessonPrepResponse>()
+        assertEquals(next.toString(), prep.lesson?.id)
+    }
+
+    @Test
+    fun `a lesson's plan is found by lesson id`() = testApp {
+        startApplication()
+        LessonPrepFixtures.enable()
+        GoalFixtures.secondTeacher()
+        val client = createJsonClient(this)
+        val teacher = getTeacherToken(client)
+        val other = getToken(client, "teacher2@test.com")
+        val lesson = LessonPrepFixtures.lesson(now.minusDays(1))
+        val plan = LessonPrepFixtures.plan(lesson, coveredNote = "Perfekt")
+        val unplanned = LessonPrepFixtures.lesson(now.minusDays(2))
+
+        val found = client.send("GET", teacher, "/api/v1/lessons/$lesson/plan").body<LessonPlanResponse>()
+        assertEquals(plan.toString(), found.id)
+        assertEquals("Perfekt", found.coveredNote)
+        client.send("GET", teacher, "/api/v1/lessons/$unplanned/plan").problem(HttpStatusCode.NotFound, "LESSON_PLAN_NOT_FOUND")
+        client.send("GET", other, "/api/v1/lessons/$lesson/plan").problem(HttpStatusCode.NotFound, "LESSON_PLAN_NOT_FOUND")
+        client.send("GET", getStudentToken(client), "/api/v1/lessons/$lesson/plan").problem(HttpStatusCode.Forbidden, "FORBIDDEN")
+    }
+
+    @Test
+    fun `preparing a planned lesson names the existing plan`() = testApp {
+        startApplication()
+        LessonPrepFixtures.enable()
+        val client = createJsonClient(this)
+        val teacher = getTeacherToken(client)
+        val next = LessonPrepFixtures.lesson(now.plusDays(2), status = LessonStatus.CONFIRMED)
+        val plan = LessonPrepFixtures.plan(next, status = LessonPlanStatus.READY)
+
+        val problem = client.send("POST", teacher, "/api/v1/lesson-plans", """{"studentId":"$STUDENT","prepNote":"x","lessonId":"$next"}""")
+            .problem(HttpStatusCode.Conflict, "LESSON_PLAN_EXISTS")
+        assertEquals(plan.toString(), problem.existingId)
+    }
+
     private fun jsonOf(content: LessonPlanContent) = kotlinx.serialization.json.Json.encodeToString(LessonPlanContent.serializer(), content)
 }

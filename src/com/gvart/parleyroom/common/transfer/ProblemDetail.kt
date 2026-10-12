@@ -25,6 +25,9 @@ data class ProblemDetail(
     /** What is still tagged with a topic that cannot be deleted without `force`. */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val usage: TagUsage? = null,
+    /** The resource that already exists, on a one-per-X conflict (e.g. LESSON_PLAN_EXISTS: the plan id). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val existingId: String? = null,
     /** When a daily limit lifts again (e.g. PRACTICE_SENTENCE_LIMIT). */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     @Serializable(with = OffsetDateTimeSerializer::class)

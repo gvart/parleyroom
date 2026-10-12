@@ -54,9 +54,14 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.inSubQuery
+import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.lessEq
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.core.notInList
+import org.jetbrains.exposed.v1.core.notInSubQuery
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.select
@@ -106,6 +111,15 @@ class LessonPrepService(
     }
 
     fun get(planId: UUID, principal: UserPrincipal): LessonPlanResponse = transaction {
+        LessonPlanViews.plan(LessonPrepAccess.requirePlan(planId, principal))
+    }
+
+    /** The plan linked to [lessonId], with the same access as [get]. */
+    fun getByLesson(lessonId: UUID, principal: UserPrincipal): LessonPlanResponse = transaction {
+        if (principal.role == UserRole.STUDENT) throw ForbiddenException("Lesson plans are for teachers only")
+        val planId = LessonPlanTable.select(LessonPlanTable.id).where { LessonPlanTable.lessonId eq lessonId }
+            .firstOrNull()?.get(LessonPlanTable.id)?.value
+            ?: throw NotFoundException("Lesson plan not found", code = "LESSON_PLAN_NOT_FOUND")
         LessonPlanViews.plan(LessonPrepAccess.requirePlan(planId, principal))
     }
 
@@ -237,7 +251,8 @@ class LessonPrepService(
     private fun requireUnplanned(lessonId: UUID, except: UUID?) {
         val other = LessonPlanTable.select(LessonPlanTable.id).where { LessonPlanTable.lessonId eq lessonId }
             .map { it[LessonPlanTable.id].value }.firstOrNull { it != except }
-        if (other != null) throw ConflictException("The lesson already has a plan ($other)", code = "LESSON_PLAN_EXISTS")
+        if (other != null)
+            throw ConflictException("The lesson already has a plan ($other)", code = "LESSON_PLAN_EXISTS", existingId = other.toString())
     }
 
     /** The student's ACTIVE goal (of [teacher] when given). */
@@ -330,7 +345,17 @@ object LessonPrepAccess {
             .singleOrNull()
             ?: throw BadRequestException("lessonId is not a lesson of this teacher with the student", "LESSON_PLAN_LESSON_INVALID", pointer)
 
-    /** The earliest upcoming CONFIRMED lesson ([unplannedOnly]: without a plan). */
+    /** Lessons wrapped up (their plan is DONE), whenever they were scheduled. */
+    private fun wrappedUp() = LessonPlanTable.select(LessonPlanTable.lessonId)
+        .where { (LessonPlanTable.status eq LessonPlanStatus.DONE) and LessonPlanTable.lessonId.isNotNull() }
+
+    /** Took place: scheduled before [now], or taught early (IN_PROGRESS, COMPLETED or wrapped up). */
+    fun tookPlace(now: OffsetDateTime): Op<Boolean> =
+        (LessonTable.scheduledAt lessEq now) or
+                (LessonTable.status inList listOf(LessonStatus.IN_PROGRESS, LessonStatus.COMPLETED)) or
+                (LessonTable.id inSubQuery wrappedUp())
+
+    /** The earliest upcoming CONFIRMED lesson not wrapped up yet ([unplannedOnly]: without a plan). */
     fun nextLesson(studentId: UUID, teacher: UUID?, unplannedOnly: Boolean): ResultRow? {
         val planned = if (!unplannedOnly) emptyList() else LessonPlanTable.select(LessonPlanTable.lessonId)
             .where { LessonPlanTable.studentId eq studentId }.mapNotNull { it[LessonPlanTable.lessonId]?.value }
@@ -338,6 +363,7 @@ object LessonPrepAccess {
             .where {
                 studentLessons(studentId, teacher) and (LessonTable.status eq LessonStatus.CONFIRMED) and
                         (LessonTable.scheduledAt greater OffsetDateTime.now()) and
+                        (LessonTable.id notInSubQuery wrappedUp()) and
                         (if (planned.isEmpty()) Op.TRUE else LessonTable.id notInList planned)
             }
             .orderBy(LessonTable.scheduledAt, SortOrder.ASC)

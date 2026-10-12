@@ -20,7 +20,6 @@ import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.core.lessEq
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -37,7 +36,7 @@ class LessonHistoryService {
         LessonPrepAccess.requireStudent(studentId, principal)
         val teacher = LessonPrepAccess.teacherScope(principal)
         val past = (LessonTable innerJoin LessonStudentTable).select(LessonTable.columns)
-            .where { LessonPrepAccess.studentLessons(studentId, teacher) and (LessonTable.scheduledAt lessEq OffsetDateTime.now()) }
+            .where { LessonPrepAccess.studentLessons(studentId, teacher) and LessonPrepAccess.tookPlace(OffsetDateTime.now()) }
         val total = past.count()
         val rows = past.orderBy(LessonTable.scheduledAt to SortOrder.DESC, LessonTable.id to SortOrder.ASC)
             .limit(page.pageSize).offset(page.offset).toList()

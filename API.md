@@ -1047,6 +1047,7 @@ While the flag `lessonPrep` is off every route below answers **404 `NOT_FOUND`**
 ```
 POST   /api/v1/lesson-plans                  { studentId, prepNote, lessonId?, explainInRussian? } -> 202 LessonPlan (+ job)
 GET    /api/v1/lesson-plans/{id}                              -> LessonPlan
+GET    /api/v1/lessons/{lessonId}/plan                       -> LessonPlan   (404 LESSON_PLAN_NOT_FOUND without one)
 PATCH  /api/v1/lesson-plans/{id}             LessonPlanPatch  -> LessonPlan
 POST   /api/v1/lesson-plans/{id}/regenerate  { prepNote?, explainInRussian? } -> 202 LessonPlan (+ job)
 DELETE /api/v1/lesson-plans/{id}                              -> 204
@@ -1062,7 +1063,7 @@ any teacher's); pending requests (`REQUEST`) and rejected participations never c
 
 **Create.** `prepNote` 1..4 000. `lessonId` must be a lesson of the teacher with the student (400
 `LESSON_PLAN_LESSON_INVALID`, `/lessonId`); without it the student's next upcoming `CONFIRMED` lesson
-that has no plan yet is linked (none → unlinked). One plan per lesson (409 `LESSON_PLAN_EXISTS`). The
+that has no plan yet is linked (none → unlinked). One plan per lesson (409 `LESSON_PLAN_EXISTS`, `existingId` = that plan's id, so a client can open it). The
 student's `ACTIVE` goal (of this teacher) is attached. Answers 202 with the plan (`plan: null`) and its
 `job`; poll `GET /api/v1/ai/jobs/{id}` (tray `targetType: LESSON_PLAN`, `lessonPlanId`) or the plan.
 **Regenerate** keeps the lesson link, optionally replaces prepNote / explainInRussian, and replaces
@@ -1113,8 +1114,10 @@ HistoryEntry {
   homework: [{ id, assignmentId, title, status }]  // the student's homework from this lesson's assignments
 }
 ```
-**History**: past lessons (scheduledAt ≤ now, cancelled included) newest first, paginated in SQL
-(`pageSize` default 20, ≤ 100); `nextLesson` (the upcoming `CONFIRMED` lesson) is on every page. A
+**History**: lessons that took place — scheduledAt ≤ now (cancelled included), or taught early
+(`IN_PROGRESS`, `COMPLETED`, or wrapped up = plan `DONE`) — newest first, paginated in SQL
+(`pageSize` default 20, ≤ 100); `nextLesson` (the upcoming `CONFIRMED` lesson that is not wrapped up yet;
+also what `next-lesson-prep` returns) is on every page. A
 page costs a fixed number of queries whatever its size (a test counts them). Roadmap items store only
 the lesson they were *last* checked in, so an item re-checked later moves to the later lesson.
 
