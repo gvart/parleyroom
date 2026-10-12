@@ -1221,6 +1221,25 @@ one, absent = never). `BEHIND` / `MISMATCH` need `roadmap`; `NOT_WRAPPED_UP` as 
 
 ## Lesson Changes
 
+### New: list filters (`GET /api/v1/lessons`)
+Server-side filters, all optional and combined with AND inside the caller's normal scope
+(teacher: own lessons; student: own seats + the linked teachers' scrubbed schedule; admin: all):
+
+| Param | Meaning |
+|---|---|
+| `studentId` | lessons where that student has a `CONFIRMED` or `REQUESTED` seat. Students may only pass their own id (403 otherwise); a teacher gets only their own lessons with that student |
+| `status` | `CONFIRMED`, `REQUEST`, `CANCELLED`, `COMPLETED`, `IN_PROGRESS`; repeat the param or use a comma list |
+| `upcoming` | `true`: `scheduledAt >= now` or `IN_PROGRESS`; `false`: `scheduledAt < now` and not `IN_PROGRESS` |
+| `order` | `asc` (default) or `desc` by `scheduledAt`, then `id` |
+| `from` / `to` | unchanged: `scheduledAt` within `[from, to]` |
+
+Bad values → 400 `LESSON_FILTER_INVALID` with `pointer` `/status`, `/upcoming` or `/order`.
+Examples: next lesson `?studentId=…&upcoming=true&status=CONFIRMED,IN_PROGRESS&pageSize=1`;
+history `?studentId=…&upcoming=false&order=desc`.
+
+`pageSize` above the maximum (100, or 500 with both `from` and `to`) is still clamped, not
+rejected; the response's `pageSize` is the size actually applied, so page through `total` with it.
+
 ### New: Teacher in lesson responses
 Every `LessonResponse` (list, detail, and the lesson returned by mutations) now includes
 `teacher: { id, firstName, lastName }` next to the existing `teacherId`.
@@ -2193,7 +2212,7 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 | Telegram | `TELEGRAM_NOT_LINKED`, `TELEGRAM_ALREADY_LINKED`, `TELEGRAM_NOT_CONFIGURED`, `TELEGRAM_AUTH_INVALID`, `TELEGRAM_AUTH_EXPIRED`, `TELEGRAM_UNREACHABLE` (409), `TELEGRAM_SEND_FAILED` (502) |
 | Users | `USER_NOT_FOUND`, `TEACHER_NOT_FOUND`, `EMAIL_ALREADY_EXISTS`, `UNSUPPORTED_LOCALE`, `UNSUPPORTED_NATIVE_LANGUAGE`, `NATIVE_LANGUAGE_STUDENTS_ONLY`, `APPROVAL_SETTINGS_TEACHERS_ONLY`, `AVATAR_INVALID`, `AVATAR_NOT_FOUND`, `ADMIN_SELF_ACTION` |
 | Registration / reset | `INVITATION_ALREADY_PENDING`, `REGISTRATION_LINK_INVALID`, `REGISTRATION_LINK_EXPIRED`, `REGISTRATION_LINK_USED`, `RESET_TOKEN_INVALID`, `RESET_TOKEN_EXPIRED`, `RESET_TOKEN_USED` |
-| Lessons | `LESSON_NOT_FOUND`, `LESSON_INVALID_STATE`, `CLUB_FULL`, `NOT_TEACHERS_STUDENT`, `LESSON_NOT_JOINABLE`, `LESSON_ALREADY_STARTED`, `LESSON_NOT_STARTED`, `ALREADY_PARTICIPANT`, `STUDENT_NOT_IN_LESSON`, `JOIN_REQUEST_ALREADY_PENDING`, `JOIN_REQUEST_NOT_FOUND`, `RESCHEDULE_ALREADY_PENDING`, `RESCHEDULE_NOT_FOUND`, `VIDEO_ROOM_NOT_READY` |
+| Lessons | `LESSON_NOT_FOUND`, `LESSON_FILTER_INVALID`, `LESSON_INVALID_STATE`, `CLUB_FULL`, `NOT_TEACHERS_STUDENT`, `LESSON_NOT_JOINABLE`, `LESSON_ALREADY_STARTED`, `LESSON_NOT_STARTED`, `ALREADY_PARTICIPANT`, `STUDENT_NOT_IN_LESSON`, `JOIN_REQUEST_ALREADY_PENDING`, `JOIN_REQUEST_NOT_FOUND`, `RESCHEDULE_ALREADY_PENDING`, `RESCHEDULE_NOT_FOUND`, `VIDEO_ROOM_NOT_READY` |
 | Availability | `AVAILABILITY_SLOT_BLOCKED`, `AVAILABILITY_MIN_NOTICE`, `AVAILABILITY_OVERLAP`, `AVAILABILITY_BUFFER_CONFLICT`, `AVAILABILITY_EXCEPTION_NOT_FOUND` |
 | Materials | `MATERIAL_NOT_FOUND`, `MATERIAL_FILE_NOT_FOUND`, `FOLDER_NOT_FOUND`, `TARGET_FOLDER_NOT_FOUND`, `FOLDER_NOT_EMPTY`, `FOLDER_NAME_TAKEN`, `FOLDER_CYCLE`, `FILE_TOO_LARGE` |
 | Homework | `ASSIGNMENT_NOT_FOUND`, `ASSIGNMENT_NO_STUDENTS`, `HOMEWORK_NOT_FOUND`, `HOMEWORK_ITEM_INVALID` (+ `pointer`), `HOMEWORK_ANSWER_INVALID` (+ `pointer`), `HOMEWORK_INVALID_STATE` (409), `SUBMISSION_LOCKED` (409), `UPLOAD_TYPE_NOT_ALLOWED`, `UPLOAD_LIMIT_REACHED` (409), `HOMEWORK_UPLOAD_NOT_FOUND` |

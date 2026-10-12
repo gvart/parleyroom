@@ -28,7 +28,10 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.core.greaterEq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.inSubQuery
+import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.lessEq
+import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.select
@@ -37,6 +40,20 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.time.OffsetDateTime
 import java.util.UUID
 
+/**
+ * Narrows `GET /lessons` within the caller's own scope. [upcoming] true: not started yet or IN_PROGRESS;
+ * false: started before [now] and not running.
+ */
+data class LessonListFilter(
+    val from: OffsetDateTime? = null,
+    val to: OffsetDateTime? = null,
+    val studentId: UUID? = null,
+    val statuses: List<LessonStatus>? = null,
+    val upcoming: Boolean? = null,
+    val descending: Boolean = false,
+    val now: OffsetDateTime = OffsetDateTime.now(),
+)
+
 class LessonService(
     private val support: LessonSupport,
     private val availabilityService: AvailabilityService,
@@ -44,10 +61,12 @@ class LessonService(
 
     fun getLessons(
         principal: UserPrincipal,
-        from: OffsetDateTime?,
-        to: OffsetDateTime?,
+        filter: LessonListFilter,
         page: PageRequest,
     ): LessonPageResponse = transaction {
+        if (principal.role == UserRole.STUDENT && filter.studentId != null && filter.studentId != principal.id)
+            throw ForbiddenException("Students can only filter by their own id")
+
         val baseQuery = when (principal.role) {
             UserRole.ADMIN -> LessonTable.selectAll()
             UserRole.TEACHER -> LessonTable.selectAll()
@@ -91,12 +110,36 @@ class LessonService(
             }
         }
 
+        val from = filter.from
+        val to = filter.to
         if (from != null) baseQuery.andWhere { LessonTable.scheduledAt greaterEq from }
         if (to != null) baseQuery.andWhere { LessonTable.scheduledAt lessEq to }
+        if (filter.studentId != null) {
+            // A participant seat that is not rejected; for students this narrows to their own lessons.
+            val studentLessonIds = LessonStudentTable
+                .select(LessonStudentTable.lessonId)
+                .where {
+                    (LessonStudentTable.studentId eq filter.studentId) and
+                            (LessonStudentTable.status neq LessonStudentStatus.REJECTED)
+                }
+            baseQuery.andWhere { LessonTable.id inSubQuery studentLessonIds }
+        }
+        if (!filter.statuses.isNullOrEmpty()) baseQuery.andWhere { LessonTable.status inList filter.statuses }
+        when (filter.upcoming) {
+            // A running lesson started in the past but is still the "next" one.
+            true -> baseQuery.andWhere {
+                (LessonTable.scheduledAt greaterEq filter.now) or (LessonTable.status eq LessonStatus.IN_PROGRESS)
+            }
+            false -> baseQuery.andWhere {
+                (LessonTable.scheduledAt less filter.now) and (LessonTable.status neq LessonStatus.IN_PROGRESS)
+            }
+            null -> Unit
+        }
 
+        val order = if (filter.descending) SortOrder.DESC else SortOrder.ASC
         val total = baseQuery.count()
         val rows = baseQuery
-            .orderBy(LessonTable.scheduledAt to SortOrder.ASC, LessonTable.id to SortOrder.ASC)
+            .orderBy(LessonTable.scheduledAt to order, LessonTable.id to order)
             .limit(page.pageSize)
             .offset(page.offset)
             .toList()
