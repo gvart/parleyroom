@@ -8,6 +8,8 @@ import com.gvart.parleyroom.email.template.RenderedEmail
 import com.gvart.parleyroom.email.template.ReminderFooter
 import com.gvart.parleyroom.email.template.RobbiPose
 import com.gvart.parleyroom.email.template.emailLanguageFor
+import com.gvart.parleyroom.reminder.transfer.AttentionReasonType
+import com.gvart.parleyroom.reminder.transfer.TeacherDigestLine
 import com.gvart.parleyroom.user.data.UserRole
 import java.io.File
 import java.time.OffsetDateTime
@@ -111,6 +113,21 @@ class EmailTemplatesTest {
                     ),
                     "homeworkDueTomorrow" to templates.homeworkDueTomorrow(lang, "Wechselpräpositionen", NOW.plusDays(1), zone, "https://app.test/student/homework/1", footer),
                     "homeworkOverdue" to templates.homeworkOverdue(lang, "Wechselpräpositionen", NOW.minusDays(2), zone, "https://app.test/student/homework/1", footer),
+                    "teacherFollowUp" to templates.teacherFollowUp(
+                        lang, "Anna", "Perfekt", NOW.minusHours(3), zone, wrapUp = true, homework = true, "https://app.test/teacher/students/1/wrap-up?lesson=2", footer,
+                    ),
+                    "teacherFollowUpHomework" to templates.teacherFollowUp(
+                        lang, "Anna", "Perfekt", NOW.minusHours(3), zone, wrapUp = false, homework = true, "https://app.test/teacher/students/1/wrap-up?lesson=2", footer,
+                    ),
+                    "teacherPrep" to templates.teacherPrep(lang, "Anna", "Perfekt", NOW.plusDays(1), zone, "https://app.test/teacher/students/1/prepare?lesson=2", footer),
+                    "teacherDigest" to templates.teacherDigest(
+                        lang,
+                        listOf(
+                            TeacherDigestLine("Anna", mapOf(AttentionReasonType.BEHIND to 1, AttentionReasonType.NOT_WRAPPED_UP to 2)),
+                            TeacherDigestLine("Olena", mapOf(AttentionReasonType.NO_HOMEWORK to 1)),
+                        ),
+                        "https://app.test/teacher/dashboard", footer,
+                    ),
                 ).map { (name, email) -> Triple(name, lang, email) }
             }
         }

@@ -1,6 +1,10 @@
 package com.gvart.parleyroom.reminder.config
 
+import com.gvart.parleyroom.reminder.routing.configureReminderRouting
 import com.gvart.parleyroom.reminder.service.ReminderService
+import com.gvart.parleyroom.reminder.service.TeacherAttentionService
+import com.gvart.parleyroom.reminder.service.TeacherReminderService
+import com.gvart.parleyroom.reminder.service.TeacherReminderSettingsService
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStarted
 import io.ktor.server.application.ApplicationStopping
@@ -14,11 +18,16 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
 
-/** After the email and Telegram modules (NotificationMailer, TelegramNotifier). */
+/** After the email, Telegram, notification, admin (feature flags), goal and lesson-prep modules. */
 fun Application.configureReminderModule() {
     dependencies {
         provide(ReminderService::class)
+        provide(TeacherReminderSettingsService::class)
+        provide(TeacherAttentionService::class)
+        provide(TeacherReminderService::class)
     }
+
+    configureReminderRouting()
 
     val config = environment.config
     val enabled = config.propertyOrNull("reminders.enabled")?.getString()?.toBoolean() ?: true
@@ -28,6 +37,7 @@ fun Application.configureReminderModule() {
         val supervisor = SupervisorJob()
         val scope = CoroutineScope(Dispatchers.IO + supervisor)
         val reminderService: ReminderService by dependencies
+        val teacherReminderService: TeacherReminderService by dependencies
 
         val log = environment.log
         monitor.subscribe(ApplicationStarted) {
@@ -36,6 +46,8 @@ fun Application.configureReminderModule() {
                     delay(interval)
                     runCatching { reminderService.runOnce() }
                         .onFailure { log.warn("Reminder job failed", it) }
+                    runCatching { teacherReminderService.runOnce() }
+                        .onFailure { log.warn("Teacher reminder job failed", it) }
                 }
             }
         }

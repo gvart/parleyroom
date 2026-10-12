@@ -6,6 +6,9 @@ import com.gvart.parleyroom.email.service.SendResult
 import com.gvart.parleyroom.email.template.LessonReminderVariant
 import com.gvart.parleyroom.email.template.emailLanguageFor
 import com.gvart.parleyroom.email.transfer.EmailCategory
+import com.gvart.parleyroom.reminder.service.TeacherLesson
+import com.gvart.parleyroom.reminder.service.TeacherLinks
+import com.gvart.parleyroom.reminder.transfer.TeacherDigestLine
 import com.gvart.parleyroom.telegram.config.TelegramNotificationConfig
 import com.gvart.parleyroom.telegram.data.TelegramKind
 import com.gvart.parleyroom.telegram.data.TelegramLogTable
@@ -89,6 +92,26 @@ class TelegramNotifier(
             templates.homeworkOverdue(emailLanguageFor(user), assignmentTitle) to appUrl(user, "/homework/$homeworkId")
         }
 
+    /** See NotificationMailer.sendTeacherFollowUp. */
+    suspend fun sendTeacherFollowUp(lesson: TeacherLesson, studentFirstName: String, wrapUp: Boolean, homework: Boolean): SendResult =
+        sendReminder(lesson.teacherId, EmailCategory.TEACHER_REMINDERS, TelegramKind.TEACHER_FOLLOW_UP, lesson.id, null) { user ->
+            templates.teacherFollowUp(emailLanguageFor(user), studentFirstName, lesson.title, wrapUp, homework) to
+                teacherUrl("/students/${lesson.studentId}", TeacherLinks.wrapUp(config.appBaseUrl, lesson))
+        }
+
+    /** See NotificationMailer.sendTeacherPrep. */
+    suspend fun sendTeacherPrep(lesson: TeacherLesson, studentFirstName: String): SendResult =
+        sendReminder(lesson.teacherId, EmailCategory.TEACHER_REMINDERS, TelegramKind.TEACHER_PREP, lesson.id, "@${lesson.startsAt.toEpochSecond()}") { user ->
+            templates.teacherPrep(emailLanguageFor(user), studentFirstName, lesson.title, lesson.startsAt, zoneOf(user)) to
+                teacherUrl("/students/${lesson.studentId}", TeacherLinks.prep(config.appBaseUrl, lesson))
+        }
+
+    /** See NotificationMailer.sendTeacherDigest. */
+    suspend fun sendTeacherDigest(teacherId: UUID, week: String, students: List<TeacherDigestLine>): SendResult =
+        sendReminder(teacherId, EmailCategory.TEACHER_REMINDERS, TelegramKind.TEACHER_DIGEST, teacherId, week) { user ->
+            templates.teacherDigest(emailLanguageFor(user), students) to teacherUrl("", TeacherLinks.dashboard(config.appBaseUrl))
+        }
+
     private suspend fun sendReminder(
         userId: UUID,
         category: EmailCategory,
@@ -103,6 +126,8 @@ class TelegramNotifier(
         val enabled = when (category) {
             EmailCategory.LESSON_REMINDERS -> user[UserTable.telegramLessonReminders]
             EmailCategory.HOMEWORK_REMINDERS -> user[UserTable.telegramHomeworkReminders]
+            // Toggled per type in teacher_reminder_settings, which the caller checked.
+            EmailCategory.TEACHER_REMINDERS -> true
         }
         if (!enabled) return SendResult.OPTED_OUT
         val chatId = user[UserTable.telegramId] ?: return SendResult.SKIPPED
@@ -161,6 +186,10 @@ class TelegramNotifier(
             val area = if (user[UserTable.role] == UserRole.STUDENT) "student" else "teacher"
             if (path.isEmpty()) config.appBaseUrl else "${config.appBaseUrl}/$area$path"
         }
+
+    /** [miniAppPath] in the Mini App (teachers have no preparation or wrap-up there yet), else the portal page [portalUrl]. */
+    private fun teacherUrl(miniAppPath: String, portalUrl: String): String =
+        if (config.miniAppBaseUrl.isNotEmpty()) "${config.miniAppBaseUrl}$miniAppPath" else portalUrl
 
     private fun zoneOf(user: ResultRow): ZoneId =
         runCatching { ZoneId.of(user[UserTable.timezone]) }.getOrDefault(ZoneId.of("Europe/Berlin"))

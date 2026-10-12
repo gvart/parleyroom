@@ -7,6 +7,8 @@ import com.gvart.parleyroom.email.template.EmailLanguage.EN
 import com.gvart.parleyroom.email.template.EmailLanguage.RU
 import com.gvart.parleyroom.email.template.EmailLanguage.UK
 import com.gvart.parleyroom.email.template.LessonReminderVariant
+import com.gvart.parleyroom.email.template.digestReason
+import com.gvart.parleyroom.reminder.transfer.TeacherDigestLine
 import com.gvart.parleyroom.user.data.UserRole
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -86,6 +88,46 @@ class TelegramTemplates(private val brand: Brand) {
             UK -> TelegramContent("Прострочене завдання: $t\nНічого страшного — його ще можна здати.", "Доробити завдання")
             DE -> TelegramContent("Überfällige Hausaufgabe: $t\nKein Stress – du kannst sie noch abgeben.", "Hausaufgabe abschließen")
         }
+    }
+
+    /** To the teacher after a 1:1: what is still open. Only the student's first name. */
+    fun teacherFollowUp(lang: EmailLanguage, studentFirstName: String, lessonTitle: String, wrapUp: Boolean, homework: Boolean): TelegramContent {
+        val n = "<b>${escape(studentFirstName)}</b>"
+        val t = escape(lessonTitle)
+        val (headline, wrapLine, homeworkLine, label) = when (lang) {
+            EN -> listOf("Your lesson with $n is over ($t). Still open:", "• Check off what you covered", "• Create homework", "Wrap up lesson")
+            RU -> listOf("Урок закончился ($n, $t). Осталось:", "• Отметить, что прошли", "• Задать домашнее задание", "Подвести итоги")
+            UK -> listOf("Урок закінчився ($n, $t). Залишилося:", "• Позначити, що пройшли", "• Задати домашнє завдання", "Підбити підсумки")
+            DE -> listOf("Deine Stunde mit $n ist vorbei ($t). Noch offen:", "• Abhaken, was ihr geschafft habt", "• Hausaufgabe erstellen", "Stunde abschließen")
+        }
+        return TelegramContent(listOfNotNull(headline, wrapLine.takeIf { wrapUp }, homeworkLine.takeIf { homework }).joinToString("\n"), label)
+    }
+
+    /** To the teacher before a 1:1 that is not prepared yet. */
+    fun teacherPrep(lang: EmailLanguage, studentFirstName: String, lessonTitle: String, startsAt: OffsetDateTime, zone: ZoneId): TelegramContent {
+        val n = "<b>${escape(studentFirstName)}</b>"
+        val t = escape(lessonTitle)
+        val (headline, label) = when (lang) {
+            EN -> "Prepare your lesson with $n: $t." to "Prepare lesson"
+            RU -> "Подготовка к уроку: $n, $t." to "Подготовить урок"
+            UK -> "Підготовка до уроку: $n, $t." to "Підготувати урок"
+            DE -> "Bereite deine Stunde mit $n vor: $t." to "Stunde vorbereiten"
+        }
+        return TelegramContent("$headline\n${dateTime(lang, startsAt, zone)}", label)
+    }
+
+    /** The weekly overview: one line per student, first name and reason counts only. */
+    fun teacherDigest(lang: EmailLanguage, students: List<TeacherDigestLine>): TelegramContent {
+        val (headline, label) = when (lang) {
+            EN -> "<b>Weekly overview</b> — these students could use some attention:" to "Open dashboard"
+            RU -> "<b>Обзор недели</b> — этим ученикам стоит уделить внимание:" to "Открыть панель"
+            UK -> "<b>Огляд тижня</b> — цим учням варто приділити увагу:" to "Відкрити панель"
+            DE -> "<b>Wochenüberblick</b> – diese Lernenden brauchen etwas Aufmerksamkeit:" to "Zum Dashboard"
+        }
+        val lines = students.map { line ->
+            "• <b>${escape(line.firstName)}</b>: " + line.reasons.entries.joinToString(", ") { (type, count) -> digestReason(lang, type, count) }
+        }
+        return TelegramContent((listOf(headline) + lines).joinToString("\n"), label)
     }
 
     /** e.g. "Wednesday, 15 October · 18:00 (Europe/Berlin)" in the recipient's language and zone. */

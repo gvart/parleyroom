@@ -2,6 +2,7 @@ package com.gvart.parleyroom.notification.data
 
 import com.gvart.parleyroom.common.data.pgEnum
 import com.gvart.parleyroom.user.data.UserTable
+import org.jetbrains.exposed.v1.core.TextColumnType
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
@@ -36,6 +37,12 @@ enum class NotificationType {
     MILESTONE_COMPLETED,
     /** To the teacher: the student self-assessed a done milestone with PARTLY / NOT_YET; reference = goal. */
     SELF_ASSESSMENT_MISMATCH,
+    /** To the teacher, hours after a 1:1: wrap-up and/or homework missing (details); reference = lesson, actor = student. */
+    LESSON_FOLLOW_UP_DUE,
+    /** To the teacher before a 1:1 without a READY/DONE plan; reference = lesson, actor = student. */
+    LESSON_PREP_DUE,
+    /** To the teacher: students need attention (GET /api/v1/teacher/attention); actor = the teacher, details = ["students:<n>"]. */
+    WEEKLY_DIGEST,
 }
 
 object NotificationTable : UUIDTable("notifications") {
@@ -48,4 +55,5 @@ object NotificationTable : UUIDTable("notifications") {
     val deliverAfter = timestampWithTimeZone("deliver_after").nullable()
     val oldScheduledAt = timestampWithTimeZone("old_scheduled_at").nullable()
     val newScheduledAt = timestampWithTimeZone("new_scheduled_at").nullable()
+    val details = array<String>("details", TextColumnType()).nullable()
 }

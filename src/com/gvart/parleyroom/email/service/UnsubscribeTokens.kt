@@ -64,7 +64,11 @@ class UnsubscribeTokens(jwtConfig: JwtConfig, private val config: MailConfig) {
         const val PAYLOAD_SIZE = 17
         const val MAC_SIZE = 16
         /** Stable wire codes; never reuse one. */
-        val CODES = mapOf(EmailCategory.LESSON_REMINDERS to 1.toByte(), EmailCategory.HOMEWORK_REMINDERS to 2.toByte())
+        val CODES = mapOf(
+            EmailCategory.LESSON_REMINDERS to 1.toByte(),
+            EmailCategory.HOMEWORK_REMINDERS to 2.toByte(),
+            EmailCategory.TEACHER_REMINDERS to 3.toByte(),
+        )
         val ENCODER: Base64.Encoder = Base64.getUrlEncoder().withoutPadding()
         val DECODER: Base64.Decoder = Base64.getUrlDecoder()
 
