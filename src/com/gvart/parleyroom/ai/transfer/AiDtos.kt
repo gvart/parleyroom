@@ -33,6 +33,10 @@ data class JobInput(
     val grammarTopicIds: List<String>? = null,
     val kinds: List<DraftKind>? = null,
     val materialIds: List<String>? = null,
+    /** MILESTONE_REGEN: the milestone that is rewritten. */
+    val milestoneId: String? = null,
+    /** ROADMAP: replace an existing roadmap. */
+    val replace: Boolean? = null,
 )
 
 @Serializable
@@ -53,6 +57,8 @@ data class GenerationJobResponse(
     val documentId: String? = null,
     /** GENERATE / REFINE of a draft bundle. */
     val bundleId: String? = null,
+    /** ROADMAP / MILESTONE_REGEN. */
+    val goalId: String? = null,
     val input: JobInput,
     val result: JsonElement? = null,
     val error: JobError? = null,

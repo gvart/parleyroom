@@ -1,5 +1,17 @@
 package com.gvart.parleyroom.config
 
+import com.gvart.parleyroom.goal.transfer.BatchItemStatesRequest
+import com.gvart.parleyroom.goal.transfer.GenerateRoadmapRequest
+import com.gvart.parleyroom.goal.transfer.GoalInput
+import com.gvart.parleyroom.goal.transfer.GoalPatch
+import com.gvart.parleyroom.goal.transfer.ItemInput
+import com.gvart.parleyroom.goal.transfer.ItemPatch
+import com.gvart.parleyroom.goal.transfer.MilestoneInput
+import com.gvart.parleyroom.goal.transfer.MilestonePatch
+import com.gvart.parleyroom.goal.transfer.MoveItemRequest
+import com.gvart.parleyroom.goal.transfer.RegenerateMilestoneRequest
+import com.gvart.parleyroom.goal.transfer.ReorderRequest
+import com.gvart.parleyroom.goal.transfer.SelfAssessmentInput
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.gvart.parleyroom.admin.transfer.AdminCreateUserRequest
@@ -221,6 +233,18 @@ fun Application.generalConfig() {
         validate<RefineRequest> { it.validate() }
         validate<PromptTemplateInput> { it.validate() }
         validate<FillMissingRequest> { it.validate() }
+        validate<GoalInput> { it.validate() }
+        validate<GoalPatch> { it.validate() }
+        validate<MilestoneInput> { it.validate() }
+        validate<MilestonePatch> { it.validate() }
+        validate<ItemInput> { it.validate() }
+        validate<ItemPatch> { it.validate() }
+        validate<MoveItemRequest> { it.validate() }
+        validate<ReorderRequest> { it.validate() }
+        validate<BatchItemStatesRequest> { it.validate() }
+        validate<SelfAssessmentInput> { it.validate() }
+        validate<GenerateRoadmapRequest> { it.validate() }
+        validate<RegenerateMilestoneRequest> { it.validate() }
     }
 
 

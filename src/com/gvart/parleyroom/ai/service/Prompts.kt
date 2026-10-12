@@ -2,7 +2,11 @@ package com.gvart.parleyroom.ai.service
 
 import com.gvart.parleyroom.ai.data.DraftMode
 import com.gvart.parleyroom.ai.transfer.DraftKind
+import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.document.service.DocumentBlockValidator
+
+/** The teacher's notes on a goal, as sent with a roadmap prompt. */
+data class RoadmapNotes(val levelNote: String?, val interests: String?, val materials: String?)
 
 /**
  * Prompt texts. System prompts live in `resources/ai/` (editable without code changes); the user
@@ -16,6 +20,8 @@ object Prompts {
     const val TASK_FILL = "fill_translations"
     const val TASK_SUGGEST_TAGS = "suggest_tags"
     const val TASK_SENTENCE_FEEDBACK = "sentence_feedback"
+    const val TASK_ROADMAP = "roadmap"
+    const val TASK_MILESTONE_REGEN = "milestone_regen"
     const val VALIDATION_ERRORS = "validation_errors"
 
     /** Block types numbered "Übung n" in the portal; keep identical to `isExercise` in the portal's documents/lib/blocks.ts. */
@@ -46,6 +52,54 @@ object Prompts {
     val fillSystem: String by lazy { resource("fill-translations-system.md") }
     val suggestTagsSystem: String by lazy { resource("suggest-tags-system.md") }
     val sentenceFeedbackSystem: String by lazy { resource("sentence-feedback-system.md") }
+    val roadmapSystem: String by lazy { resource("roadmap.md") }
+    val milestoneRegenSystem: String by lazy { resource("milestone-regen.md") }
+
+    /**
+     * The curated reference (`ai/exams/<provider>-<level>.md`) for a goal's exam: telc when the name
+     * says so, else Goethe for Goethe / "Start Deutsch" / "Zertifikat"; the level from the name
+     * ("A2", "Start Deutsch 1"), else [targetLevel]. Null when nothing matches.
+     */
+    fun examReference(exam: String?, targetLevel: LanguageLevel?): String? {
+        val name = exam?.lowercase() ?: return null
+        val provider = when {
+            "telc" in name -> "telc"
+            listOf("goethe", "start deutsch", "zertifikat").any { it in name } -> "goethe"
+            else -> return null
+        }
+        val level = Regex("\\b([abc][12])\\b").find(name)?.value
+            ?: when {
+                "start deutsch 1" in name -> "a1"
+                "start deutsch 2" in name -> "a2"
+                else -> targetLevel?.name?.lowercase()
+            } ?: return null
+        return Prompts::class.java.classLoader.getResource("ai/exams/$provider-$level.md")?.readText()
+    }
+
+    /** Only the goal's fields and the student's CEFR level: no name, email or other personal data. */
+    fun roadmap(goal: String, schedule: String, teacherNotes: RoadmapNotes, examReference: String?, instruction: String?): String = buildString {
+        section("task", TASK_ROADMAP)
+        section("goal", goal)
+        section("schedule", schedule)
+        roadmapNotes(teacherNotes, examReference, instruction)
+    }
+
+    fun milestoneRegen(goal: String, roadmap: String, teacherNotes: RoadmapNotes, examReference: String?, instruction: String?): String = buildString {
+        section("task", TASK_MILESTONE_REGEN)
+        section("goal", goal)
+        section("roadmap", roadmap)
+        roadmapNotes(teacherNotes, examReference, instruction)
+    }
+
+    /** The teacher's free text: kept from closing our sections. */
+    private fun StringBuilder.roadmapNotes(notes: RoadmapNotes, examReference: String?, instruction: String?) {
+        fun teacherText(value: String?) = value?.replace("</", "< /")?.takeIf { it.isNotBlank() } ?: NONE
+        section("level_note", teacherText(notes.levelNote))
+        section("interests", teacherText(notes.interests))
+        section("materials", teacherText(notes.materials))
+        section("exam_reference", examReference ?: NONE)
+        section("teacher_instructions", teacherText(instruction))
+    }
 
     fun draftSystem(mode: DraftMode): String =
         if (mode == DraftMode.CLUB) draftSystem + "\n\n" + clubSystem else draftSystem
@@ -132,6 +186,8 @@ object Prompts {
         section("sentence", sentence.replace("</", "< /"))
         translationLanguage?.let { section("translation_language", it) }
     }
+
+    private const val NONE = "(none)"
 
     fun retry(issues: List<Issue>): String = buildString {
         section(VALIDATION_ERRORS, issues.joinToString("\n") { "- ${it.pointer.ifEmpty { "/" }}: ${it.message}" })

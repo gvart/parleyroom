@@ -5,6 +5,7 @@ import com.gvart.parleyroom.common.data.LanguageLevel
 import com.gvart.parleyroom.material.data.MaterialSkill
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.document.service.DocumentBlockValidator
+import com.gvart.parleyroom.goal.data.RoadmapItemKind
 import com.gvart.parleyroom.homework.data.HomeworkResponseType
 import com.gvart.parleyroom.homework.service.HomeworkUnits
 import com.gvart.parleyroom.vocabulary.data.NounArticle
@@ -20,6 +21,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -123,6 +125,47 @@ data class AiSentenceFeedback(
     val explanation: String,
     val explanationTranslation: String? = null,
     val usesWord: Boolean,
+)
+
+/** ROADMAP model output. */
+@Serializable
+data class AiRoadmapOutput(val milestones: List<AiMilestone> = emptyList())
+
+/** MILESTONE_REGEN model output (the milestone keeps its dates and weight). */
+@Serializable
+data class AiMilestoneRegenOutput(val milestone: AiMilestone? = null)
+
+@Serializable
+data class AiMilestone(
+    val title: String = "",
+    val startDate: String? = null,
+    val endDate: String? = null,
+    val weight: Double? = null,
+    val topic: String? = null,
+    val grammarPoints: List<String> = emptyList(),
+    val wordFields: List<String> = emptyList(),
+    val examPart: String? = null,
+    val teacherTips: String? = null,
+    val canDo: String = "",
+    val items: List<AiRoadmapItem> = emptyList(),
+)
+
+@Serializable
+data class AiRoadmapItem(val kind: String = "", val title: String = "")
+
+/** A milestone that passed validation; [startDate] / [endDate] are null for a regenerated one. */
+data class ValidatedMilestone(
+    val title: String,
+    val startDate: LocalDate?,
+    val endDate: LocalDate?,
+    val weight: Double,
+    val topic: String?,
+    val grammarPoints: List<String>,
+    val wordFields: List<String>,
+    val examPart: String?,
+    val teacherTips: String?,
+    val canDo: String,
+    val items: List<Pair<RoadmapItemKind, String>>,
 )
 
 data class Issue(val pointer: String, val message: String)
@@ -365,6 +408,93 @@ object AiOutputParser {
             explanation = output.explanation.trim(),
             explanationTranslation = if (translationRequested) output.explanationTranslation?.trim() else null,
         )
+    }
+
+    const val MAX_MILESTONES = 24
+    const val MAX_MILESTONE_ITEMS = 12
+    private const val MAX_ROADMAP_TEXT = 2_000
+    private const val MAX_ROADMAP_LIST = 30
+
+    /**
+     * A whole roadmap: 1..[MAX_MILESTONES] milestones in time order, each inside [start]..[deadline],
+     * starting after the previous one ended, with a "Ich kann …" canDo and 1..[MAX_MILESTONE_ITEMS] items.
+     */
+    fun parseRoadmap(text: String, start: LocalDate, deadline: LocalDate): List<ValidatedMilestone> {
+        val output = decode<AiRoadmapOutput>(text)
+        val issues = mutableListOf<Issue>()
+        if (output.milestones.isEmpty() || output.milestones.size > MAX_MILESTONES)
+            issues += Issue("/milestones", "give 1..$MAX_MILESTONES milestones")
+        var previousEnd: LocalDate? = null
+        val milestones = output.milestones.take(MAX_MILESTONES).mapIndexed { i, milestone ->
+            val at = "/milestones/$i"
+            val from = date(milestone.startDate, "$at/startDate", issues)
+            val to = date(milestone.endDate, "$at/endDate", issues)
+            if (from != null && to != null) {
+                if (to < from) issues += Issue("$at/endDate", "endDate must not be before startDate")
+                if (from < start || to > deadline) issues += Issue(at, "dates must be within $start..$deadline")
+                previousEnd?.let { if (from <= it) issues += Issue("$at/startDate", "must start after the previous milestone ends ($it)") }
+                previousEnd = to
+            }
+            milestone(milestone, at, issues).copy(startDate = from, endDate = to)
+        }
+        if (issues.isNotEmpty()) throw AiOutputInvalid(issues.take(MAX_ISSUES))
+        return milestones
+    }
+
+    /** One rewritten milestone; dates and weight in the answer are ignored. */
+    fun parseMilestoneRegen(text: String): ValidatedMilestone {
+        val output = decode<AiMilestoneRegenOutput>(text)
+        val milestone = output.milestone ?: throw AiOutputInvalid(listOf(Issue("/milestone", "milestone is required")))
+        val issues = mutableListOf<Issue>()
+        val validated = milestone(milestone, "/milestone", issues)
+        if (issues.isNotEmpty()) throw AiOutputInvalid(issues.take(MAX_ISSUES))
+        return validated
+    }
+
+    private fun milestone(milestone: AiMilestone, at: String, issues: MutableList<Issue>): ValidatedMilestone {
+        fun text(value: String?, name: String, max: Int, required: Boolean = false): String? {
+            val trimmed = value?.trim()?.takeIf { it.isNotEmpty() }
+            if (trimmed == null && required) issues += Issue("$at/$name", "$name is required")
+            if (trimmed != null && trimmed.length > max) issues += Issue("$at/$name", "at most $max characters")
+            return trimmed
+        }
+        fun list(values: List<String>, name: String): List<String> {
+            val cleaned = values.map { it.trim() }.filter { it.isNotEmpty() }
+            if (cleaned.size > MAX_ROADMAP_LIST || cleaned.any { it.length > 200 })
+                issues += Issue("$at/$name", "at most $MAX_ROADMAP_LIST entries of at most 200 characters")
+            return cleaned
+        }
+        val canDo = text(milestone.canDo, "canDo", MAX_ROADMAP_TEXT, required = true)
+        if (canDo != null && !canDo.startsWith("Ich kann")) issues += Issue("$at/canDo", "canDo must start with \"Ich kann\"")
+        val weight = milestone.weight ?: 1.0
+        if (weight <= 0 || weight > 100) issues += Issue("$at/weight", "weight must be greater than 0 and at most 100")
+        if (milestone.items.isEmpty() || milestone.items.size > MAX_MILESTONE_ITEMS)
+            issues += Issue("$at/items", "give 1..$MAX_MILESTONE_ITEMS items")
+        val items = milestone.items.take(MAX_MILESTONE_ITEMS).mapIndexedNotNull { j, item ->
+            val kind = RoadmapItemKind.entries.firstOrNull { it.name == item.kind }
+            if (kind == null) issues += Issue("$at/items/$j/kind", "kind must be one of ${RoadmapItemKind.entries.joinToString()}")
+            val title = item.title.trim()
+            if (title.isEmpty() || title.length > 300) issues += Issue("$at/items/$j/title", "title must be 1..300 characters")
+            kind?.let { it to title }
+        }
+        return ValidatedMilestone(
+            title = text(milestone.title, "title", 200, required = true).orEmpty(),
+            startDate = null,
+            endDate = null,
+            weight = weight,
+            topic = text(milestone.topic, "topic", MAX_ROADMAP_TEXT),
+            grammarPoints = list(milestone.grammarPoints, "grammarPoints"),
+            wordFields = list(milestone.wordFields, "wordFields"),
+            examPart = text(milestone.examPart, "examPart", MAX_ROADMAP_TEXT),
+            teacherTips = text(milestone.teacherTips, "teacherTips", MAX_ROADMAP_TEXT),
+            canDo = canDo.orEmpty(),
+            items = items,
+        )
+    }
+
+    private fun date(raw: String?, pointer: String, issues: MutableList<Issue>): LocalDate? {
+        if (raw == null) { issues += Issue(pointer, "date (YYYY-MM-DD) is required"); return null }
+        return runCatching { LocalDate.parse(raw) }.getOrElse { issues += Issue(pointer, "must be YYYY-MM-DD"); null }
     }
 
     private inline fun <reified T> decode(text: String): T {

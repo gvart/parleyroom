@@ -13,7 +13,6 @@ import com.gvart.parleyroom.common.service.findByIdOrThrow
 import com.gvart.parleyroom.common.transfer.exception.BadRequestException
 import com.gvart.parleyroom.goal.data.GoalStatus
 import com.gvart.parleyroom.goal.data.GoalTable
-import com.gvart.parleyroom.goal.data.GoalType
 import com.gvart.parleyroom.lesson.data.LessonStatus
 import com.gvart.parleyroom.topic.service.LibraryAccess
 import com.gvart.parleyroom.group.data.GroupTable
@@ -352,15 +351,17 @@ class LessonContextService(private val progress: ProgressCalculator) {
     private fun focusGrammar(sources: ContextSources): List<String> =
         LibraryAccess.grammarTopicRefs(sources.grammarTopicIds).let { refs -> sources.grammarTopicIds.mapNotNull { refs[it]?.name } }
 
-    /** Active goals, without the free-text note (it may name people). */
+    /** The active goal as exam / target level and deadline only: its free text (title, notes) may name people. */
     private fun goals(teacherId: UUID, studentId: UUID): List<String> = GoalTable.selectAll()
         .where { (GoalTable.studentId eq studentId) and (GoalTable.teacherId eq teacherId) and (GoalTable.status eq GoalStatus.ACTIVE) }
         .orderBy(GoalTable.createdAt)
-        .map { row ->
-            val by = row[GoalTable.targetDate]?.let { " by $it" }.orEmpty()
-            when (row[GoalTable.type]) {
-                GoalType.EXAM -> "Exam ${row[GoalTable.examName].orEmpty()} (${row[GoalTable.targetLevel]})$by".replace("  ", " ")
-                GoalType.LEVEL -> "Reach level ${row[GoalTable.targetLevel]}$by"
+        .mapNotNull { row ->
+            val level = row[GoalTable.targetLevel]
+            val by = " by ${row[GoalTable.deadline]}"
+            when {
+                row[GoalTable.exam] != null -> "Exam ${row[GoalTable.exam]}${level?.let { " ($it)" }.orEmpty()}$by"
+                level != null -> "Reach level $level$by"
+                else -> null
             }
         }
 

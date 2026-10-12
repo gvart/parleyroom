@@ -20,12 +20,15 @@ VALUES
     ('00000000-0000-0000-0000-000000000010', 'newuser@test.com', '2cfbcb5651291dbc903c94466d3a6b11d859dfbb5674e9f3378e9b9930d27438', 'STUDENT', false, now() + interval '7 days', '00000000-0000-0000-0000-000000000002'),
     ('00000000-0000-0000-0000-000000000011', 'expired@test.com', '7e0a45801bb201a7814effd80b6941eef531a26043bde55e068f12ad30236aa0', 'STUDENT', false, now() - interval '1 day', NULL),
     ('00000000-0000-0000-0000-000000000012', 'used@test.com', '5b4114ad52a231abec8d16109578780aa5a291caa63ccf9d7a00038635cc3ed3', 'STUDENT', true, now() + interval '7 days', NULL);
--- AI model routing as seeded by V27 (TRUNCATE users CASCADE empties it).
+-- AI model routing as seeded by V27 and V36 (TRUNCATE users CASCADE empties it).
 INSERT INTO ai_model_settings (use_case, model)
 VALUES ('GENERATE', 'claude-haiku-5-5'),
        ('REFINE', 'claude-haiku-5-5'),
        ('FILL_TRANSLATIONS', 'claude-haiku-5-5'),
        ('SUGGEST_TAGS', 'claude-haiku-5-5'),
-       ('SENTENCE_FEEDBACK', 'claude-haiku-5-5');
+       ('SENTENCE_FEEDBACK', 'claude-haiku-5-5'),
+       ('ROADMAP', 'claude-sonnet-5-5'),
+       ('MILESTONE_REGEN', 'claude-sonnet-5-5'),
+       ('LESSON_PREP', 'claude-sonnet-5-5');
 -- Platform settings as seeded by V31 (TRUNCATE users CASCADE empties it).
 INSERT INTO app_settings (id) VALUES (1);

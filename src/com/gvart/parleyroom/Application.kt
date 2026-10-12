@@ -61,8 +61,9 @@ fun Application.module(
     configureActivityModule()
     // After activity (StreakService); before AI, whose lesson context uses the progress calculator.
     configureProgressModule()
-    configureGoalModule()
     configureAiModule()
+    // After AI: roadmap generation runs as AI jobs.
+    configureGoalModule()
     configurePracticeModule()
     configureReminderModule()
     configureHealthRouting()

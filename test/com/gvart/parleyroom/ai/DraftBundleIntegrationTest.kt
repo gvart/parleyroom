@@ -83,6 +83,7 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.util.UUID
 import kotlin.test.Test
+import kotlin.test.fail
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -384,6 +385,12 @@ class DraftBundleIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
         val job = client.startGenerate(token, seedLesson(), "[fake:delay=3000]").body<DraftBundleResponse>().job!!
+        // The live runner marks the job RUNNING asynchronously; let it, so it cannot overwrite FAILED below.
+        var attempts = 0
+        while (client.get("/api/v1/ai/jobs/${job.id}") { bearerAuth(token) }.body<GenerationJobResponse>().status != GenerationJobStatus.RUNNING) {
+            if (++attempts > 100) fail("Job ${job.id} never started")
+            delay(20)
+        }
 
         // Simulates the next boot: a fresh runner fails what the previous process left behind.
         val runner = GenerationJobRunner(AiConfig("fake", "fake", "", 2, 3, Duration.parse("30s")), NotificationSseManager())
