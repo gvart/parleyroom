@@ -855,98 +855,158 @@ ProgressSummary {
 }
 ```
 
-## Goals (`/api/v1/goals`)
+## Goals & roadmap (`/api/v1/goals`, feature flag `roadmap`)
 
-Brief §5.9 / decision 10: **auto-tracked** goals replace the old manual-percentage goals (table
-`learning_goals`, `PUT …/progress`, `/complete`, `/abandon` are removed; the prod DB is reset). The
-teacher sets a goal for a student; progress is **computed** from the progress data above, never
-typed in. The path stays `/api/v1/goals`; the request/response shapes are **replaced in place** (old
-clients break — acceptable, there are none besides the portal, which ships with this change).
+Stage 1 (V36) **replaces** the auto-tracked goals of V14: `goals` was dropped and recreated, no data
+was migrated. A teacher sets one goal per student, drafts a roadmap of milestones and items with AI,
+edits it and ticks items off after lessons. The student sees only a minimal progress path with
+"Ich kann …" statements and self-assesses finished milestones.
 
-```
-GET    /api/v1/goals?studentId=&status=ACTIVE,ACHIEVED   -> [Goal]   ACTIVE first, then targetDate asc nulls last, createdAt desc
-POST   /api/v1/goals            Body: GoalInput -> 201 Goal                     teacher only
-GET    /api/v1/goals/{id}       -> Goal
-PATCH  /api/v1/goals/{id}       Body: GoalPatch -> Goal                          the goal's teacher only
-DELETE /api/v1/goals/{id}       -> 204                                           the goal's teacher or admin
-```
-Roles: list/get — students see their own goals (from every teacher), teachers the goals they created
-(`studentId` filter must be linked, else 403), admins all. Others get 404 `GOAL_NOT_FOUND`. Students
-cannot create, edit or delete (403). The student must be linked to the teacher (403 `FORBIDDEN`).
+While the flag `roadmap` is off every route below answers **404 `NOT_FOUND`** (problem+json).
 
 ```
-GoalInput = { studentId, type: EXAM | LEVEL, examName?: string (1..100), targetLevel: A1..C2,
-              targetDate?: YYYY-MM-DD, note?: string (≤ 2 000) }
-GoalPatch = { examName?, targetLevel?, targetDate?, clearTargetDate?: bool, note?, clearNote?: bool,
-              status?: ACTIVE | ACHIEVED | ARCHIVED }
+GET    /api/v1/goals?studentId=&status=ACTIVE,ARCHIVED&page=&pageSize=  -> GoalPage            teacher (own) / admin (all)
+POST   /api/v1/goals                         GoalInput        -> 201 TeacherGoal          teacher, linked student
+GET    /api/v1/goals/{id}                                     -> TeacherGoal
+PATCH  /api/v1/goals/{id}                    GoalPatch        -> TeacherGoal              also archive / reopen
+DELETE /api/v1/goals/{id}                                     -> 204
+POST   /api/v1/goals/{id}/roadmap/generate   { replace?, instruction? } -> 202 GenerationJob (ROADMAP)
+POST   /api/v1/goals/{id}/milestones         MilestoneInput   -> 201 TeacherGoal
+PUT    /api/v1/goals/{id}/milestones/order   { ids: [...] }   -> TeacherGoal
+PATCH  /api/v1/goals/{id}/milestones/{mid}   MilestonePatch   -> TeacherGoal
+DELETE /api/v1/goals/{id}/milestones/{mid}                    -> TeacherGoal
+POST   /api/v1/goals/{id}/milestones/{mid}/regenerate { instruction? } -> 202 GenerationJob (MILESTONE_REGEN)
+POST   /api/v1/goals/{id}/milestones/{mid}/done               -> TeacherGoal              notifies the student
+DELETE /api/v1/goals/{id}/milestones/{mid}/done               -> TeacherGoal
+POST   /api/v1/goals/{id}/milestones/{mid}/items { kind, title, position? } -> 201 TeacherGoal
+PUT    /api/v1/goals/{id}/milestones/{mid}/items/order { ids } -> TeacherGoal
+PATCH  /api/v1/goals/{id}/items              { lessonId?, items: [{ itemId, state }] } -> TeacherGoal   batch, idempotent
+PATCH  /api/v1/goals/{id}/items/{itemId}     { kind?, title?, state?, lessonId? } -> TeacherGoal
+DELETE /api/v1/goals/{id}/items/{itemId}                      -> TeacherGoal
+POST   /api/v1/goals/{id}/items/{itemId}/move { milestoneId, position? } -> TeacherGoal
+GET    /api/v1/goals/my                                       -> { goal: StudentGoal | null }   student
+POST   /api/v1/goals/my/milestones/{mid}/self-assessment { answer, comment? } -> { goal: StudentGoal }
 ```
-Rules (400 `GOAL_INVALID` + `pointer`): `EXAM` needs `examName` and `targetDate`; `LEVEL` must not
-have `examName`, `targetDate` optional; on create `targetDate` must not be before today (the
-teacher's timezone). `type` cannot change. Status is set by the teacher (any transition, also back to
-`ACTIVE`); `statusChangedAt` records the last change.
+Roles: the teacher routes are for the goal's teacher or an admin; another teacher gets 404
+`GOAL_NOT_FOUND`, a student 403 (`/goals/my` is theirs). Only teachers create goals (403 otherwise,
+also for a student without a teacher-student link). `/goals/my` and the self-assessment are students
+only (403). Every teacher write answers with the full `TeacherGoal`, so a client can replace its cache.
 
 ```
-Goal {
-  id, studentId, teacherId, type, examName?, targetLevel, targetDate?, note?,
-  status: ACTIVE | ACHIEVED | ARCHIVED, statusChangedAt?, createdAt, updatedAt,
-  baselinePercent: 0..100 | null,    // progress percent computed when the goal was created (null: checklist was empty)
-  progress: GoalProgress
+GoalInput = { studentId, title (1..200), exam? (≤ 100, e.g. "Goethe Start Deutsch 1"), targetLevel?: A1..C2,
+              startDate: YYYY-MM-DD, deadline: YYYY-MM-DD (> startDate), lessonsPerWeek: 0.5..14, lessonMinutes: 15..480,
+              levelNote?, interests?, materials? (≤ 4 000 each) }
+GoalPatch = every GoalInput field but studentId, optional, + status?: ACTIVE | ACHIEVED | ARCHIVED
+            ("" clears exam, targetLevel, levelNote, interests, materials)
+MilestoneInput = { title, startDate, endDate (≥ startDate), weight? (0 < w ≤ 100, default 1), topic?, grammarPoints?: [string],
+                   wordFields?: [string] (≤ 30 × ≤ 200), examPart?, teacherTips?, canDo, position? (1-based, default last) }
+MilestonePatch = MilestoneInput fields, all optional ("" clears topic, examPart, teacherTips)
+```
+At most one `ACTIVE` goal per student (partial unique index; 409 `GOAL_ACTIVE_EXISTS` on create or
+reactivation). Field errors are 400 `VALIDATION_FAILED` with one `errors[]` entry per field
+(`pointer` = `/title`, `/deadline`, …); a deadline that is only invalid against the stored
+startDate is 400 `GOAL_INVALID` with its pointer.
+
+```
+TeacherGoal {
+  id, studentId, teacherId?, title, exam?, targetLevel?, startDate, deadline, lessonsPerWeek, lessonMinutes,
+  levelNote?, interests?, materials?, status: ACTIVE | ACHIEVED | ARCHIVED, createdAt, updatedAt,
+  progress: { percent: 0..100 | null, elapsedPercent: 0..100, status: AHEAD | ON_TRACK | BEHIND | NO_ROADMAP },
+  milestones: [{
+    id, position, title, startDate, endDate, weight, topic?, grammarPoints, wordFields, examPart?, teacherTips?,
+    canDo, doneAt?, progressPercent: 0..100 | null,
+    items: [{ id, position, kind: TOPIC | GRAMMAR | VOCAB | SKILL | EXAM, title,
+              state: NOT_STARTED | IN_PROGRESS | DONE, stateChangedAt?, lessonId? }],
+    selfAssessment?: { answer: YES | PARTLY | NOT_YET, comment?, createdAt, mismatch: bool }
+  }],
+  openMismatches: [{ milestoneId, milestoneTitle, answer, comment?, answeredAt }],
+  activeJob?: { id, kind: ROADMAP | MILESTONE_REGEN, status: QUEUED | RUNNING, milestoneId? }
 }
-GoalProgress {
-  percent: 0..100 | null,            // null when checklistEmpty
-  checklistEmpty: bool,
-  grammar: { total, practiced, covered, needsWork, notCovered },   // target level only, effective statuses
-  topics: { total, covered },        // teacher topics whose levels contain the target level
-  grammarDone, grammarTotal,         // breakdown under the bar: PRACTICED grammar topics / all (= grammar.practiced / grammar.total)
-  topicsDone, topicsTotal,           // covered topics / all (= topics.covered / topics.total)
-  daysLeft: int | null,              // targetDate − today (student's timezone); negative when past; null without targetDate
-  expectedPercent: 0..100 | null,
-  onTrack: bool | null               // null without targetDate, when not ACTIVE, or percent is null
+GoalPage = { goals: [GoalSummary], total, page, pageSize }      // GoalSummary = TeacherGoal without notes and roadmap
+StudentGoal {
+  id, title, deadline, progressPercent?, status,
+  milestones: [{ id, position, done, current }],              // no titles
+  currentCanDo?, nextCanDo?,                                   // current = first milestone not done
+  coveredTitles: [string],                                     // titles of done milestones
+  pendingSelfAssessment?: { milestoneId, canDo }              // first done milestone without an answer
 }
 ```
-**Progress formula** (computed on every read, against the goal teacher's library, target level only —
-lower levels are not included):
-```
-credit(PRACTICED) = 1,  credit(COVERED) = 0.5,  credit(NEEDS_WORK) = credit(NOT_COVERED) = 0
-grammarScore = Σ credit(effective status of G) / |G|        G = teacher's grammar topics with level = targetLevel
-topicsScore  = covered topics / |T|                         T = teacher's topics whose levels contain targetLevel
-percent      = round(100 × (0.8 × grammarScore + 0.2 × topicsScore))     (|T| = 0 → round(100 × grammarScore))
-|G| = 0      → percent = null, checklistEmpty = true (no fake 0 %)
-```
-NEEDS_WORK earns no credit until the recent results improve (see the window above). Overrides count
-(effective status). The percent is progress through the checklist, not exam readiness.
+The student view never contains items, grammar points, word fields, teacher tips, exam parts or the
+teacher's input (levelNote, interests, materials, exam, lesson settings) — a test asserts the keys.
 
-**On track** (only `ACTIVE` goals with `targetDate` and a `percent`), dates in the student's timezone.
-The **baseline** is the goal's `percent` at creation (stored once; `null` → 0), so a student who
-already stands at 60 % is measured against the remaining 40 %:
+**Progress** (decision D-002), computed on every read; dates in the student's timezone:
 ```
-start = createdAt date;  span = max(1, targetDate − start) days;  elapsed = clamp(today − start, 0, span)
-expectedPercent = round(baseline + (elapsed / span) × (100 − baseline))
-onTrack = percent ≥ expectedPercent − 10          (10-point tolerance; past the date: expected = 100)
+progress%  = Σ_m weight_m × done_m / items_m / Σ weight_m     over milestones with ≥ 1 item; only DONE counts
+             no such milestone → percent null, status NO_ROADMAP
+elapsed%   = clamp((today − startDate) / (deadline − startDate), 0, 100)
+status     = AHEAD if progress > elapsed + 5, BEHIND if progress < elapsed − 5, else ON_TRACK
 ```
-Listing goals runs a fixed number of grouped queries per distinct teacher in the result (no per-goal
-queries).
 
-### Tables (V14)
+**Items.** A new `state` stamps `stateChangedAt` and stores `lessonId` (null without one); the same
+state again only updates a given `lessonId`, so the batch PATCH is idempotent. The batch checks every
+item first (unknown or another goal's → 404 `ROADMAP_ITEM_NOT_FOUND`, nothing written). `lessonId`
+must be a lesson of the goal's teacher that the student attends (400 `ROADMAP_LESSON_INVALID`,
+`/lessonId`). Reorders take every id of the milestones (or the milestone's items) exactly once (400
+`ROADMAP_ORDER_INVALID`, `/ids`). A move keeps the item's id, state and lesson. Milestones are done
+only when the teacher marks them (`doneAt`); ticking all items does not do it.
 
-`learning_goals` + enums `GOAL_SET_BY` / `GOAL_STATUS` dropped. `goals` (student_id, teacher_id,
-type `GOAL_TYPE`, exam_name?, target_level, target_date?, note?, baseline_percent?, status `GOAL_STATUS`
-(ACTIVE/ACHIEVED/ARCHIVED), status_changed_at?, created/updated_at; CHECK exam ⇒ exam_name + target_date),
-`grammar_progress_overrides` (PK student_id + grammar_topic_id, grammar topic `ON DELETE CASCADE`,
-teacher_id, status `GRAMMAR_PROGRESS_STATUS`, note?, updated_at). Index
-`assignment_items (document_id)` for the homework → document tag join.
+**Self-assessment.** Marking a milestone done (once; repeating is a no-op) sends the student an
+in-app `MILESTONE_COMPLETED` notification (reference = goal id). The student answers for a done
+milestone of their own goal (409 `MILESTONE_NOT_DONE`, 404 for others'); answering again replaces
+the answer. `mismatch` = milestone done and answer ≠ YES; a new PARTLY / NOT_YET answer notifies the
+teacher (`SELF_ASSESSMENT_MISMATCH`, reference = goal id). Marking undone keeps the answer.
+
+### AI roadmap
+
+`roadmap/generate` and `regenerate` start generation jobs (see "Generation jobs": poll
+`GET /api/v1/ai/jobs/{id}`, tray `targetType: GOAL`, `goalId`) routed by `ai_model_settings`
+use cases `ROADMAP` / `MILESTONE_REGEN` (default `claude-sonnet-5-5`; `LESSON_PREP` is reserved).
+Generate needs a goal without milestones unless `replace: true` (409 `ROADMAP_EXISTS`; checked again
+when the job finishes → job error `ROADMAP_EXISTS`). One job per goal at a time (409 `ROADMAP_BUSY`).
+Regenerate rewrites one milestone that is not done (409 `ROADMAP_MILESTONE_DONE`): it keeps id,
+position, dates, weight and done state; content and items are replaced. Job result:
+`{ goalId, milestoneCount, itemCount, milestoneId? }`; the roadmap is read from the goal.
+
+The model gets **only** the goal's fields (title, exam, target level, dates, lessons/week, minutes,
+level note, interests, materials, the optional instruction) and the student's CEFR level — never the
+name, email or anything else. The student's first and last name are additionally masked as `[Name]`
+in the teacher's free text. For an exam (Goethe A1/A2/B1, telc A1/B1 by name and level) a curated
+reference of its parts and topic areas (`resources/ai/exams/*.md`) is added. Prompts:
+`resources/ai/roadmap.md`, `milestone-regen.md`. Output (validated, one retry with the problems):
+1..24 milestones in time order inside startDate..deadline (each starts after the previous ends),
+`canDo` starting with "Ich kann", 1..12 items with a valid kind each; teacher text in German.
+
+### Tables (V36)
+
+`goals` (student_id CASCADE, teacher_id SET NULL, title, exam?, target_level?, start_date, deadline,
+lessons_per_week NUMERIC(3,1), lesson_minutes, level_note?, interests?, materials?, status `GOAL_STATUS`;
+`uq_goals_active_student` on student_id WHERE ACTIVE), `roadmap_milestones` (goal_id CASCADE,
+position, title, start/end_date, weight NUMERIC(6,2) DEFAULT 1, topic?, grammar_points TEXT[],
+word_fields TEXT[], exam_part?, teacher_tips?, can_do, done_at?), `roadmap_items` (milestone_id CASCADE,
+position, kind `ROADMAP_ITEM_KIND`, title, state `ROADMAP_ITEM_STATE`, state_changed_at?, lesson_id? SET
+NULL), `milestone_self_assessments` (milestone_id CASCADE, student_id, answer `SELF_ASSESSMENT_ANSWER`,
+comment ≤ 1000, UNIQUE (milestone_id, student_id)). `generation_jobs.goal_id` (CASCADE),
+`GENERATION_JOB_KIND` + ROADMAP, MILESTONE_REGEN; `NOTIFICATION_TYPE` + MILESTONE_COMPLETED,
+SELF_ASSESSMENT_MISMATCH; `ai_model_settings` rows ROADMAP, MILESTONE_REGEN, LESSON_PREP.
+`grammar_progress_overrides` (V14) and the progress tab are unchanged.
 
 ### Error codes
 
 | Code | Status | Notes |
 |---|---|---|
-| `GOAL_NOT_FOUND` | 404 | also for goals the caller cannot see |
-| `GOAL_INVALID` | 400 | type-specific field rules, past `targetDate`; `pointer` |
-| `GRAMMAR_OVERRIDE_INVALID` | 400 | unknown `status`, `note` too long; `pointer` |
-| `GRAMMAR_TOPIC_NOT_FOUND` | 404 | override on another teacher's grammar topic |
-| `TEACHER_STUDENT_NOT_FOUND` | 404 | progress of a student without (that) teacher |
-
----
+| `NOT_FOUND` | 404 | flag `roadmap` off |
+| `GOAL_NOT_FOUND` | 404 | also another teacher's goal |
+| `GOAL_INVALID` | 400 | deadline / endDate against a stored date; `status` filter; `pointer` |
+| `GOAL_ACTIVE_EXISTS` | 409 | second ACTIVE goal for the student |
+| `ROADMAP_MILESTONE_NOT_FOUND` | 404 | also another student's milestone (self-assessment) |
+| `ROADMAP_ITEM_NOT_FOUND` | 404 | |
+| `ROADMAP_ORDER_INVALID` | 400 | `/ids` |
+| `ROADMAP_LESSON_INVALID` | 400 | `/lessonId` |
+| `ROADMAP_EXISTS` | 409 | generate without `replace` (also a job error code) |
+| `ROADMAP_BUSY` | 409 | a ROADMAP / MILESTONE_REGEN job of the goal is QUEUED / RUNNING |
+| `ROADMAP_MILESTONE_DONE` | 409 | regenerate a done milestone |
+| `MILESTONE_NOT_DONE` | 409 | self-assessment before the milestone is done |
+| `GOAL_NOT_FOUND`, `ROADMAP_MILESTONE_NOT_FOUND` | – | job `error.code`: deleted while the job ran |
 
 ## Lesson Changes
 
@@ -1290,17 +1350,19 @@ marked `FAILED` with `AI_INTERRUPTED`. A teacher may have at most `max_active_jo
 
 ```
 GenerationJob {
-  id, kind: GENERATE | REFINE | FILL_TRANSLATIONS | SUGGEST_TAGS,
+  id, kind: GENERATE | REFINE | FILL_TRANSLATIONS | SUGGEST_TAGS | ROADMAP | MILESTONE_REGEN,
   status: QUEUED | RUNNING | SUCCEEDED | FAILED,
   lessonId: uuid | null,            // lesson-scope drafts only
   materialId: uuid | null,          // SUGGEST_TAGS only
   parentJobId: null,                // legacy
   documentId: uuid | null,          // REFINE of a document (see "Document draft revisions")
   bundleId: uuid | null,            // GENERATE / REFINE of a draft bundle
+  goalId: uuid | null,              // ROADMAP / MILESTONE_REGEN (see "Goals & roadmap")
   input: {
     notes?, prompt?, promptTemplateId?, pastLessonIds?, topicIds?, grammarTopicIds?, materialIds?,   // GENERATE
     instruction?, itemId?,                                                              // REFINE
-    entryIds?, fields?                                                                  // FILL_TRANSLATIONS
+    entryIds?, fields?,                                                                 // FILL_TRANSLATIONS
+    replace?, milestoneId?                                                              // ROADMAP / MILESTONE_REGEN (+ instruction)
   },
   result: object | null,            // only when SUCCEEDED. GENERATE/REFINE of a bundle: { bundleId, itemCount }
                                     // (the items are in the bundle); document REFINE: { documentId, draft: true };
@@ -1736,7 +1798,9 @@ TEXT "Kurzer Text"); only the parts in `<produce>`. Club: a notes document (head
 task gets `" (überarbeitet: <instruction>)"` appended, a document gets a rich-text block
 "Überarbeitet: …" and " (überarbeitet)" in its title. Test markers in the prompt: `[fake:invalid-once]`,
 `[fake:invalid]`, `[fake:error]`, `[fake:rate-limit]`, `[fake:delay=<ms>]`, `[fake:empty-once]`,
-`[fake:truncated]`.
+`[fake:truncated]`. Roadmap: the goal period split into the `<schedule>`'s milestone count, each
+"Etappe n" with a TOPIC, GRAMMAR and VOCAB item and canDo "Ich kann Etappe n."; a regenerated
+milestone is titled "Neu: <instruction>" (or "Neu geplant") with a SKILL and an EXAM item.
 
 ### Error codes
 
@@ -1920,7 +1984,7 @@ Generic fallbacks (used when no specific code applies): `BAD_REQUEST`, `VALIDATI
 | Availability | `AVAILABILITY_SLOT_BLOCKED`, `AVAILABILITY_MIN_NOTICE`, `AVAILABILITY_OVERLAP`, `AVAILABILITY_BUFFER_CONFLICT`, `AVAILABILITY_EXCEPTION_NOT_FOUND` |
 | Materials | `MATERIAL_NOT_FOUND`, `MATERIAL_FILE_NOT_FOUND`, `FOLDER_NOT_FOUND`, `TARGET_FOLDER_NOT_FOUND`, `FOLDER_NOT_EMPTY`, `FOLDER_NAME_TAKEN`, `FOLDER_CYCLE`, `FILE_TOO_LARGE` |
 | Homework | `ASSIGNMENT_NOT_FOUND`, `ASSIGNMENT_NO_STUDENTS`, `HOMEWORK_NOT_FOUND`, `HOMEWORK_ITEM_INVALID` (+ `pointer`), `HOMEWORK_ANSWER_INVALID` (+ `pointer`), `HOMEWORK_INVALID_STATE` (409), `SUBMISSION_LOCKED` (409), `UPLOAD_TYPE_NOT_ALLOWED`, `UPLOAD_LIMIT_REACHED` (409), `HOMEWORK_UPLOAD_NOT_FOUND` |
-| Progress / goals | `GOAL_NOT_FOUND`, `GOAL_INVALID` (+ `pointer`), `GRAMMAR_OVERRIDE_INVALID` (+ `pointer`) |
+| Progress / goals | `GOAL_NOT_FOUND`, `GOAL_INVALID` (+ `pointer`), `GOAL_ACTIVE_EXISTS`, `ROADMAP_*`, `MILESTONE_NOT_DONE`, `GRAMMAR_OVERRIDE_INVALID` (+ `pointer`) |
 | Vocabulary | `VOCABULARY_WORD_NOT_FOUND`, `VOCAB_ENTRY_NOT_FOUND`, `VOCAB_ENTRY_DUPLICATE`, `VOCAB_LANGUAGE_UNSUPPORTED`, `VOCAB_DISPLAY_FIELD_UNSUPPORTED`, `TEACHER_STUDENT_NOT_FOUND`; practice: `PRACTICE_STUDENT_ONLY` (403), `PRACTICE_MODE_INVALID`, `NOT_A_NOUN`, `SENTENCE_EMPTY`, `SENTENCE_TOO_LONG`, `PRACTICE_SENTENCE_LIMIT` (429, + `resetsAt`) |
 | Documents | `DOCUMENT_NOT_FOUND`, `DOCUMENT_INVALID_BLOCK` (+ `pointer`), `DOCUMENT_DUPLICATE_ID` (+ `pointer`), `DOCUMENT_TOO_LARGE`, `DOCUMENT_CONFLICT` (409, + `currentRevision`), `DOCUMENT_VERSION_NOT_FOUND` |
 | AI drafts | `AI_NOT_CONFIGURED` (503), `AI_RATE_LIMITED` (429), `AI_JOB_NOT_FOUND`, `AI_JOB_NOT_READY`, `AI_PROPOSALS_RESOLVED`, `AI_DRAFT_*` (see AI drafts), `DOCUMENT_DRAFT_NOT_FOUND`, `NACHBEREITUNG_NO_ATTENDEES`, `PROMPT_TEMPLATE_NOT_FOUND`, `PROMPT_TEMPLATE_DUPLICATE`; job-only: `AI_OUTPUT_INVALID`, `AI_PROVIDER_ERROR`, `AI_TIMEOUT`, `AI_INTERRUPTED` |

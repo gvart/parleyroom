@@ -79,6 +79,7 @@ class GenerationJobRunner(private val config: AiConfig, private val sse: Notific
         documentId: UUID? = null,
         materialId: UUID? = null,
         bundleId: UUID? = null,
+        goalId: UUID? = null,
         modelId: String,
     ): UUID = synchronized(admission) {
         val jobId = transaction {
@@ -102,6 +103,7 @@ class GenerationJobRunner(private val config: AiConfig, private val sse: Notific
                 it[GenerationJobTable.documentId] = documentId
                 it[GenerationJobTable.materialId] = materialId
                 it[GenerationJobTable.bundleId] = bundleId
+                it[GenerationJobTable.goalId] = goalId
                 it[GenerationJobTable.input] = input
                 it[model] = modelId
                 it[createdAt] = OffsetDateTime.now()

@@ -32,6 +32,10 @@ enum class NotificationType {
     LESSON_BOOKED,
     /** To the teacher: a student joined a club that auto-accepts joins. */
     CLUB_JOINED,
+    /** To the student: the teacher marked a roadmap milestone done; reference = goal. Asks for a self-assessment. */
+    MILESTONE_COMPLETED,
+    /** To the teacher: the student self-assessed a done milestone with PARTLY / NOT_YET; reference = goal. */
+    SELF_ASSESSMENT_MISMATCH,
 }
 
 object NotificationTable : UUIDTable("notifications") {

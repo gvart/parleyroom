@@ -6,6 +6,7 @@ import com.gvart.parleyroom.ai.service.Prompts
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -16,6 +17,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -27,7 +30,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * `[fake:error]`, `[fake:rate-limit]`, `[fake:delay=<ms>]`, `[fake:empty-once]`, `[fake:truncated]`,
  * `[fake:ignore-exclude]`, `[fake:suggest-tags]` (words also get a new topic, the library's Perfekt
  * and a new grammar topic), `[fake:dup-words]` (every word with an umlaut again, spelled out);
- * sentence feedback also `[fake:wrong]`.
+ * sentence feedback also `[fake:wrong]`. Roadmap and milestone answers are canned (see [roadmap]).
  */
 class FakeLlmGateway : LlmGateway {
 
@@ -54,6 +57,8 @@ class FakeLlmGateway : LlmGateway {
             Prompts.TASK_REFINE -> refine(request, invalid)
             Prompts.TASK_REFINE_DOCUMENT -> refineDocument(request, invalid)
             Prompts.TASK_SENTENCE_FEEDBACK -> sentenceFeedback(request, invalid)
+            Prompts.TASK_ROADMAP -> roadmap(request, invalid)
+            Prompts.TASK_MILESTONE_REGEN -> milestoneRegen(request, invalid)
             else -> generate(request, invalid)
         }
         val text = output.toString()
@@ -296,6 +301,53 @@ class FakeLlmGateway : LlmGateway {
     }
 
     /** Uses the word = the lemma stem occurs; correct = uses the word and no `[fake:wrong]` marker. */
+    /**
+     * The `<goal>` period (lines "Start date: …", "Deadline: …") split into the `<schedule>`'s
+     * "Milestones: n" (at most one per day), each with a TOPIC, GRAMMAR and VOCAB item.
+     * Invalid: canDo without "Ich kann".
+     */
+    private fun roadmap(request: String, invalid: Boolean): JsonObject {
+        val goal = Prompts.section(request, "goal").orEmpty()
+        fun line(prefix: String) = goal.lineSequence().first { it.startsWith(prefix) }.removePrefix(prefix).trim()
+        val start = LocalDate.parse(line("Start date:"))
+        val deadline = LocalDate.parse(line("Deadline:"))
+        val days = ChronoUnit.DAYS.between(start, deadline) + 1
+        val wanted = Prompts.section(request, "schedule").orEmpty().lineSequence()
+            .firstOrNull { it.startsWith("Milestones:") }?.removePrefix("Milestones:")?.trim()?.toLongOrNull() ?: 3
+        val count = wanted.coerceIn(1, days)
+        return buildJsonObject {
+            putJsonArray("milestones") {
+                (0 until count).forEach { i ->
+                    val from = start.plusDays(days * i / count)
+                    val to = start.plusDays(days * (i + 1) / count - 1)
+                    add(fakeMilestone("Etappe ${i + 1}", invalid, from, to, listOf("TOPIC", "GRAMMAR", "VOCAB")))
+                }
+            }
+        }
+    }
+
+    /** The rewritten milestone is titled after the instruction ("Neu geplant" without one); a SKILL and an EXAM item. */
+    private fun milestoneRegen(request: String, invalid: Boolean): JsonObject {
+        val instruction = Prompts.section(request, "teacher_instructions").orEmpty().takeIf { it != NONE }
+        val title = instruction?.let { "Neu: ${it.take(100)}" } ?: "Neu geplant"
+        return buildJsonObject { put("milestone", fakeMilestone(title, invalid, null, null, listOf("SKILL", "EXAM"))) }
+    }
+
+    private fun fakeMilestone(title: String, invalid: Boolean, from: LocalDate?, to: LocalDate?, kinds: List<String>) = buildJsonObject {
+        put("title", title)
+        from?.let { put("startDate", it.toString()) }
+        to?.let { put("endDate", it.toString()) }
+        put("topic", "Thema: $title")
+        putJsonArray("grammarPoints") { add(JsonPrimitive("Präsens")) }
+        putJsonArray("wordFields") { add(JsonPrimitive("Alltag")) }
+        put("examPart", JsonNull)
+        put("teacherTips", "Tipp: $title")
+        put("canDo", if (invalid) "Thema $title" else "Ich kann $title.")
+        putJsonArray("items") {
+            kinds.forEachIndexed { j, kind -> add(buildJsonObject { put("kind", kind); put("title", "$title – Punkt ${j + 1}") }) }
+        }
+    }
+
     private fun sentenceFeedback(request: String, invalid: Boolean): JsonObject {
         val sentence = Prompts.section(request, "sentence").orEmpty()
         val lemma = Prompts.section(request, "target_word").orEmpty().lineSequence()

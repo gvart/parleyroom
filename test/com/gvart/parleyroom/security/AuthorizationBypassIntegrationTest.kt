@@ -2,7 +2,8 @@ package com.gvart.parleyroom.security
 
 import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.homework.HomeworkFixtures
-import com.gvart.parleyroom.goal.transfer.GoalResponse
+import com.gvart.parleyroom.goal.GoalFixtures
+import com.gvart.parleyroom.goal.transfer.TeacherGoalView
 import com.gvart.parleyroom.registration.transfer.InviteUserRequest
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.vocabulary.data.StudentVocabStatus
@@ -30,53 +31,20 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
     // ---------- Goals ----------
 
     @Test
-    fun `student2 cannot GET another student's goal`() = testApp {
+    fun `students cannot read, update or delete a goal by id`() = testApp {
         val client = createJsonClient(this)
         val goalId = createGoalAsTeacher(client)
 
-        val response = client.get("/api/v1/goals/$goalId") {
-            bearerAuth(getStudent2Token(client))
+        for (token in listOf(getStudentToken(client), getStudent2Token(client))) {
+            assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/goals/$goalId") { bearerAuth(token) }.status)
+            val patch = client.patch("/api/v1/goals/$goalId") {
+                bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody("""{ "status": "ACHIEVED" }""")
+            }
+            assertEquals(HttpStatusCode.Forbidden, patch.status)
+            assertEquals(HttpStatusCode.Forbidden, client.delete("/api/v1/goals/$goalId") { bearerAuth(token) }.status)
         }
-        assertEquals(HttpStatusCode.NotFound, response.status)
-    }
-
-    @Test
-    fun `student2 cannot UPDATE another student's goal`() = testApp {
-        val client = createJsonClient(this)
-        val goalId = createGoalAsTeacher(client)
-
-        val response = client.patch("/api/v1/goals/$goalId") {
-            bearerAuth(getStudent2Token(client))
-            contentType(ContentType.Application.Json)
-            setBody("""{ "note": "Hijacked" }""")
-        }
-        assertEquals(HttpStatusCode.NotFound, response.status)
-    }
-
-    @Test
-    fun `the student cannot UPDATE or DELETE their own goal`() = testApp {
-        val client = createJsonClient(this)
-        val goalId = createGoalAsTeacher(client)
-        val token = getStudentToken(client)
-
-        val patch = client.patch("/api/v1/goals/$goalId") {
-            bearerAuth(token)
-            contentType(ContentType.Application.Json)
-            setBody("""{ "status": "ACHIEVED" }""")
-        }
-        assertEquals(HttpStatusCode.Forbidden, patch.status)
-        assertEquals(HttpStatusCode.Forbidden, client.delete("/api/v1/goals/$goalId") { bearerAuth(token) }.status)
-    }
-
-    @Test
-    fun `student2 cannot DELETE another student's goal`() = testApp {
-        val client = createJsonClient(this)
-        val goalId = createGoalAsTeacher(client)
-
-        val response = client.delete("/api/v1/goals/$goalId") {
-            bearerAuth(getStudent2Token(client))
-        }
-        assertEquals(HttpStatusCode.NotFound, response.status)
     }
 
     // ---------- Vocabulary ----------
@@ -157,13 +125,18 @@ class AuthorizationBypassIntegrationTest : IntegrationTest() {
     // ---------- Helpers ----------
 
     private suspend fun createGoalAsTeacher(client: HttpClient): String {
+        val token = getTeacherToken(client)
+        GoalFixtures.enableRoadmap()
         val resp = client.post("/api/v1/goals") {
-            bearerAuth(getTeacherToken(client))
+            bearerAuth(token)
             contentType(ContentType.Application.Json)
-            setBody("""{ "studentId": "$STUDENT_ID", "type": "LEVEL", "targetLevel": "B1" }""")
+            setBody(
+                """{ "studentId": "$STUDENT_ID", "title": "B1", "startDate": "2026-01-01", "deadline": "2026-12-31",
+                    "lessonsPerWeek": 1, "lessonMinutes": 60 }"""
+            )
         }
         assertEquals(HttpStatusCode.Created, resp.status)
-        return resp.body<GoalResponse>().id
+        return resp.body<TeacherGoalView>().id
     }
 
     private suspend fun createVocabularyAsTeacher(client: HttpClient): String {

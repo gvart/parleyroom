@@ -4,6 +4,7 @@ import com.gvart.parleyroom.IntegrationTest
 import com.gvart.parleyroom.common.data.LessonType
 import com.gvart.parleyroom.common.transfer.FieldError
 import com.gvart.parleyroom.common.transfer.ProblemDetail
+import com.gvart.parleyroom.goal.GoalFixtures
 import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.user.transfer.AuthenticateRequest
@@ -11,12 +12,14 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -95,14 +98,18 @@ class ErrorCodeIntegrationTest : IntegrationTest() {
         val client = createJsonClient(this)
         val token = getTeacherToken(client)
 
-        val problem = client.post("/api/v1/goals") {
+        GoalFixtures.enableRoadmap()
+        val goal = GoalFixtures.goal(start = LocalDate.of(2026, 1, 10), deadline = LocalDate.of(2026, 6, 1))
+
+        // Valid on its own; only the stored startDate makes it invalid.
+        val problem = client.patch("/api/v1/goals/$goal") {
             contentType(ContentType.Application.Json)
             bearerAuth(token)
-            setBody("""{ "studentId": "$STUDENT_ID", "type": "LEVEL", "targetLevel": "B3" }""")
+            setBody("""{ "deadline": "2026-01-01" }""")
         }.assertProblem(HttpStatusCode.BadRequest, "GOAL_INVALID")
 
-        assertEquals("/targetLevel", problem.pointer)
-        assertEquals(listOf(FieldError("/targetLevel", "GOAL_INVALID", problem.detail)), problem.errors)
+        assertEquals("/deadline", problem.pointer)
+        assertEquals(listOf(FieldError("/deadline", "GOAL_INVALID", problem.detail)), problem.errors)
     }
 
     @Test

@@ -11,8 +11,8 @@ import com.gvart.parleyroom.document.data.DocumentStudentTable
 import com.gvart.parleyroom.document.data.DocumentTable
 import com.gvart.parleyroom.document.transfer.DocumentResponse
 import com.gvart.parleyroom.goal.data.GoalTable
-import com.gvart.parleyroom.goal.data.GoalType
-import com.gvart.parleyroom.goal.transfer.GoalResponse
+import com.gvart.parleyroom.goal.GoalFixtures
+import com.gvart.parleyroom.goal.transfer.MyGoalResponse
 import com.gvart.parleyroom.homework.data.AssignmentItemKind
 import com.gvart.parleyroom.homework.data.AssignmentItemTable
 import com.gvart.parleyroom.homework.data.AssignmentTable
@@ -259,8 +259,9 @@ class AdminUserHardDeleteIntegrationTest : IntegrationTest() {
         assertNull(lesson.teacher)
         val homework = client.get("/api/v1/homework") { bearerAuth(studentToken) }.body<HomeworkPageResponse>()
         assertNull(homework.homework.single().teacher)
-        val goals = client.get("/api/v1/goals") { bearerAuth(studentToken) }.body<List<GoalResponse>>()
-        assertNull(goals.single().teacherId)
+        GoalFixtures.enableRoadmap()
+        val myGoal = client.get("/api/v1/goals/my") { bearerAuth(studentToken) }.body<MyGoalResponse>().goal
+        assertEquals(goal.toString(), myGoal?.id)
         val vocab = client.get("/api/v1/vocabulary") { bearerAuth(studentToken) }.body<StudentVocabPageResponse>()
         assertEquals(listOf("Haus"), vocab.words.map { it.lemma })
         val doc = client.get("/api/v1/documents/$sharedDoc") { bearerAuth(studentToken) }
@@ -353,16 +354,7 @@ class AdminUserHardDeleteIntegrationTest : IntegrationTest() {
         }.value
     }
 
-    private fun goal(studentId: UUID): UUID = transaction {
-        GoalTable.insertAndGetId {
-            it[GoalTable.studentId] = studentId
-            it[teacherId] = teacher
-            it[type] = GoalType.LEVEL
-            it[targetLevel] = LanguageLevel.B1
-            it[createdAt] = OffsetDateTime.now()
-            it[updatedAt] = OffsetDateTime.now()
-        }.value
-    }
+    private fun goal(studentId: UUID): UUID = GoalFixtures.goal(studentId, teacher)
 
     private fun vocabEntry(lemma: String = "Haus"): UUID = transaction {
         VocabEntryTable.insertAndGetId {

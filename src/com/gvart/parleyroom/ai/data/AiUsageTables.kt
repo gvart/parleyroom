@@ -7,7 +7,7 @@ import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
 /** What a model call is for; each one is routed to its own model (ai_model_settings). */
-enum class AiUseCase { GENERATE, REFINE, FILL_TRANSLATIONS, SUGGEST_TAGS, SENTENCE_FEEDBACK }
+enum class AiUseCase { GENERATE, REFINE, FILL_TRANSLATIONS, SUGGEST_TAGS, SENTENCE_FEEDBACK, ROADMAP, MILESTONE_REGEN, LESSON_PREP }
 
 object AiModelSettingsTable : Table("ai_model_settings") {
     val useCase = enumerationByName<AiUseCase>("use_case", 32)
