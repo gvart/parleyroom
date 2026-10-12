@@ -23,10 +23,12 @@ suspend fun ApplicationCall.respondProblem(status: HttpStatusCode, problem: Prob
 /**
  * JSON pointer for a RequestValidation reason: validate() messages lead with the property they
  * are about ("inviteExpiryDays must be…", "Title can't be empty"), so the first word is matched
- * against the body's serial names. Null when the reason is not about a single property.
+ * against the body's serial names. A reason about a nested value may lead with its JSON pointer
+ * ("/plan/timePlan/0/minutes must be…"). Null when the reason is not about a single property.
  */
 fun validationPointer(body: Any, reason: String): String? {
     val word = reason.substringBefore(' ').trimEnd(':', ',', '.')
+    if (word.startsWith('/')) return word
     val names = serializerOrNull(body::class.java)?.descriptor?.elementNames ?: return null
     return names.firstOrNull { it == word || it == word.replaceFirstChar(Char::lowercaseChar) }?.let { "/$it" }
 }

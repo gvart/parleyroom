@@ -74,6 +74,7 @@ object GenerationJobs {
             documentId = row[GenerationJobTable.documentId]?.value?.toString(),
             bundleId = row[GenerationJobTable.bundleId]?.value?.toString(),
             goalId = row[GenerationJobTable.goalId]?.value?.toString(),
+            lessonPlanId = row[GenerationJobTable.lessonPlanId]?.value?.toString(),
             input = input(row),
             result = row[GenerationJobTable.result],
             error = row[GenerationJobTable.errorCode]?.let { JobError(it, row[GenerationJobTable.errorMessage].orEmpty()) },

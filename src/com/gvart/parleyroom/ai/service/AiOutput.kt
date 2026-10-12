@@ -8,6 +8,8 @@ import com.gvart.parleyroom.document.service.DocumentBlockValidator
 import com.gvart.parleyroom.goal.data.RoadmapItemKind
 import com.gvart.parleyroom.homework.data.HomeworkResponseType
 import com.gvart.parleyroom.homework.service.HomeworkUnits
+import com.gvart.parleyroom.lessonprep.service.LessonPlanRules
+import com.gvart.parleyroom.lessonprep.transfer.LessonPlanContent
 import com.gvart.parleyroom.vocabulary.data.NounArticle
 import com.gvart.parleyroom.vocabulary.data.WordType
 import com.gvart.parleyroom.vocabulary.service.VocabDisplay
@@ -449,6 +451,14 @@ object AiOutputParser {
         val validated = milestone(milestone, "/milestone", issues)
         if (issues.isNotEmpty()) throw AiOutputInvalid(issues.take(MAX_ISSUES))
         return validated
+    }
+
+    /** A lesson plan: see [LessonPlanRules.generated]; roadmapItemIds are still the prompt's item keys. */
+    fun parseLessonPlan(text: String, lessonMinutes: Int, itemKeys: Set<String>): LessonPlanContent {
+        val plan = decode<LessonPlanContent>(text)
+        val issues = LessonPlanRules.generated(plan, lessonMinutes, itemKeys)
+        if (issues.isNotEmpty()) throw AiOutputInvalid(issues.take(MAX_ISSUES))
+        return plan
     }
 
     private fun milestone(milestone: AiMilestone, at: String, issues: MutableList<Issue>): ValidatedMilestone {

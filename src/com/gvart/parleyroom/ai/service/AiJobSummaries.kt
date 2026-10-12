@@ -13,6 +13,7 @@ import com.gvart.parleyroom.goal.data.GoalTable
 import com.gvart.parleyroom.group.data.GroupTable
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
+import com.gvart.parleyroom.lessonprep.data.LessonPlanTable
 import com.gvart.parleyroom.material.data.MaterialTable
 import com.gvart.parleyroom.user.data.UserTable
 import org.jetbrains.exposed.v1.core.Column
@@ -76,7 +77,12 @@ object AiJobSummaries {
             .select(GoalTable.id, GoalTable.studentId)
             .where { GoalTable.id inList rows.mapNotNull { it[GenerationJobTable.goalId]?.value }.distinct() }
             .associate { it[GoalTable.id].value to it[GoalTable.studentId].value }
-        val studentIds = bundles.values.mapNotNull { it[DraftBundleTable.studentId]?.value } + lessonStudent.values + goalStudent.values
+        val planStudent = if (rows.none { it[GenerationJobTable.lessonPlanId] != null }) emptyMap() else LessonPlanTable
+            .select(LessonPlanTable.id, LessonPlanTable.studentId)
+            .where { LessonPlanTable.id inList rows.mapNotNull { it[GenerationJobTable.lessonPlanId]?.value }.distinct() }
+            .associate { it[LessonPlanTable.id].value to it[LessonPlanTable.studentId].value }
+        val studentIds = bundles.values.mapNotNull { it[DraftBundleTable.studentId]?.value } + lessonStudent.values + goalStudent.values +
+                planStudent.values
         val students = if (studentIds.isEmpty()) emptyMap() else UserTable
             .select(UserTable.id, UserTable.firstName, UserTable.lastName)
             .where { UserTable.id inList studentIds.distinct() }
@@ -88,7 +94,9 @@ object AiJobSummaries {
             val lessonId = bundle?.get(DraftBundleTable.lessonId)?.value ?: row[GenerationJobTable.lessonId]?.value
             val lesson = lessonId?.let(lessons::get)
             val goalId = row[GenerationJobTable.goalId]?.value
-            val studentId = bundle?.get(DraftBundleTable.studentId)?.value ?: lessonId?.let(lessonStudent::get) ?: goalId?.let(goalStudent::get)
+            val lessonPlanId = row[GenerationJobTable.lessonPlanId]?.value
+            val studentId = lessonPlanId?.let(planStudent::get) ?: bundle?.get(DraftBundleTable.studentId)?.value
+                ?: lessonId?.let(lessonStudent::get) ?: goalId?.let(goalStudent::get)
             // A club GENERATE also stores the notes document it created: the draft is still the target.
             val documentId = row[GenerationJobTable.documentId]?.value.takeIf { bundle == null }
             val input = GenerationJobs.input(row)
@@ -97,6 +105,7 @@ object AiJobSummaries {
                 kind = kind,
                 status = row[GenerationJobTable.status],
                 targetType = when {
+                    kind == GenerationJobKind.LESSON_PREP -> AiJobTargetType.LESSON_PLAN
                     goalId != null -> AiJobTargetType.GOAL
                     bundle != null -> if (bundle[DraftBundleTable.scope] == DraftScope.STUDENT) AiJobTargetType.STUDENT else AiJobTargetType.LESSON
                     documentId != null -> AiJobTargetType.DOCUMENT
@@ -115,6 +124,7 @@ object AiJobSummaries {
                 materialId = row[GenerationJobTable.materialId]?.value?.toString(),
                 materialName = row[GenerationJobTable.materialId]?.value?.let(materials::get),
                 goalId = goalId?.toString(),
+                lessonPlanId = lessonPlanId?.toString(),
                 entryCount = input.entryIds?.size,
                 draftKinds = input.kinds.takeIf { bundle != null },
                 itemRefine = input.itemId != null,
