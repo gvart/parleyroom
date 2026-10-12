@@ -159,15 +159,24 @@ class TeacherReminderIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `Telegram buttons open the Mini App when it is configured`() = testApp(mapOf("telegram.miniapp_base_url" to "https://mini.example.com")) {
+    fun `Telegram buttons link the portal even when the Mini App is configured`() = testApp(
+        mapOf("telegram.miniapp_base_url" to "https://mini.example.com", "mail.app_base_url" to "https://app.example.com"),
+    ) {
         val service = service("teacherReminders", "lessonPrep")
         TeacherReminderFixtures.setUser(TEACHER, telegramId = 777)
-        LessonPrepFixtures.lesson(now.minusHours(3))
+        val ended = LessonPrepFixtures.lesson(now.minusHours(3))
+        val upcoming = LessonPrepFixtures.lesson(now.plusHours(2), LessonStatus.CONFIRMED)
 
         service.runOnce(now)
-        val button = sentTelegrams.sent.single().button!!
-        assertEquals("https://mini.example.com/students/$STUDENT", button.url)
-        assertTrue(button.webApp)
+        val buttons = sentTelegrams.sent.map { it.button!! }
+        assertEquals(
+            setOf(
+                "https://app.example.com/teacher/students/$STUDENT/wrap-up?lesson=$ended",
+                "https://app.example.com/teacher/students/$STUDENT/prepare?lesson=$upcoming",
+            ),
+            buttons.map { it.url }.toSet(),
+        )
+        assertTrue(buttons.none { it.webApp })
     }
 
     @Test

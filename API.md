@@ -1174,8 +1174,8 @@ The settings routes are 404 while `teacherReminders` is off; `/teacher/attention
 
 "Wrapped up" counts only while it can happen: with `lessonPrep` on, or with `roadmap` on for students with an ACTIVE
 goal; otherwise only `HOMEWORK` is reminded. Emails / Telegram name the student by first name and never include lesson
-notes. Telegram buttons open the Mini App (`/students/{studentId}`, `/` for the digest) when `MINIAPP_BASE_URL` is set,
-else the portal links above. `NotificationResponse` has a new optional `details: [string]`.
+notes. Telegram buttons are plain links to the portal pages above, also when `MINIAPP_BASE_URL` is set (teacher
+features are portal-only). `NotificationResponse` has a new optional `details: [string]`.
 
 Each reminder is claimed once per channel before sending — in-app in `teacher_reminder_log` (unique kind + lesson or
 teacher + variant), email / Telegram in `email_log` / `telegram_log` (kinds `TEACHER_FOLLOW_UP`, `TEACHER_PREP`,
