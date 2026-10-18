@@ -1,0 +1,25 @@
+resources/ai/blocks.md
+  s_d1a9c27d5d676a::t_e847bd2f693328 11-12
+src/com/gvart/parleyroom/ai/service/AiOutput.kt
+  s_d1a9c27d5d676a::t_133f069f059f23 551,557-575
+  s_d1a9c27d5d676a::t_d6ae5a1e21642d 576-577
+test/com/gvart/parleyroom/ai/AiOutputParserTest.kt
+  s_d1a9c27d5d676a::t_61d41dd45f0d6a 76-86
+  s_d1a9c27d5d676a::t_82a8b7b6d846eb 75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "a3264f9f414e666ce33e5880785d6f25342f3c1e",
+  "prompts": {},
+  "sessions": {
+    "s_d1a9c27d5d676a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ec340a9-9ea0-415c-88d0-30292f5dedd8",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
