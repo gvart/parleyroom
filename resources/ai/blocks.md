@@ -8,7 +8,8 @@ Document `blocks` follow the JSON Schema below with exactly two differences:
 Rules the schema cannot show, all mandatory:
 - No empty texts: headings, questions, options, sentences, prompts, writing points must be filled.
 - `gap_fill`: each item's `text` contains at least one gap written as `___` (three underscores) and
-  `solution.answers` has exactly one list of accepted answers per gap, in order.
+  `solution.answers` has exactly one list of accepted answers per gap, in order. Each `wordBox`
+  word fills one gap: a word that answers two gaps is listed twice.
 - `multiple_choice`: at least two options, `solution.correctOptionIds` with exactly one id (or
   several when `"multiple": true`). Same for `CHOICE` questions.
 - `media` blocks need a real https url; only use them if Anna gives you one.
