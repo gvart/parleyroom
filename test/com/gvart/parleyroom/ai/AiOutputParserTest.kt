@@ -73,6 +73,18 @@ class AiOutputParserTest {
     }
 
     @Test
+    fun `a word box gets one chip per gap that uses the word`() {
+        val block = Json.parseToJsonElement(
+            """[{"id":"b1","type":"gap_fill","wordBox":["geht","kommt","hat"],"items":[
+                {"id":"i1","text":"Er ___ nach Hause und ___ morgen.","solution":{"answers":[["geht"],["kommt"]]}},
+                {"id":"i2","text":"Sie ___ ins Kino, er ___ ins Bett.","solution":{"answers":[["geht"],["geht"]]}},
+                {"id":"i3","text":"Wir ___ Zeit.","solution":{"answers":[["haben","hat"]]}}]}]""",
+        ).jsonArray
+        val wordBox = AiBlocks.fromAi(block).blocks.single().jsonObject["wordBox"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(listOf("geht", "kommt", "hat", "geht", "geht"), wordBox)
+    }
+
+    @Test
     fun `short ids become uuids and option references follow`() {
         val blocks = AiOutputParser.parseDraft(fakeAnswer(DraftMode.ONE_ON_ONE), DraftTarget.BUNDLE).exerciseDocument!!.blocks
         val mc = blocks.map { it.jsonObject }.single { it["type"]!!.jsonPrimitive.content == "multiple_choice" }

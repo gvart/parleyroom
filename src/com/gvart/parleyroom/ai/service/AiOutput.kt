@@ -548,9 +548,31 @@ object AiBlocks {
                 copy = JsonObject(copy - "vocabKeys" + ("rows" to JsonArray(emptyList())))
             }
             if ("interactive" !in copy) copy = JsonObject(copy + ("interactive" to JsonPrimitive(false)))
+            if ((block["type"] as? JsonPrimitive)?.content == "gap_fill") copy = withFullWordBox(copy)
             copy
         }
         return Converted(JsonArray(converted), tables)
+    }
+
+    /**
+     * Each chip fills one gap, so a word two gaps need must be in the word box twice: appends the
+     * first answer of every gap none of whose accepted answers has a chip left.
+     */
+    private fun withFullWordBox(block: JsonObject): JsonObject {
+        val wordBox = block["wordBox"] as? JsonArray ?: return block
+        val left = wordBox.mapNotNull { (it as? JsonPrimitive)?.content?.trim() }.groupingBy { it }.eachCount().toMutableMap()
+        val added = mutableListOf<String>()
+        (block["items"] as? JsonArray).orEmpty().forEach { item ->
+            val answers = ((item as? JsonObject)?.get("solution") as? JsonObject)?.get("answers") as? JsonArray
+            answers.orEmpty().forEach { group ->
+                val accepted = (group as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.trim() }.filter { it.isNotEmpty() }
+                val chip = accepted.firstOrNull { (left[it] ?: 0) > 0 }
+                if (chip != null) left[chip] = left.getValue(chip) - 1
+                else accepted.firstOrNull()?.let(added::add)
+            }
+        }
+        if (added.isEmpty()) return block
+        return JsonObject(block + ("wordBox" to JsonArray(wordBox + added.map(::JsonPrimitive))))
     }
 
     /**
