@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.1](https://github.com/gvart/parleyroom/compare/v1.8.0...v1.8.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **ai:** give gap-fill word boxes one chip per gap ([#89](https://github.com/gvart/parleyroom/issues/89)) ([d5c3567](https://github.com/gvart/parleyroom/commit/d5c35675ed15fa23d58b38fd735fefa5f09ed0d2))
+
 ## [1.8.0](https://github.com/gvart/parleyroom/compare/v1.7.0...v1.8.0) (2026-10-12)
 
 
