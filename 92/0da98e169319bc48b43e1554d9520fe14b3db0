@@ -1,0 +1,37 @@
+resources/db/migration/V40__vocab_reminder_toggles.sql
+  s_81d0f71760d0cb::t_fa02c492a5c9af 1-5
+src/com/gvart/parleyroom/email/service/EmailPreferenceService.kt
+  s_81d0f71760d0cb::t_de3f513a9cc451 24
+src/com/gvart/parleyroom/email/service/NotificationMailer.kt
+  s_81d0f71760d0cb::t_d5f6cab493b952 150
+src/com/gvart/parleyroom/email/service/UnsubscribeTokens.kt
+  s_81d0f71760d0cb::t_0afeca921f9e2d 71
+src/com/gvart/parleyroom/email/transfer/EmailCategory.kt
+  s_81d0f71760d0cb::t_2da9acd7de02e4 6-7,9
+src/com/gvart/parleyroom/telegram/service/TelegramNotifier.kt
+  s_81d0f71760d0cb::t_c048c62c7a6450 131
+src/com/gvart/parleyroom/user/data/UserTable.kt
+  s_81d0f71760d0cb::t_511355f78a023f 43,47
+src/com/gvart/parleyroom/user/service/UserService.kt
+  s_81d0f71760d0cb::t_0b6334c25f89d6 119-120,239-240
+src/com/gvart/parleyroom/user/transfer/UpdateProfileRequest.kt
+  s_81d0f71760d0cb::t_66fea7c26023c2 30-31,40
+src/com/gvart/parleyroom/user/transfer/UserResponse.kt
+  s_81d0f71760d0cb::t_c9b235cb581612 45-46,51-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "920da98e169319bc48b43e1554d9520fe14b3db0",
+  "prompts": {},
+  "sessions": {
+    "s_81d0f71760d0cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5ea60677-0754-409d-85f3-9e5e9e54178e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
