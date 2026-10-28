@@ -1,0 +1,27 @@
+src/com/gvart/parleyroom/notification/service/EventNotifier.kt
+  s_81d0f71760d0cb::t_51376dcd140016 1-139
+src/com/gvart/parleyroom/homework/service/HomeworkService.kt
+  s_81d0f71760d0cb::t_c199b4173bb9c5 26,56,215,273-276
+src/com/gvart/parleyroom/lesson/service/LessonLifecycleService.kt
+  s_81d0f71760d0cb::t_3fd7afc8b316ef 24,53,171,180,190,227-228,236
+src/com/gvart/parleyroom/notification/config/NotificationModuleConfig.kt
+  s_81d0f71760d0cb::t_adedf5ddf4806b 4,11,18,22,27
+test/com/gvart/parleyroom/lesson/LessonAutoCompleteIntegrationTest.kt
+  s_81d0f71760d0cb::t_366fba77fea356 20-21,53-54,59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ba92813707ecfacad47b634eacbe2e28a3888fb7",
+  "prompts": {},
+  "sessions": {
+    "s_81d0f71760d0cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5ea60677-0754-409d-85f3-9e5e9e54178e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
