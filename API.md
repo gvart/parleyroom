@@ -2300,7 +2300,7 @@ student's level with `PUT /api/v1/students/{studentId}/level`, admins with `PATC
 `true`); any user sets them with `PATCH /api/v1/users/me { "emailLessonReminders": false }`.
 
 Reminder emails link to the portal page `/unsubscribe?token=…`, which posts the token to the public
-`POST /api/v1/email/unsubscribe { "token": "…" }` → 200 `{ "category": "LESSON_REMINDERS" | "HOMEWORK_REMINDERS" }`.
+`POST /api/v1/email/unsubscribe { "token": "…" }` → 200 `{ "category": "LESSON_REMINDERS" | "HOMEWORK_REMINDERS" | "TEACHER_REMINDERS" | "VOCAB_REMINDERS" }`.
 Mail clients use the same endpoint for RFC 8058 one-click unsubscribe (`?token=…` with a
 `List-Unsubscribe=One-Click` form body). It switches that category off and is idempotent; a bad token returns 400
 `UNSUBSCRIBE_TOKEN_INVALID`. Tokens are stateless HMACs keyed from `JWT_SECRET` and never expire.
@@ -2348,6 +2348,27 @@ turns it off, default `true`). Lessons in `CONFIRMED` status remind the teacher 
 before (only while 24h–20h remain, so late bookings skip it) and 1h before; a moved lesson is reminded again for its
 new time. Students get a homework reminder on the day before an `OPEN` homework's due date and an overdue one on the
 day after, each from 09:00 in their timezone. Each reminder goes out once; a failed send is retried on a later run.
+
+### Vocabulary and event notifications
+
+`UserResponse` also carries `emailVocabReminders` and `telegramVocabReminders` (both default `true`, set with
+`PATCH /api/v1/users/me { "emailVocabReminders": false }`). The same reminder job sends a student with at least one
+word due for review (not `LEARNED`, `due` reached) one email + Telegram message per day, from 09:00 in their timezone,
+with the number of words due. The in-app `VOCAB_REVIEW_DUE` notification is unchanged. Its email unsubscribe link
+switches `VOCAB_REMINDERS` off.
+
+Events go out by email and Telegram right after the change is saved (never when it fails), in the background, once
+each:
+
+| Event | To | Toggles |
+|---|---|---|
+| Teacher (or admin) creates a confirmed lesson / accepts a request | the students | `emailLessonReminders`, `telegramLessonReminders` |
+| Student requests a lesson / books one that is auto-confirmed | the teacher | `emailLessonReminders`, `telegramLessonReminders` |
+| Student submits homework (each submission) | the teacher | `emailHomeworkReminders`, `telegramHomeworkReminders` |
+| Teacher reviews or returns homework (`DONE` after `REVIEWED` sends nothing) | the student | `emailHomeworkReminders`, `telegramHomeworkReminders` |
+
+Teacher messages link the portal (`/teacher/calendar`, `/teacher/homework/{id}`); student Telegram messages open the
+Mini App (`/lessons`, `/homework/{id}`, `/vocab`) when `MINIAPP_BASE_URL` is set.
 
 ## Telegram notifications
 

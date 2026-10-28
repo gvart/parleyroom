@@ -459,6 +459,305 @@ class EmailTemplates(private val brand: Brand) {
         return render(content)
     }
 
+    /** To a student: the teacher scheduled a lesson ([accepted] false) or accepted their request. */
+    fun lessonConfirmed(
+        lang: EmailLanguage,
+        accepted: Boolean,
+        lessonTitle: String,
+        startsAt: OffsetDateTime,
+        zone: ZoneId,
+        teacherName: String?,
+        lessonUrl: String,
+        footer: ReminderFooter,
+    ): RenderedEmail {
+        val t = lessonTitle
+        val `when` = dateTime(lang, startsAt, zone)
+        val content = when (lang) {
+            EN -> EmailContent(
+                lang,
+                subject = if (accepted) "Your lesson request was accepted: $t" else "New lesson: $t",
+                preheader = "See you on ${date(lang, startsAt, zone)} at ${time(startsAt, zone)}.",
+                robbi = RobbiPose.CELEBRATE, heading = if (accepted) "Request accepted!" else "A new lesson is booked",
+                paragraphs = listOf(
+                    if (accepted) "Good news: your teacher accepted your lesson request. It's in your calendar now."
+                    else "Your teacher booked a lesson for you. It's in your calendar now.",
+                ),
+                details = listOfNotNull("Lesson" to t, "When" to `when`, teacherName?.let { "Teacher" to it }),
+                ctaLabel = "View lesson", ctaUrl = lessonUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = lessonReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            RU -> EmailContent(
+                lang,
+                subject = if (accepted) "Ваш запрос на урок принят: $t" else "Новый урок: $t",
+                preheader = "До встречи ${date(lang, startsAt, zone)} в ${time(startsAt, zone)}.",
+                robbi = RobbiPose.CELEBRATE, heading = if (accepted) "Запрос принят!" else "Новый урок в расписании",
+                paragraphs = listOf(
+                    if (accepted) "Отличные новости: преподаватель принял ваш запрос на урок. Он уже в вашем календаре."
+                    else "Преподаватель назначил вам урок. Он уже в вашем календаре.",
+                ),
+                details = listOfNotNull("Урок" to t, "Когда" to `when`, teacherName?.let { "Преподаватель" to it }),
+                ctaLabel = "Открыть урок", ctaUrl = lessonUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = lessonReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            UK -> EmailContent(
+                lang,
+                subject = if (accepted) "Ваш запит на урок прийнято: $t" else "Новий урок: $t",
+                preheader = "До зустрічі ${date(lang, startsAt, zone)} о ${time(startsAt, zone)}.",
+                robbi = RobbiPose.CELEBRATE, heading = if (accepted) "Запит прийнято!" else "Новий урок у розкладі",
+                paragraphs = listOf(
+                    if (accepted) "Чудові новини: викладач прийняв ваш запит на урок. Він уже у вашому календарі."
+                    else "Викладач призначив вам урок. Він уже у вашому календарі.",
+                ),
+                details = listOfNotNull("Урок" to t, "Коли" to `when`, teacherName?.let { "Викладач" to it }),
+                ctaLabel = "Відкрити урок", ctaUrl = lessonUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = lessonReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            DE -> EmailContent(
+                lang,
+                subject = if (accepted) "Deine Stundenanfrage wurde angenommen: $t" else "Neue Stunde: $t",
+                preheader = "Bis zum ${date(lang, startsAt, zone)} um ${time(startsAt, zone)}.",
+                robbi = RobbiPose.CELEBRATE, heading = if (accepted) "Anfrage angenommen!" else "Eine neue Stunde ist geplant",
+                paragraphs = listOf(
+                    if (accepted) "Gute Nachrichten: Deine Lehrkraft hat deine Anfrage angenommen. Die Stunde steht jetzt in deinem Kalender."
+                    else "Deine Lehrkraft hat eine Stunde für dich geplant. Sie steht jetzt in deinem Kalender.",
+                ),
+                details = listOfNotNull("Stunde" to t, "Wann" to `when`, teacherName?.let { "Lehrkraft" to it }),
+                ctaLabel = "Zur Stunde", ctaUrl = lessonUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = lessonReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+        }
+        return render(content)
+    }
+
+    /** To a teacher: [studentName] requested a lesson ([requested]) or booked one that was confirmed straight away. */
+    fun lessonBooked(
+        lang: EmailLanguage,
+        requested: Boolean,
+        lessonTitle: String,
+        startsAt: OffsetDateTime,
+        zone: ZoneId,
+        studentName: String,
+        calendarUrl: String,
+        footer: ReminderFooter,
+    ): RenderedEmail {
+        val t = lessonTitle
+        val s = studentName
+        val `when` = dateTime(lang, startsAt, zone)
+        val content = when (lang) {
+            EN -> EmailContent(
+                lang,
+                subject = if (requested) "$s requested a lesson" else "$s booked a lesson",
+                preheader = if (requested) "Accept or decline it in your calendar." else "It's confirmed and in your calendar.",
+                robbi = RobbiPose.WAVE, heading = if (requested) "New lesson request" else "New booking",
+                paragraphs = listOf(
+                    if (requested) "$s would like a lesson with you. Accept or decline the request in your calendar."
+                    else "$s booked a lesson with you. It was confirmed automatically and is in your calendar.",
+                ),
+                details = listOf("Student" to s, "Lesson" to t, "When" to `when`),
+                ctaLabel = if (requested) "Review request" else "Open calendar", ctaUrl = calendarUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = lessonReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            RU -> EmailContent(
+                lang,
+                subject = if (requested) "$s запрашивает урок" else "Новая запись на урок: $s",
+                preheader = if (requested) "Примите или отклоните запрос в календаре." else "Урок подтверждён и уже в календаре.",
+                robbi = RobbiPose.WAVE, heading = if (requested) "Новый запрос на урок" else "Новая запись",
+                paragraphs = listOf(
+                    if (requested) "$s хочет урок с вами. Примите или отклоните запрос в календаре."
+                    else "У вас новая запись на урок: $s. Урок подтверждён автоматически и уже в вашем календаре.",
+                ),
+                details = listOf("Ученик" to s, "Урок" to t, "Когда" to `when`),
+                ctaLabel = if (requested) "Посмотреть запрос" else "Открыть календарь", ctaUrl = calendarUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = lessonReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            UK -> EmailContent(
+                lang,
+                subject = if (requested) "$s просить про урок" else "Новий запис на урок: $s",
+                preheader = if (requested) "Прийміть або відхиліть запит у календарі." else "Урок підтверджено, він уже в календарі.",
+                robbi = RobbiPose.WAVE, heading = if (requested) "Новий запит на урок" else "Новий запис",
+                paragraphs = listOf(
+                    if (requested) "$s хоче урок з вами. Прийміть або відхиліть запит у календарі."
+                    else "У вас новий запис на урок: $s. Урок підтверджено автоматично, він уже у вашому календарі.",
+                ),
+                details = listOf("Учень" to s, "Урок" to t, "Коли" to `when`),
+                ctaLabel = if (requested) "Переглянути запит" else "Відкрити календар", ctaUrl = calendarUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = lessonReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            DE -> EmailContent(
+                lang,
+                subject = if (requested) "$s möchte eine Stunde buchen" else "$s hat eine Stunde gebucht",
+                preheader = if (requested) "Nimm die Anfrage im Kalender an oder lehne sie ab." else "Sie ist bestätigt und steht in deinem Kalender.",
+                robbi = RobbiPose.WAVE, heading = if (requested) "Neue Stundenanfrage" else "Neue Buchung",
+                paragraphs = listOf(
+                    if (requested) "$s möchte eine Stunde bei dir. Nimm die Anfrage im Kalender an oder lehne sie ab."
+                    else "$s hat eine Stunde bei dir gebucht. Sie wurde automatisch bestätigt und steht in deinem Kalender.",
+                ),
+                details = listOf("Lernende" to s, "Stunde" to t, "Wann" to `when`),
+                ctaLabel = if (requested) "Anfrage ansehen" else "Zum Kalender", ctaUrl = calendarUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = lessonReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+        }
+        return render(content)
+    }
+
+    /** To a teacher: [studentName] handed in a homework. */
+    fun homeworkSubmitted(lang: EmailLanguage, assignmentTitle: String, studentName: String, reviewUrl: String, footer: ReminderFooter): RenderedEmail {
+        val t = assignmentTitle
+        val s = studentName
+        val content = when (lang) {
+            EN -> EmailContent(
+                lang, subject = "$s submitted homework: $t", preheader = "Ready for your review.",
+                robbi = RobbiPose.IDLE, heading = "Homework submitted",
+                paragraphs = listOf("$s handed in “$t”. It's ready for your review."),
+                details = listOf("Student" to s, "Assignment" to t),
+                ctaLabel = "Review homework", ctaUrl = reviewUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = homeworkReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            RU -> EmailContent(
+                lang, subject = "Задание сдано: $t ($s)", preheader = "Можно проверять.",
+                robbi = RobbiPose.IDLE, heading = "Задание сдано",
+                paragraphs = listOf("$s: задание «$t» сдано. Можно проверять."),
+                details = listOf("Ученик" to s, "Задание" to t),
+                ctaLabel = "Проверить задание", ctaUrl = reviewUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = homeworkReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            UK -> EmailContent(
+                lang, subject = "Завдання здано: $t ($s)", preheader = "Можна перевіряти.",
+                robbi = RobbiPose.IDLE, heading = "Завдання здано",
+                paragraphs = listOf("$s: завдання «$t» здано. Можна перевіряти."),
+                details = listOf("Учень" to s, "Завдання" to t),
+                ctaLabel = "Перевірити завдання", ctaUrl = reviewUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = homeworkReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            DE -> EmailContent(
+                lang, subject = "$s hat eine Hausaufgabe abgegeben: $t", preheader = "Bereit zur Korrektur.",
+                robbi = RobbiPose.IDLE, heading = "Hausaufgabe abgegeben",
+                paragraphs = listOf("$s hat „$t“ abgegeben. Sie ist bereit zur Korrektur."),
+                details = listOf("Lernende" to s, "Aufgabe" to t),
+                ctaLabel = "Hausaufgabe korrigieren", ctaUrl = reviewUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = homeworkReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+        }
+        return render(content)
+    }
+
+    /** To a student: the teacher reviewed a homework, or [returned] it for changes. */
+    fun homeworkReviewed(lang: EmailLanguage, returned: Boolean, assignmentTitle: String, homeworkUrl: String, footer: ReminderFooter): RenderedEmail {
+        val t = assignmentTitle
+        val content = when (lang) {
+            EN -> EmailContent(
+                lang,
+                subject = if (returned) "Please take another look: $t" else "Your homework was reviewed: $t",
+                preheader = if (returned) "Your teacher left a few notes." else "See your teacher's feedback.",
+                robbi = if (returned) RobbiPose.IDLE else RobbiPose.CELEBRATE,
+                heading = if (returned) "A few things to fix" else "Feedback is in!",
+                paragraphs = listOf(
+                    if (returned) "Your teacher sent “$t” back with a few notes. Make the changes and hand it in again — almost there!"
+                    else "Your teacher reviewed “$t”. Take a look at the feedback.",
+                ),
+                details = listOf("Assignment" to t),
+                ctaLabel = if (returned) "Fix homework" else "See feedback", ctaUrl = homeworkUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = homeworkReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            RU -> EmailContent(
+                lang,
+                subject = if (returned) "Задание нужно доработать: $t" else "Ваше задание проверено: $t",
+                preheader = if (returned) "Преподаватель оставил несколько замечаний." else "Посмотрите отзыв преподавателя.",
+                robbi = if (returned) RobbiPose.IDLE else RobbiPose.CELEBRATE,
+                heading = if (returned) "Осталось немного поправить" else "Отзыв готов!",
+                paragraphs = listOf(
+                    if (returned) "Преподаватель вернул задание «$t» с замечаниями. Внесите правки и сдайте его снова — почти готово!"
+                    else "Преподаватель проверил задание «$t». Посмотрите отзыв.",
+                ),
+                details = listOf("Задание" to t),
+                ctaLabel = if (returned) "Доработать задание" else "Посмотреть отзыв", ctaUrl = homeworkUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = homeworkReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            UK -> EmailContent(
+                lang,
+                subject = if (returned) "Завдання треба доопрацювати: $t" else "Ваше завдання перевірено: $t",
+                preheader = if (returned) "Викладач залишив кілька зауважень." else "Перегляньте відгук викладача.",
+                robbi = if (returned) RobbiPose.IDLE else RobbiPose.CELEBRATE,
+                heading = if (returned) "Залишилося трохи виправити" else "Відгук готовий!",
+                paragraphs = listOf(
+                    if (returned) "Викладач повернув завдання «$t» із зауваженнями. Внесіть правки й здайте його знову — майже готово!"
+                    else "Викладач перевірив завдання «$t». Перегляньте відгук.",
+                ),
+                details = listOf("Завдання" to t),
+                ctaLabel = if (returned) "Доопрацювати завдання" else "Переглянути відгук", ctaUrl = homeworkUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = homeworkReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            DE -> EmailContent(
+                lang,
+                subject = if (returned) "Bitte noch einmal überarbeiten: $t" else "Deine Hausaufgabe wurde korrigiert: $t",
+                preheader = if (returned) "Deine Lehrkraft hat dir ein paar Hinweise gegeben." else "Sieh dir das Feedback deiner Lehrkraft an.",
+                robbi = if (returned) RobbiPose.IDLE else RobbiPose.CELEBRATE,
+                heading = if (returned) "Noch ein paar Korrekturen" else "Dein Feedback ist da!",
+                paragraphs = listOf(
+                    if (returned) "Deine Lehrkraft hat „$t“ mit ein paar Hinweisen zurückgegeben. Überarbeite sie und gib sie noch einmal ab – fast geschafft!"
+                    else "Deine Lehrkraft hat „$t“ korrigiert. Sieh dir das Feedback an.",
+                ),
+                details = listOf("Aufgabe" to t),
+                ctaLabel = if (returned) "Hausaufgabe überarbeiten" else "Feedback ansehen", ctaUrl = homeworkUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = homeworkReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+        }
+        return render(content)
+    }
+
+    /** The daily nudge when [dueCount] words are due for review; the count goes after a colon (no plural forms). */
+    fun vocabDue(lang: EmailLanguage, dueCount: Int, reviewUrl: String, footer: ReminderFooter): RenderedEmail {
+        val content = when (lang) {
+            EN -> EmailContent(
+                lang, subject = "Words to review today: $dueCount", preheader = "Five minutes keeps them fresh.",
+                robbi = RobbiPose.WAVE, heading = "Time for a quick review",
+                paragraphs = listOf("Some of your words are due for review. Five minutes today keeps them fresh — Robbi is cheering you on!"),
+                details = listOf("Words due" to dueCount.toString()),
+                ctaLabel = "Start review", ctaUrl = reviewUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = vocabReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            RU -> EmailContent(
+                lang, subject = "Слова на повторение сегодня: $dueCount", preheader = "Пять минут — и слова не забудутся.",
+                robbi = RobbiPose.WAVE, heading = "Время повторить слова",
+                paragraphs = listOf("Некоторые слова пора повторить. Пять минут сегодня — и они не забудутся. Робби болеет за вас!"),
+                details = listOf("Слов к повторению" to dueCount.toString()),
+                ctaLabel = "Начать повторение", ctaUrl = reviewUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = vocabReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            UK -> EmailContent(
+                lang, subject = "Слова на повторення сьогодні: $dueCount", preheader = "П’ять хвилин — і слова не забудуться.",
+                robbi = RobbiPose.WAVE, heading = "Час повторити слова",
+                paragraphs = listOf("Деякі слова час повторити. П’ять хвилин сьогодні — і вони не забудуться. Роббі вболіває за вас!"),
+                details = listOf("Слів до повторення" to dueCount.toString()),
+                ctaLabel = "Почати повторення", ctaUrl = reviewUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = vocabReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+            DE -> EmailContent(
+                lang, subject = "Wörter zum Wiederholen heute: $dueCount", preheader = "Fünf Minuten halten sie frisch.",
+                robbi = RobbiPose.WAVE, heading = "Zeit für eine kurze Wiederholung",
+                paragraphs = listOf("Ein paar deiner Wörter sind wieder dran. Fünf Minuten heute halten sie frisch – Robbi drückt dir die Daumen!"),
+                details = listOf("Fällige Wörter" to dueCount.toString()),
+                ctaLabel = "Wiederholung starten", ctaUrl = reviewUrl, linkHint = linkHint(lang),
+                signoff = signoff(lang), footerReason = vocabReason(lang), footerLinks = footerLinks(lang, footer),
+            )
+        }
+        return render(content)
+    }
+
+    private fun lessonReason(lang: EmailLanguage): String = when (lang) {
+        EN -> "You're getting this because lesson notifications are on in your ${brand.name} account."
+        RU -> "Вы получили это письмо, потому что в вашем аккаунте ${brand.name} включены уведомления об уроках."
+        UK -> "Ви отримали цей лист, бо у вашому акаунті ${brand.name} увімкнено сповіщення про уроки."
+        DE -> "Du bekommst diese E-Mail, weil in deinem ${brand.name}-Konto Benachrichtigungen zu Stunden aktiviert sind."
+    }
+
+    private fun vocabReason(lang: EmailLanguage): String = when (lang) {
+        EN -> "You're getting this because vocabulary reminders are on in your ${brand.name} account."
+        RU -> "Вы получили это письмо, потому что в вашем аккаунте ${brand.name} включены напоминания о словах."
+        UK -> "Ви отримали цей лист, бо у вашому акаунті ${brand.name} увімкнено нагадування про слова."
+        DE -> "Du bekommst diese E-Mail, weil in deinem ${brand.name}-Konto Erinnerungen an Vokabeln aktiviert sind."
+    }
+
     private fun teacherReason(lang: EmailLanguage): String = when (lang) {
         EN -> "You're getting this because teacher reminders are on in your ${brand.name} account."
         RU -> "Вы получили это письмо, потому что в вашем аккаунте ${brand.name} включены напоминания для преподавателя."

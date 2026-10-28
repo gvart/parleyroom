@@ -6,7 +6,8 @@ import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import org.jetbrains.exposed.v1.datetime.timestampWithTimeZone
 
-enum class TelegramKind { TEST, LESSON_REMINDER, HOMEWORK_DUE_TOMORROW, HOMEWORK_OVERDUE, TEACHER_FOLLOW_UP, TEACHER_PREP, TEACHER_DIGEST }
+enum class TelegramKind { TEST, LESSON_REMINDER, HOMEWORK_DUE_TOMORROW, HOMEWORK_OVERDUE, TEACHER_FOLLOW_UP, TEACHER_PREP, TEACHER_DIGEST,
+    LESSON_CONFIRMED, LESSON_BOOKED, HOMEWORK_SUBMITTED, HOMEWORK_REVIEWED, VOCAB_DUE }
 
 /** Every send attempt. Reminders claim their row first (unique on kind, ref_id, recipient, variant). */
 object TelegramLogTable : UUIDTable("telegram_log") {

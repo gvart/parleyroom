@@ -23,6 +23,7 @@ import com.gvart.parleyroom.homework.transfer.HomeworkResponse
 import com.gvart.parleyroom.homework.transfer.ReviewUnitInput
 import com.gvart.parleyroom.homework.transfer.SaveAnswersRequest
 import com.gvart.parleyroom.notification.data.NotificationType
+import com.gvart.parleyroom.notification.service.EventNotifier
 import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserTable
@@ -52,6 +53,7 @@ class HomeworkService(
     private val views: HomeworkViews,
     private val notificationService: NotificationService,
     private val storage: StorageService,
+    private val eventNotifier: EventNotifier,
 ) {
 
     enum class Sort { DUE, SUBMITTED, CREATED }
@@ -210,6 +212,7 @@ class HomeworkService(
         }
         LearningActivityRecorder.record(principal.id, ActivityKind.HOMEWORK_SUBMITTED, homeworkId)
         row[AssignmentTable.teacherId]?.value?.let { notificationService.createNotification(it, principal.id, NotificationType.HOMEWORK_SUBMITTED, homeworkId) }
+        eventNotifier.homeworkSubmitted(homeworkId, row[HomeworkTable.attempt] + 1)
 
         views.detail(views.requireReadable(homeworkId, principal), principal)
     }
@@ -267,6 +270,10 @@ class HomeworkService(
             HomeworkOutcome.DONE -> if (previous != HomeworkStatus.REVIEWED) NotificationType.HOMEWORK_REVIEWED else null
         }
         type?.let { notificationService.createNotification(row[HomeworkTable.studentId].value, principal.id, it, homeworkId) }
+        if (type != null) {
+            val attempt = row[HomeworkTable.attempt] + if (gradeDraft) 1 else 0
+            eventNotifier.homeworkReviewed(homeworkId, attempt, returned = outcome == HomeworkOutcome.RETURNED)
+        }
 
         views.detail(views.requireReadable(homeworkId, principal), principal)
     }

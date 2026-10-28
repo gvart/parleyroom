@@ -21,6 +21,7 @@ import com.gvart.parleyroom.lesson.transfer.CreateLessonRequest
 import com.gvart.parleyroom.lesson.transfer.LessonResponse
 import com.gvart.parleyroom.lesson.transfer.StartLessonResponse
 import com.gvart.parleyroom.notification.data.NotificationType
+import com.gvart.parleyroom.notification.service.EventNotifier
 import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.user.data.TeacherStudentTable
 import com.gvart.parleyroom.user.data.UserRole
@@ -49,6 +50,7 @@ class LessonLifecycleService(
     private val videoTokenService: VideoTokenService,
     private val support: LessonSupport,
     private val availabilityValidator: AvailabilityValidator,
+    private val eventNotifier: EventNotifier,
 ) {
     private val log = LoggerFactory.getLogger(LessonLifecycleService::class.java)
 
@@ -166,6 +168,7 @@ class LessonLifecycleService(
                 type = NotificationType.LESSON_REQUESTED,
                 referenceId = lessonId.value,
             )
+            eventNotifier.lessonBooked(lessonId.value, principal.id, requested = true)
         } else if (principal.role == UserRole.STUDENT) {
             // Auto-confirmed booking: the student booked it, so only the teacher hears about it.
             notificationService.createNotification(
@@ -174,6 +177,7 @@ class LessonLifecycleService(
                 type = NotificationType.LESSON_BOOKED,
                 referenceId = lessonId.value,
             )
+            eventNotifier.lessonBooked(lessonId.value, principal.id, requested = false)
         } else if (status == LessonStatus.CONFIRMED) {
             for (studentId in studentIds) {
                 notificationService.createNotification(
@@ -183,6 +187,7 @@ class LessonLifecycleService(
                     referenceId = lessonId.value,
                 )
             }
+            eventNotifier.lessonConfirmed(lessonId.value, studentIds, accepted = false)
         }
 
         LessonTable.selectAll()
@@ -219,7 +224,8 @@ class LessonLifecycleService(
             it[newStatus] = LessonStatus.CONFIRMED
         }
 
-        for (studentId in support.getStudentIds(lessonId)) {
+        val studentIds = support.getStudentIds(lessonId)
+        for (studentId in studentIds) {
             notificationService.createNotification(
                 userId = studentId,
                 actorId = principal.id,
@@ -227,6 +233,7 @@ class LessonLifecycleService(
                 referenceId = lessonId,
             )
         }
+        eventNotifier.lessonConfirmed(lessonId, studentIds, accepted = true)
 
         LessonTable.selectAll()
             .where { LessonTable.id eq lessonId }

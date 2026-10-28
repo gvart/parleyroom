@@ -17,6 +17,8 @@ import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.notification.service.NotificationSseManager
 import com.gvart.parleyroom.video.config.VideoConfig
 import com.gvart.parleyroom.video.service.VideoTokenService
+import io.ktor.server.plugins.di.dependencies
+import io.ktor.server.testing.ApplicationTestBuilder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -48,11 +50,13 @@ class LessonAutoCompleteIntegrationTest : IntegrationTest() {
 
     private val video = RecordingVideoTokenService()
 
-    private fun service() = LessonLifecycleService(
+    /** After startApplication(). */
+    private suspend fun ApplicationTestBuilder.service() = LessonLifecycleService(
         NotificationService(NotificationSseManager()),
         video,
         LessonSupport(),
         AvailabilityValidator(),
+        application.dependencies.resolve(),
     )
 
     private fun seedLesson(status: LessonStatus, scheduledAt: OffsetDateTime, durationMinutes: Int = 60): UUID =

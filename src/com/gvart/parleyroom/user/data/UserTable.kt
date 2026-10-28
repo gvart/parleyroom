@@ -40,9 +40,11 @@ object UserTable : UUIDTable("users") {
     /** Opt-outs for reminder emails (settings page or the unsubscribe link). */
     val emailLessonReminders = bool("email_lesson_reminders").default(true)
     val emailHomeworkReminders = bool("email_homework_reminders").default(true)
+    val emailVocabReminders = bool("email_vocab_reminders").default(true)
     /** Telegram reminder toggles; only used while telegramId is set. */
     val telegramLessonReminders = bool("telegram_lesson_reminders").default(true)
     val telegramHomeworkReminders = bool("telegram_homework_reminders").default(true)
+    val telegramVocabReminders = bool("telegram_vocab_reminders").default(true)
     /** Set when Telegram refused a message (403); cleared by (re)linking, unlinking or a successful test message. */
     val telegramUnreachableAt = timestampWithTimeZone("telegram_unreachable_at").nullable()
 }

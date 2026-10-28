@@ -112,6 +112,52 @@ class NotificationMailer(
             templates.homeworkOverdue(emailLanguageFor(user), assignmentTitle, dueAt, zoneOf(user), homeworkUrl(homeworkId), footer)
         }
 
+    /** To a student, once per lesson: the teacher scheduled it, or [accepted] their request. */
+    suspend fun sendLessonConfirmed(
+        userId: UUID,
+        lessonId: UUID,
+        accepted: Boolean,
+        lessonTitle: String,
+        startsAt: OffsetDateTime,
+        teacherName: String?,
+    ): SendResult = sendReminder(userId, EmailCategory.LESSON_REMINDERS, EmailKind.LESSON_CONFIRMED, lessonId, null) { user, footer ->
+        templates.lessonConfirmed(
+            emailLanguageFor(user), accepted, lessonTitle, startsAt, zoneOf(user), teacherName, "${config.appBaseUrl}/student/lessons", footer,
+        )
+    }
+
+    /** To the teacher, once per lesson: a student [requested] it or booked it confirmed. */
+    suspend fun sendLessonBooked(
+        teacherId: UUID,
+        lessonId: UUID,
+        requested: Boolean,
+        lessonTitle: String,
+        startsAt: OffsetDateTime,
+        studentName: String,
+    ): SendResult = sendReminder(teacherId, EmailCategory.LESSON_REMINDERS, EmailKind.LESSON_BOOKED, lessonId, null) { user, footer ->
+        templates.lessonBooked(
+            emailLanguageFor(user), requested, lessonTitle, startsAt, zoneOf(user), studentName, "${config.appBaseUrl}/teacher/calendar", footer,
+        )
+    }
+
+    /** To the teacher, once per submission ([attempt]). */
+    suspend fun sendHomeworkSubmitted(teacherId: UUID, homeworkId: UUID, attempt: Int, assignmentTitle: String, studentName: String): SendResult =
+        sendReminder(teacherId, EmailCategory.HOMEWORK_REMINDERS, EmailKind.HOMEWORK_SUBMITTED, homeworkId, attempt.toString()) { user, footer ->
+            templates.homeworkSubmitted(emailLanguageFor(user), assignmentTitle, studentName, "${config.appBaseUrl}/teacher/homework/$homeworkId", footer)
+        }
+
+    /** To the student, once per outcome and [attempt]. */
+    suspend fun sendHomeworkReviewed(userId: UUID, homeworkId: UUID, attempt: Int, returned: Boolean, assignmentTitle: String): SendResult =
+        sendReminder(userId, EmailCategory.HOMEWORK_REMINDERS, EmailKind.HOMEWORK_REVIEWED, homeworkId, reviewVariant(returned, attempt)) { user, footer ->
+            templates.homeworkReviewed(emailLanguageFor(user), returned, assignmentTitle, homeworkUrl(homeworkId), footer)
+        }
+
+    /** Once per student and local [day] (ISO date). */
+    suspend fun sendVocabDue(userId: UUID, day: String, dueCount: Int): SendResult =
+        sendReminder(userId, EmailCategory.VOCAB_REMINDERS, EmailKind.VOCAB_DUE, userId, day) { user, footer ->
+            templates.vocabDue(emailLanguageFor(user), dueCount, "${config.appBaseUrl}/student/vocabulary", footer)
+        }
+
     /** The [lesson]'s follow-up to its teacher, once per lesson; links the wrap-up flow. */
     suspend fun sendTeacherFollowUp(lesson: TeacherLesson, studentFirstName: String, wrapUp: Boolean, homework: Boolean): SendResult =
         sendReminder(lesson.teacherId, EmailCategory.TEACHER_REMINDERS, EmailKind.TEACHER_FOLLOW_UP, lesson.id, null) { user, footer ->
@@ -147,6 +193,7 @@ class NotificationMailer(
         val enabled = when (category) {
             EmailCategory.LESSON_REMINDERS -> user[UserTable.emailLessonReminders]
             EmailCategory.HOMEWORK_REMINDERS -> user[UserTable.emailHomeworkReminders]
+            EmailCategory.VOCAB_REMINDERS -> user[UserTable.emailVocabReminders]
             // Toggled per type in teacher_reminder_settings, which the caller checked.
             EmailCategory.TEACHER_REMINDERS -> true
         }
@@ -205,6 +252,8 @@ class NotificationMailer(
     )
 
     private fun homeworkUrl(homeworkId: UUID) = "${config.appBaseUrl}/student/homework/$homeworkId"
+
+    private fun reviewVariant(returned: Boolean, attempt: Int) = "${if (returned) "RETURNED" else "REVIEWED"}@$attempt"
 
     private fun zoneOf(user: ResultRow): ZoneId =
         runCatching { ZoneId.of(user[UserTable.timezone]) }.getOrDefault(ZoneId.of("Europe/Berlin"))

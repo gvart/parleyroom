@@ -13,8 +13,11 @@ import com.gvart.parleyroom.lesson.data.LessonStudentStatus
 import com.gvart.parleyroom.lesson.data.LessonStudentTable
 import com.gvart.parleyroom.lesson.data.LessonTable
 import com.gvart.parleyroom.telegram.service.TelegramNotifier
+import com.gvart.parleyroom.user.data.UserRole
 import com.gvart.parleyroom.user.data.UserStatus
 import com.gvart.parleyroom.user.data.UserTable
+import com.gvart.parleyroom.vocabulary.data.StudentVocabStatus
+import com.gvart.parleyroom.vocabulary.data.StudentVocabTable
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.toJavaLocalDate
 import kotlinx.datetime.toKotlinLocalDate
@@ -25,7 +28,11 @@ import org.jetbrains.exposed.v1.core.between
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.count
 import org.jetbrains.exposed.v1.core.lessEq
+import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.or
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
@@ -43,7 +50,8 @@ import java.util.UUID
  * Lessons (CONFIRMED, teacher + confirmed students): H24 while now ∈ [start − 24h, start − [H24_LATEST]), H1
  * while now ∈ [start − 1h, start). A lesson booked or moved to less than [H24_LATEST] ahead only gets the H1 one,
  * so the "tomorrow at …" email never lands on the lesson's own day. Homework (OPEN, with a due date, students only), in the student's timezone from
- * 09:00: "due tomorrow" on the day before the due date, "overdue" on the day after.
+ * 09:00: "due tomorrow" on the day before the due date, "overdue" on the day after. Vocabulary (students with at
+ * least one word due), in the student's timezone from 09:00, once per local day.
  */
 class ReminderService(private val mailer: NotificationMailer, private val telegram: TelegramNotifier) {
 
@@ -66,6 +74,8 @@ class ReminderService(private val mailer: NotificationMailer, private val telegr
         val dueDate: java.time.LocalDate,
         val zone: ZoneId,
     )
+
+    private data class VocabDue(val studentId: UUID, val dueCount: Int, val zone: ZoneId)
 
     suspend fun runOnce(now: OffsetDateTime = OffsetDateTime.now()) {
         val emailResults = mutableMapOf<SendResult, Int>()
@@ -110,6 +120,14 @@ class ReminderService(private val mailer: NotificationMailer, private val telegr
                 }
                 else -> Unit
             }
+        }
+
+        for (student in vocabDue(now)) {
+            val local = now.atZoneSameInstant(student.zone)
+            if (local.toLocalTime() < SEND_FROM) continue
+            val day = local.toLocalDate().toString()
+            send(emailResults) { mailer.sendVocabDue(student.studentId, day, student.dueCount) }
+            send(telegramResults) { telegram.sendVocabDue(student.studentId, day, student.dueCount) }
         }
 
         fun summary(results: Map<SendResult, Int>) = "${results[SendResult.SENT] ?: 0} sent, ${results[SendResult.FAILED] ?: 0} failed"
@@ -175,6 +193,29 @@ class ReminderService(private val mailer: NotificationMailer, private val telegr
             }
     }
 
+    /** Active students with a vocabulary reminder on and at least one word due at [now]. */
+    private fun vocabDue(now: OffsetDateTime): List<VocabDue> = transaction {
+        val dueCount = StudentVocabTable.id.count()
+        StudentVocabTable
+            .join(UserTable, JoinType.INNER, StudentVocabTable.studentId, UserTable.id)
+            .select(StudentVocabTable.studentId, UserTable.timezone, dueCount)
+            .where {
+                (StudentVocabTable.status neq StudentVocabStatus.LEARNED) and
+                    (StudentVocabTable.due lessEq now) and
+                    (UserTable.role eq UserRole.STUDENT) and
+                    (UserTable.status eq UserStatus.ACTIVE) and
+                    ((UserTable.emailVocabReminders eq true) or (UserTable.telegramVocabReminders eq true))
+            }
+            .groupBy(StudentVocabTable.studentId, UserTable.timezone)
+            .map { row ->
+                VocabDue(
+                    studentId = row[StudentVocabTable.studentId].value,
+                    dueCount = row[dueCount].toInt(),
+                    zone = runCatching { ZoneId.of(row[UserTable.timezone]) }.getOrDefault(ZoneId.of("Europe/Berlin")),
+                )
+            }
+    }
+
     private fun activeUsers(ids: List<UUID>): List<ResultRow> =
         if (ids.isEmpty()) emptyList()
         else UserTable.selectAll().where { (UserTable.id inList ids) and (UserTable.status eq UserStatus.ACTIVE) }.toList()
@@ -185,7 +226,7 @@ class ReminderService(private val mailer: NotificationMailer, private val telegr
         /** The H24 reminder goes out between 24h and this long before the lesson. */
         val H24_LATEST: Duration = Duration.ofHours(20)
 
-        /** No homework reminders before this local time. */
+        /** No homework or vocabulary reminders before this local time. */
         val SEND_FROM: LocalTime = LocalTime.of(9, 0)
     }
 }

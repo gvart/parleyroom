@@ -92,6 +92,50 @@ class TelegramNotifier(
             templates.homeworkOverdue(emailLanguageFor(user), assignmentTitle) to appUrl(user, "/homework/$homeworkId")
         }
 
+    /** See NotificationMailer.sendLessonConfirmed. */
+    suspend fun sendLessonConfirmed(
+        userId: UUID,
+        lessonId: UUID,
+        accepted: Boolean,
+        lessonTitle: String,
+        startsAt: OffsetDateTime,
+        teacherName: String?,
+    ): SendResult = sendReminder(userId, EmailCategory.LESSON_REMINDERS, TelegramKind.LESSON_CONFIRMED, lessonId, null) { user ->
+        templates.lessonConfirmed(emailLanguageFor(user), accepted, lessonTitle, startsAt, zoneOf(user), teacherName) to appUrl(user, "/lessons")
+    }
+
+    /** See NotificationMailer.sendLessonBooked. Links the portal calendar (D-004: teacher features are portal-only). */
+    suspend fun sendLessonBooked(
+        teacherId: UUID,
+        lessonId: UUID,
+        requested: Boolean,
+        lessonTitle: String,
+        startsAt: OffsetDateTime,
+        studentName: String,
+    ): SendResult = sendReminder(teacherId, EmailCategory.LESSON_REMINDERS, TelegramKind.LESSON_BOOKED, lessonId, null, webApp = false) { user ->
+        templates.lessonBooked(emailLanguageFor(user), requested, lessonTitle, startsAt, zoneOf(user), studentName) to
+            "${config.appBaseUrl}/teacher/calendar"
+    }
+
+    /** See NotificationMailer.sendHomeworkSubmitted. Links the portal review page. */
+    suspend fun sendHomeworkSubmitted(teacherId: UUID, homeworkId: UUID, attempt: Int, assignmentTitle: String, studentName: String): SendResult =
+        sendReminder(teacherId, EmailCategory.HOMEWORK_REMINDERS, TelegramKind.HOMEWORK_SUBMITTED, homeworkId, attempt.toString(), webApp = false) { user ->
+            templates.homeworkSubmitted(emailLanguageFor(user), assignmentTitle, studentName) to "${config.appBaseUrl}/teacher/homework/$homeworkId"
+        }
+
+    /** See NotificationMailer.sendHomeworkReviewed. */
+    suspend fun sendHomeworkReviewed(userId: UUID, homeworkId: UUID, attempt: Int, returned: Boolean, assignmentTitle: String): SendResult =
+        sendReminder(userId, EmailCategory.HOMEWORK_REMINDERS, TelegramKind.HOMEWORK_REVIEWED, homeworkId, "${if (returned) "RETURNED" else "REVIEWED"}@$attempt") { user ->
+            templates.homeworkReviewed(emailLanguageFor(user), returned, assignmentTitle) to appUrl(user, "/homework/$homeworkId")
+        }
+
+    /** See NotificationMailer.sendVocabDue. The Mini App's vocabulary tab, or the portal's vocabulary page. */
+    suspend fun sendVocabDue(userId: UUID, day: String, dueCount: Int): SendResult =
+        sendReminder(userId, EmailCategory.VOCAB_REMINDERS, TelegramKind.VOCAB_DUE, userId, day) { user ->
+            templates.vocabDue(emailLanguageFor(user), dueCount) to
+                if (config.miniAppBaseUrl.isNotEmpty()) "${config.miniAppBaseUrl}/vocab" else "${config.appBaseUrl}/student/vocabulary"
+        }
+
     /** See NotificationMailer.sendTeacherFollowUp. Teacher reminders link the portal (D-004: teacher features are portal-only). */
     suspend fun sendTeacherFollowUp(lesson: TeacherLesson, studentFirstName: String, wrapUp: Boolean, homework: Boolean): SendResult =
         sendReminder(lesson.teacherId, EmailCategory.TEACHER_REMINDERS, TelegramKind.TEACHER_FOLLOW_UP, lesson.id, null, webApp = false) { user ->
@@ -128,6 +172,7 @@ class TelegramNotifier(
         val enabled = when (category) {
             EmailCategory.LESSON_REMINDERS -> user[UserTable.telegramLessonReminders]
             EmailCategory.HOMEWORK_REMINDERS -> user[UserTable.telegramHomeworkReminders]
+            EmailCategory.VOCAB_REMINDERS -> user[UserTable.telegramVocabReminders]
             // Toggled per type in teacher_reminder_settings, which the caller checked.
             EmailCategory.TEACHER_REMINDERS -> true
         }
