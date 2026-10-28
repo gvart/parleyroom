@@ -21,6 +21,7 @@ class EmailPreferenceService(private val tokens: UnsubscribeTokens) {
                 when (category) {
                     EmailCategory.LESSON_REMINDERS -> it[emailLessonReminders] = false
                     EmailCategory.HOMEWORK_REMINDERS -> it[emailHomeworkReminders] = false
+                    EmailCategory.VOCAB_REMINDERS -> it[emailVocabReminders] = false
                     EmailCategory.TEACHER_REMINDERS -> Unit
                 }
                 it[updatedAt] = OffsetDateTime.now()

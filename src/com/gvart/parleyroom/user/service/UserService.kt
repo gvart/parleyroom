@@ -116,6 +116,8 @@ class UserService(
             if (request.emailHomeworkReminders != null) it[emailHomeworkReminders] = request.emailHomeworkReminders
             if (request.telegramLessonReminders != null) it[telegramLessonReminders] = request.telegramLessonReminders
             if (request.telegramHomeworkReminders != null) it[telegramHomeworkReminders] = request.telegramHomeworkReminders
+            if (request.emailVocabReminders != null) it[emailVocabReminders] = request.emailVocabReminders
+            if (request.telegramVocabReminders != null) it[telegramVocabReminders] = request.telegramVocabReminders
             it[updatedAt] = OffsetDateTime.now()
         }
 
@@ -234,6 +236,8 @@ class UserService(
             emailHomeworkReminders = row[UserTable.emailHomeworkReminders],
             telegramLessonReminders = row[UserTable.telegramLessonReminders],
             telegramHomeworkReminders = row[UserTable.telegramHomeworkReminders],
+            emailVocabReminders = row[UserTable.emailVocabReminders],
+            telegramVocabReminders = row[UserTable.telegramVocabReminders],
             telegramReachable = row[UserTable.telegramId] != null && row[UserTable.telegramUnreachableAt] == null,
         )
     }

@@ -68,6 +68,7 @@ class UnsubscribeTokens(jwtConfig: JwtConfig, private val config: MailConfig) {
             EmailCategory.LESSON_REMINDERS to 1.toByte(),
             EmailCategory.HOMEWORK_REMINDERS to 2.toByte(),
             EmailCategory.TEACHER_REMINDERS to 3.toByte(),
+            EmailCategory.VOCAB_REMINDERS to 4.toByte(),
         )
         val ENCODER: Base64.Encoder = Base64.getUrlEncoder().withoutPadding()
         val DECODER: Base64.Decoder = Base64.getUrlDecoder()

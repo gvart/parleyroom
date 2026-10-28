@@ -128,6 +128,7 @@ class TelegramNotifier(
         val enabled = when (category) {
             EmailCategory.LESSON_REMINDERS -> user[UserTable.telegramLessonReminders]
             EmailCategory.HOMEWORK_REMINDERS -> user[UserTable.telegramHomeworkReminders]
+            EmailCategory.VOCAB_REMINDERS -> user[UserTable.telegramVocabReminders]
             // Toggled per type in teacher_reminder_settings, which the caller checked.
             EmailCategory.TEACHER_REMINDERS -> true
         }

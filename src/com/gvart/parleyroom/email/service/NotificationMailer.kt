@@ -147,6 +147,7 @@ class NotificationMailer(
         val enabled = when (category) {
             EmailCategory.LESSON_REMINDERS -> user[UserTable.emailLessonReminders]
             EmailCategory.HOMEWORK_REMINDERS -> user[UserTable.emailHomeworkReminders]
+            EmailCategory.VOCAB_REMINDERS -> user[UserTable.emailVocabReminders]
             // Toggled per type in teacher_reminder_settings, which the caller checked.
             EmailCategory.TEACHER_REMINDERS -> true
         }
