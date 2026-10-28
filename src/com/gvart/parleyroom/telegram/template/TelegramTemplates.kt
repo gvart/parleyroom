@@ -130,6 +130,78 @@ class TelegramTemplates(private val brand: Brand) {
         return TelegramContent((listOf(headline) + lines).joinToString("\n"), label)
     }
 
+    /** To a student: the teacher scheduled a lesson ([accepted] false) or accepted their request. */
+    fun lessonConfirmed(
+        lang: EmailLanguage,
+        accepted: Boolean,
+        lessonTitle: String,
+        startsAt: OffsetDateTime,
+        zone: ZoneId,
+        teacherName: String?,
+    ): TelegramContent {
+        val t = "<b>${escape(lessonTitle)}</b>"
+        val teacher = teacherName?.let(::escape)
+        val (headline, teacherLine, label) = when (lang) {
+            EN -> Triple(if (accepted) "Your lesson request was accepted: $t" else "New lesson: $t", teacher?.let { "Teacher: $it" }, "View lesson")
+            RU -> Triple(if (accepted) "Ваш запрос на урок принят: $t" else "Новый урок: $t", teacher?.let { "Преподаватель: $it" }, "Открыть урок")
+            UK -> Triple(if (accepted) "Ваш запит на урок прийнято: $t" else "Новий урок: $t", teacher?.let { "Викладач: $it" }, "Відкрити урок")
+            DE -> Triple(if (accepted) "Deine Stundenanfrage wurde angenommen: $t" else "Neue Stunde: $t", teacher?.let { "Lehrkraft: $it" }, "Zur Stunde")
+        }
+        return TelegramContent(listOfNotNull(headline, dateTime(lang, startsAt, zone), teacherLine).joinToString("\n"), label)
+    }
+
+    /** To a teacher: [studentName] requested a lesson ([requested]) or booked one that was confirmed straight away. */
+    fun lessonBooked(lang: EmailLanguage, requested: Boolean, lessonTitle: String, startsAt: OffsetDateTime, zone: ZoneId, studentName: String): TelegramContent {
+        val s = "<b>${escape(studentName)}</b>"
+        val t = escape(lessonTitle)
+        val (headline, label) = when (lang) {
+            EN -> (if (requested) "$s requested a lesson: $t. Accept or decline it in your calendar." else "$s booked a lesson: $t. It is confirmed.") to
+                (if (requested) "Review request" else "Open calendar")
+            RU -> (if (requested) "$s запрашивает урок: $t. Примите или отклоните запрос в календаре." else "Новая запись на урок: $s, $t. Урок подтверждён.") to
+                (if (requested) "Посмотреть запрос" else "Открыть календарь")
+            UK -> (if (requested) "$s просить про урок: $t. Прийміть або відхиліть запит у календарі." else "Новий запис на урок: $s, $t. Урок підтверджено.") to
+                (if (requested) "Переглянути запит" else "Відкрити календар")
+            DE -> (if (requested) "$s möchte eine Stunde buchen: $t. Nimm die Anfrage im Kalender an oder lehne sie ab." else "$s hat eine Stunde gebucht: $t. Sie ist bestätigt.") to
+                (if (requested) "Anfrage ansehen" else "Zum Kalender")
+        }
+        return TelegramContent("$headline\n${dateTime(lang, startsAt, zone)}", label)
+    }
+
+    /** To a teacher: [studentName] handed in a homework. */
+    fun homeworkSubmitted(lang: EmailLanguage, assignmentTitle: String, studentName: String): TelegramContent {
+        val s = "<b>${escape(studentName)}</b>"
+        val t = "<b>${escape(assignmentTitle)}</b>"
+        return when (lang) {
+            EN -> TelegramContent("$s submitted homework: $t\nReady for your review.", "Review homework")
+            RU -> TelegramContent("$s: задание $t сдано.\nМожно проверять.", "Проверить задание")
+            UK -> TelegramContent("$s: завдання $t здано.\nМожна перевіряти.", "Перевірити завдання")
+            DE -> TelegramContent("$s hat eine Hausaufgabe abgegeben: $t\nBereit zur Korrektur.", "Hausaufgabe korrigieren")
+        }
+    }
+
+    /** To a student: the teacher reviewed a homework, or [returned] it for changes. */
+    fun homeworkReviewed(lang: EmailLanguage, returned: Boolean, assignmentTitle: String): TelegramContent {
+        val t = "<b>${escape(assignmentTitle)}</b>"
+        return when (lang) {
+            EN -> if (returned) TelegramContent("Please take another look: $t\nYour teacher left a few notes — almost there!", "Fix homework")
+            else TelegramContent("Your homework was reviewed: $t\nSee your teacher's feedback.", "See feedback")
+            RU -> if (returned) TelegramContent("Задание нужно доработать: $t\nПреподаватель оставил замечания — почти готово!", "Доработать задание")
+            else TelegramContent("Ваше задание проверено: $t\nПосмотрите отзыв преподавателя.", "Посмотреть отзыв")
+            UK -> if (returned) TelegramContent("Завдання треба доопрацювати: $t\nВикладач залишив зауваження — майже готово!", "Доопрацювати завдання")
+            else TelegramContent("Ваше завдання перевірено: $t\nПерегляньте відгук викладача.", "Переглянути відгук")
+            DE -> if (returned) TelegramContent("Bitte noch einmal überarbeiten: $t\nDeine Lehrkraft hat dir Hinweise gegeben – fast geschafft!", "Hausaufgabe überarbeiten")
+            else TelegramContent("Deine Hausaufgabe wurde korrigiert: $t\nSieh dir das Feedback an.", "Feedback ansehen")
+        }
+    }
+
+    /** The daily nudge when [dueCount] words are due for review. */
+    fun vocabDue(lang: EmailLanguage, dueCount: Int): TelegramContent = when (lang) {
+        EN -> TelegramContent("Words to review today: <b>$dueCount</b>\nFive minutes keeps them fresh.", "Start review")
+        RU -> TelegramContent("Слова на повторение сегодня: <b>$dueCount</b>\nПять минут — и они не забудутся.", "Начать повторение")
+        UK -> TelegramContent("Слова на повторення сьогодні: <b>$dueCount</b>\nП’ять хвилин — і вони не забудуться.", "Почати повторення")
+        DE -> TelegramContent("Wörter zum Wiederholen heute: <b>$dueCount</b>\nFünf Minuten halten sie frisch.", "Wiederholung starten")
+    }
+
     /** e.g. "Wednesday, 15 October · 18:00 (Europe/Berlin)" in the recipient's language and zone. */
     private fun dateTime(lang: EmailLanguage, at: OffsetDateTime, zone: ZoneId): String {
         val pattern = if (lang == DE) "EEEE, d. MMMM · HH:mm" else "EEEE, d MMMM · HH:mm"
