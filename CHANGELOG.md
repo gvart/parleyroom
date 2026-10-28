@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/gvart/parleyroom/compare/v1.8.1...v1.9.0) (2026-10-28)
+
+
+### Features
+
+* **notifications:** email + telegram for lesson booking, homework and vocab review ([#91](https://github.com/gvart/parleyroom/issues/91)) ([b8e8e37](https://github.com/gvart/parleyroom/commit/b8e8e374f5239468c85ca0a8542f87774b2d29a7))
+
 ## [1.8.1](https://github.com/gvart/parleyroom/compare/v1.8.0...v1.8.1) (2026-10-18)
 
 
