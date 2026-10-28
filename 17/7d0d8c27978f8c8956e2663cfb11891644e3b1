@@ -1,0 +1,22 @@
+test/com/gvart/parleyroom/notification/EventNotificationIntegrationTest.kt
+  s_81d0f71760d0cb::t_1444d839c02a97 1-382
+  s_81d0f71760d0cb::t_841f25e6bbf346 383-394
+src/com/gvart/parleyroom/reminder/service/ReminderService.kt
+  s_81d0f71760d0cb::t_8d1bc54abdd942 16,19-20,31,33-35,53-54,78-79,125-132,196-218,229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "177d0d8c27978f8c8956e2663cfb11891644e3b1",
+  "prompts": {},
+  "sessions": {
+    "s_81d0f71760d0cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5ea60677-0754-409d-85f3-9e5e9e54178e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
