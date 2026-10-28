@@ -1,25 +1,30 @@
 package com.gvart.parleyroom.notification.config
 
 import com.gvart.parleyroom.notification.routing.configureNotificationRouting
+import com.gvart.parleyroom.notification.service.EventNotifier
 import com.gvart.parleyroom.notification.service.NotificationService
 import com.gvart.parleyroom.notification.service.NotificationSseManager
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStopped
 import io.ktor.server.plugins.di.dependencies
 
+/** After the email and Telegram modules (EventNotifier). */
 fun Application.configureNotificationModule() {
     val sseManager = NotificationSseManager()
 
     dependencies {
         provide { sseManager }
         provide(NotificationService::class)
+        provide(EventNotifier::class)
     }
 
     val notificationService: NotificationService by dependencies
+    val eventNotifier: EventNotifier by dependencies
 
     monitor.subscribe(ApplicationStopped) {
         sseManager.shutdown()
         notificationService.shutdown()
+        eventNotifier.shutdown()
     }
 
     configureNotificationRouting()
