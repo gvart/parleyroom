@@ -60,4 +60,41 @@ class TelegramTemplatesTest {
         assertEquals(EmailLanguage.entries.size, preps.toSet().size)
         assertTrue(preps.all { "18:00" in it })
     }
+
+    @Test
+    fun `event messages escape input and differ per language and variant`() {
+        val at = OffsetDateTime.parse("2030-03-12T17:00:00Z")
+        val zone = ZoneId.of("Europe/Berlin")
+        for (lang in EmailLanguage.entries) {
+            val texts = listOf(
+                templates.lessonConfirmed(lang, false, "L", at, zone, "T"),
+                templates.lessonConfirmed(lang, true, "L", at, zone, "T"),
+                templates.lessonBooked(lang, true, "L", at, zone, "S"),
+                templates.lessonBooked(lang, false, "L", at, zone, "S"),
+                templates.homeworkSubmitted(lang, "HW", "S"),
+                templates.homeworkReviewed(lang, false, "HW"),
+                templates.homeworkReviewed(lang, true, "HW"),
+                templates.vocabDue(lang, 7),
+            ).map { it.text }
+            assertEquals(texts.size, texts.toSet().size, "${lang.tag}: $texts")
+            assertTrue(texts.take(4).all { "18:00" in it }, lang.tag)
+        }
+        for (render in listOf<(EmailLanguage) -> String>(
+            { templates.lessonBooked(it, true, "L", at, zone, "S").text },
+            { templates.homeworkReviewed(it, true, "HW").text },
+            { templates.vocabDue(it, 7).text },
+        )) {
+            assertEquals(EmailLanguage.entries.size, EmailLanguage.entries.map(render).toSet().size)
+        }
+
+        val booked = templates.lessonBooked(EmailLanguage.EN, true, "A & B", at, zone, "<Ann>")
+        assertEquals(
+            "<b>&lt;Ann&gt;</b> requested a lesson: A &amp; B. Accept or decline it in your calendar.\n" +
+                "Tuesday, 12 March · 18:00 (Europe/Berlin)",
+            booked.text,
+        )
+        assertEquals("Review request", booked.buttonLabel)
+        assertTrue("<b>a&lt;b</b>" in templates.homeworkSubmitted(EmailLanguage.DE, "a<b", "S").text)
+        assertEquals("Words to review today: <b>7</b>\nFive minutes keeps them fresh.", templates.vocabDue(EmailLanguage.EN, 7).text)
+    }
 }

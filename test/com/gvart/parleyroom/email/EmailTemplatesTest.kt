@@ -53,6 +53,27 @@ class EmailTemplatesTest {
     }
 
     @Test
+    fun `event emails have their own copy per language and variant`() {
+        val all = renderAll(templates)
+        val events = listOf(
+            "lessonConfirmed", "lessonAccepted", "lessonRequested", "lessonBooked",
+            "homeworkSubmitted", "homeworkReviewed", "homeworkReturned", "vocabDue",
+        )
+        for (name in events) {
+            val subjects = all.filter { it.first == name }.map { it.third.subject }
+            assertEquals(EmailLanguage.entries.size, subjects.toSet().size, "$name: $subjects")
+        }
+        for (lang in EmailLanguage.entries) {
+            val subjects = all.filter { it.second == lang && it.first in events }.map { it.third.subject }
+            assertEquals(events.size, subjects.toSet().size, "${lang.tag}: $subjects")
+        }
+        val vocab = all.single { it.first == "vocabDue" && it.second == EmailLanguage.DE }.third
+        assertTrue("12" in vocab.subject && "https://app.test/student/vocabulary" in vocab.html, vocab.subject)
+        val requested = all.single { it.first == "lessonRequested" && it.second == EmailLanguage.EN }.third
+        assertTrue("Olena Koval" in requested.subject && "https://app.test/teacher/calendar" in requested.text, requested.subject)
+    }
+
+    @Test
     fun `user input is escaped`() {
         val email = templates.invite(EmailLanguage.EN, "<b>Eve</b> & co", UserRole.STUDENT, "https://app.test/r?a=1&b=2", NOW)
         assertTrue("&lt;b&gt;Eve&lt;/b&gt; &amp; co" in email.html)
@@ -128,6 +149,14 @@ class EmailTemplatesTest {
                         ),
                         "https://app.test/teacher/dashboard", footer,
                     ),
+                    "lessonConfirmed" to templates.lessonConfirmed(lang, false, "Perfekt", NOW.plusDays(2), zone, "Anna Schmidt", "https://app.test/student/lessons", footer),
+                    "lessonAccepted" to templates.lessonConfirmed(lang, true, "Perfekt", NOW.plusDays(2), zone, "Anna Schmidt", "https://app.test/student/lessons", footer),
+                    "lessonRequested" to templates.lessonBooked(lang, true, "Perfekt", NOW.plusDays(2), zone, "Olena Koval", "https://app.test/teacher/calendar", footer),
+                    "lessonBooked" to templates.lessonBooked(lang, false, "Perfekt", NOW.plusDays(2), zone, "Olena Koval", "https://app.test/teacher/calendar", footer),
+                    "homeworkSubmitted" to templates.homeworkSubmitted(lang, "Wechselpräpositionen", "Olena Koval", "https://app.test/teacher/homework/1", footer),
+                    "homeworkReviewed" to templates.homeworkReviewed(lang, false, "Wechselpräpositionen", "https://app.test/student/homework/1", footer),
+                    "homeworkReturned" to templates.homeworkReviewed(lang, true, "Wechselpräpositionen", "https://app.test/student/homework/1", footer),
+                    "vocabDue" to templates.vocabDue(lang, 12, "https://app.test/student/vocabulary", footer),
                 ).map { (name, email) -> Triple(name, lang, email) }
             }
         }

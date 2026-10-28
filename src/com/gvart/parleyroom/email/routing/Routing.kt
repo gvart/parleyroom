@@ -29,7 +29,7 @@ fun Application.configureEmailRouting() {
             summary = "Unsubscribe from a reminder email category"
             description = "Public. Takes the token from an email's unsubscribe link, either as JSON { token } (portal page) " +
                 "or as ?token= with a List-Unsubscribe=One-Click form body (RFC 8058 one-click from mail clients). " +
-                "Switches LESSON_REMINDERS or HOMEWORK_REMINDERS off; idempotent. 400 UNSUBSCRIBE_TOKEN_INVALID for a bad token."
+                "Switches the token's category (LESSON_, HOMEWORK_, TEACHER_ or VOCAB_REMINDERS) off; idempotent. 400 UNSUBSCRIBE_TOKEN_INVALID for a bad token."
             parameters { query("token") { description = "Unsubscribe token (one-click); alternative to the JSON body"; required = false } }
             requestBody { schema = jsonSchema<UnsubscribeRequest>() }
             responses {
