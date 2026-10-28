@@ -1,0 +1,29 @@
+src/com/gvart/parleyroom/email/data/EmailLogTable.kt
+  s_81d0f71760d0cb::t_d24caf3f9ac4be 9-10
+src/com/gvart/parleyroom/email/service/NotificationMailer.kt
+  s_81d0f71760d0cb::t_f5ea53e42680a6 115-160,256-257
+src/com/gvart/parleyroom/email/template/EmailTemplates.kt
+  s_81d0f71760d0cb::t_d573af145357a5 462-760
+src/com/gvart/parleyroom/telegram/data/TelegramLogTable.kt
+  s_81d0f71760d0cb::t_b1fdf94cbf7b40 9-10
+src/com/gvart/parleyroom/telegram/service/TelegramNotifier.kt
+  s_81d0f71760d0cb::t_1359d6e1e5c5fc 95-138
+src/com/gvart/parleyroom/telegram/template/TelegramTemplates.kt
+  s_81d0f71760d0cb::t_38ca8ce1f6c591 133-204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "f688ed3acdb712e5d292912b2c37d54e6c6a3f29",
+  "prompts": {},
+  "sessions": {
+    "s_81d0f71760d0cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5ea60677-0754-409d-85f3-9e5e9e54178e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vladlen Gladis <vladlen.gladis@deliveryhero.com>"
+    }
+  }
+}
