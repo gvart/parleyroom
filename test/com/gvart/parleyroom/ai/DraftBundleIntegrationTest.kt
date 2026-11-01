@@ -318,7 +318,7 @@ class DraftBundleIntegrationTest : IntegrationTest() {
 
         val job = client.generateAndWait(token, seedLesson(), prompt = "[fake:truncated]")
         assertEquals(GenerationJobStatus.FAILED, job.status)
-        assertEquals("AI_OUTPUT_INVALID", job.error?.code)
+        assertEquals("AI_OUTPUT_TOO_LONG", job.error?.code)
         assertEquals(1, job.attempts)
         assertEquals(1, FakeLlmGateway.received.size)
     }

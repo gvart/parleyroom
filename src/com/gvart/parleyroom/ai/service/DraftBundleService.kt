@@ -643,7 +643,8 @@ class DraftBundleService(
         .getOrElse { throw BadRequestException("$field contains an invalid uuid", code = "VALIDATION_FAILED") }
 
     companion object {
-        const val MAX_TOKENS = 16_000
+        // A long pasted word list with examples + translations outgrew 16k (2026-11-01); ~160s at 32k.
+        const val MAX_TOKENS = 32_000
         const val MAX_LIST = 100
     }
 }
