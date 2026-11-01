@@ -92,7 +92,7 @@ object GenerationJobs {
 
     /**
      * Calls the model and parses the answer; on invalid output retries once with the problems fed
-     * back. Throws [AiJobFailure] (AI_OUTPUT_INVALID or the provider's code) otherwise.
+     * back. Throws [AiJobFailure] (AI_OUTPUT_INVALID, AI_OUTPUT_TOO_LONG or the provider's code) otherwise.
      * Every provider call, failed ones included, gets an `ai_usage` row for [call].
      */
     suspend fun <T> completeValidated(
@@ -118,7 +118,7 @@ object GenerationJobs {
             // A retry would hit the same limit, so a cut-off answer fails right away.
             if (reply.truncated) {
                 log.warn("AI output cut off at maxTokens={} (attempt {}, outputTokens={})", maxTokens, attempt, reply.outputTokens)
-                throw AiJobFailure("AI_OUTPUT_INVALID", "The AI answer was cut off at the output limit", attempt, usage)
+                throw AiJobFailure("AI_OUTPUT_TOO_LONG", "The AI answer was cut off at the output limit", attempt, usage)
             }
             try {
                 return Completion(parse(reply.text), attempt, usage)
