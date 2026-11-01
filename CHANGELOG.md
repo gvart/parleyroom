@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/gvart/parleyroom/compare/v1.9.0...v1.9.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **ai:** raise draft output limit to 32k and flag cut-off answers ([#93](https://github.com/gvart/parleyroom/issues/93)) ([035029c](https://github.com/gvart/parleyroom/commit/035029c566231366c7bc7018183119462e800e62))
+
 ## [1.9.0](https://github.com/gvart/parleyroom/compare/v1.8.1...v1.9.0) (2026-10-28)
 
 
